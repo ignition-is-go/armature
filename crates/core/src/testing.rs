@@ -186,6 +186,49 @@ pub fn check<P: Primitive>(make: impl Fn() -> P, items: &[Item]) -> Vec<Violatio
         );
     }
 
+    // A button or switch that a press changes must answer Enter the same way, since
+    // an unstyled part gets no keyboard activation for free.
+    for (part, item) in instances::<P>(items) {
+        let at_rest = build(true).semantics(part, item.as_deref());
+        if !matches!(at_rest.role, Some(Role::Button | Role::Switch))
+            || at_rest.focusable == Focusable::No
+        {
+            continue;
+        }
+        let mods = Modifiers::default();
+        let mut pressed = build(true);
+        pressed.send(
+            Input::Press {
+                part,
+                item: item.clone(),
+                mods,
+            },
+            &mut |_| true,
+        );
+        let mut keyed = build(true);
+        keyed.send(
+            Input::Focus {
+                part,
+                item: item.clone(),
+            },
+            &mut |_| true,
+        );
+        keyed.send(
+            Input::Key {
+                key: Key::Enter,
+                mods,
+                now_ms: 0,
+            },
+            &mut |_| true,
+        );
+        if pressed.value() != keyed.value() {
+            fail(
+                "Enter presses a focused button",
+                format!("{part:?} {item:?}"),
+            );
+        }
+    }
+
     // Robustness: no input may panic, with items or without, and a refused change
     // leaves the value alone.
     for with_items in [true, false] {

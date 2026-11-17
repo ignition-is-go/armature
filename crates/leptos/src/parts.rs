@@ -269,6 +269,28 @@ fn announce(message: &str, assertive: bool) {
     request_animation_frame(move || region.set_text_content(Some(&message)));
 }
 
+/// Moves focus to the next tabbable element inside a modal part, wrapping at the ends
+/// so Tab never leaves it.
+fn trap_tab(container: &HtmlElement, backwards: bool) {
+    let tabbable = "a[href], button, input, select, textarea, [tabindex]:not([tabindex=\"-1\"])";
+    let Ok(nodes) = container.query_selector_all(tabbable) else {
+        return;
+    };
+    let stops: Vec<HtmlElement> = (0..nodes.length())
+        .filter_map(|i| nodes.item(i)?.dyn_into::<HtmlElement>().ok())
+        .filter(|el| !el.has_attribute("disabled") && el.offset_parent().is_some())
+        .collect();
+    let active = document().active_element();
+    let current = stops.iter().position(|stop| {
+        active
+            .as_ref()
+            .is_some_and(|active| active.is_same_node(Some(stop)))
+    });
+    if let Some(next) = armature_core::layers::trapped_focus(current, stops.len(), backwards) {
+        let _ = stops[next].focus();
+    }
+}
+
 fn orientation_name(orientation: Option<Orientation>) -> Option<&'static str> {
     orientation.map(|orientation| match orientation {
         Orientation::Vertical => "vertical",
@@ -586,6 +608,15 @@ where
         if !interactive() {
             return;
         }
+        if ev.key() == "Tab"
+            && semantics.get_untracked().modal
+            && let Some(container) = element.get_untracked()
+        {
+            trap_tab(&container, ev.shift_key());
+            ev.prevent_default();
+            ev.stop_propagation();
+            return;
+        }
         let Some(key) = key_from_dom(&ev.key()) else {
             return;
         };
@@ -628,6 +659,7 @@ where
                 "aria-haspopup",
                 (state.role == Some(Role::ComboBox)).then(|| "listbox".to_string()),
             ),
+            ("aria-modal", state.modal.then(|| "true".to_string())),
             ("data-active", state.active.then(String::new)),
         ];
         for (name, value) in attributes {

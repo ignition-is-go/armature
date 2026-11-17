@@ -1,5 +1,6 @@
 use armature_core::accordion::{self, Accordion};
 use armature_core::command::{self, Command};
+use armature_core::dialog::{self, Dialog};
 use armature_core::keys::Dir;
 use armature_core::listbox::{self, Listbox};
 use armature_core::number::NumberRange;
@@ -230,6 +231,18 @@ fn App() -> impl IntoView {
                         <For each=move || shopping.get() key=|key| *key let:key>
                             <Part part=sortable::Part::Item item=key>{key}</Part>
                         </For>
+                    </Part>
+                </Root>
+            </Section>
+
+            <Section title="Dialog">
+                <Root machine=Dialog::default() label="Confirm">
+                    <Part part=dialog::Part::Trigger>"Open dialog"</Part>
+                    <Part part=dialog::Part::Backdrop />
+                    <Part part=dialog::Part::Content>
+                        <p>"Are you sure?"</p>
+                        <button id="dialog-yes">"Yes"</button>
+                        <Part part=dialog::Part::Close>"Cancel"</Part>
                     </Part>
                 </Root>
             </Section>

@@ -215,6 +215,8 @@ pub struct Semantics {
     pub orientation: Option<Orientation>,
     pub disabled: bool,
     pub hidden: bool,
+    /// Keeps Tab inside this part while it is shown, as a modal dialog must.
+    pub modal: bool,
     pub focusable: Focusable,
     /// The item the user is currently on, for styling.
     pub active: bool,

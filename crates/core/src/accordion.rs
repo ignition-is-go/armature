@@ -1,7 +1,7 @@
 use crate::agent::{ActError, Snapshot, SnapshotItem};
 use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::items::Items;
-use crate::keys::{Dir, Orientation};
+use crate::keys::{Dir, Key, Orientation};
 use crate::primitive::{Focusable, Input, Item, PartOf, Primitive, Reaction, Role, Semantics};
 use crate::roving;
 
@@ -144,7 +144,24 @@ impl Primitive for Accordion {
                 self.focused = item;
                 Reaction::default()
             }
-            // Arrows travel between headers; Enter and Space are the button's own press.
+            // A header is a button, so Enter and Space press it.
+            Input::Key {
+                key: Key::Enter | Key::Space,
+                ..
+            } => match self.focused.clone() {
+                Some(key) if self.items.is_enabled(&key) => {
+                    self.set(
+                        &key,
+                        !self.is_open(&key),
+                        Source::User,
+                        Reason::Keyboard,
+                        gate,
+                    );
+                    Reaction::handled()
+                }
+                _ => Reaction::default(),
+            },
+            // Arrows travel between headers.
             Input::Key { key, .. } => {
                 let nav = roving::nav_for_key(key, Orientation::Vertical, Dir::Ltr);
                 let target =
@@ -226,7 +243,7 @@ impl Primitive for Accordion {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::keys::Modifiers;
+    use crate::keys::{Key, Modifiers};
 
     fn accordion(opts: Options) -> Accordion {
         let mut accordion = Accordion::new(opts);
@@ -307,7 +324,6 @@ mod tests {
 
     #[test]
     fn arrows_travel_between_headers_past_disabled_ones() {
-        use crate::keys::Key;
         let mut accordion = accordion(Options::default());
         accordion.send(
             Input::Focus {
@@ -330,10 +346,11 @@ mod tests {
             key(&mut accordion, Key::ArrowDown).focus_item(),
             Some("shipping")
         );
-        assert!(
-            !key(&mut accordion, Key::Enter).handled,
-            "left for the press that follows"
+        assert!(key(&mut accordion, Key::Enter).handled);
+        assert_eq!(
+            accordion.value(),
+            ["shipping"],
+            "Enter presses the focused header"
         );
-        assert!(accordion.value().is_empty());
     }
 }

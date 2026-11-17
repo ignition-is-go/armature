@@ -229,3 +229,61 @@ fn the_owner_can_set_a_value_without_the_gate(cx: &mut TestAppContext) {
     refused.update(cx, |wifi, cx| wifi.set_value(vec!["on".into()], cx));
     assert!(refused.update(cx, |wifi, _| wifi.primitive().is_on()));
 }
+
+#[gpui::test]
+fn enter_and_space_press_a_focused_switch_exactly_once(cx: &mut TestAppContext) {
+    let (demo, cx) = open(cx);
+    let wifi = demo.update(cx, |d, _| d.wifi.clone());
+    wifi.update_in(cx, |w, window, cx| {
+        w.focus_handle(toggle::Part::Root, None)
+            .unwrap()
+            .focus(window, cx);
+    });
+
+    cx.simulate_keystrokes("enter");
+    assert!(wifi.update(cx, |w, _| w.primitive().is_on()));
+    cx.simulate_keystrokes("space");
+    assert!(!wifi.update(cx, |w, _| w.primitive().is_on()));
+}
+
+#[gpui::test]
+fn a_dialog_opens_from_the_keyboard_and_escape_returns_focus(cx: &mut TestAppContext) {
+    use armature_core::dialog::{self, Dialog};
+
+    struct Page(Entity<Machine<Dialog>>);
+    impl Render for Page {
+        fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .child(part(&self.0, dialog::Part::Trigger, None, cx).size(px(ROW)))
+                .child(part(&self.0, dialog::Part::Backdrop, None, cx))
+                .child(
+                    part(&self.0, dialog::Part::Content, None, cx)
+                        .child(part(&self.0, dialog::Part::Close, None, cx).size(px(ROW))),
+                )
+        }
+    }
+    let (page, cx) = cx.add_window_view(|_, cx| {
+        Page(cx.new(|cx| Machine::new(Dialog::default(), "Confirm", [], cx)))
+    });
+    let confirm = page.update(cx, |page, _| page.0.clone());
+    let focused = |cx: &mut VisualTestContext, part| {
+        confirm.update_in(cx, |c, window, _| {
+            c.focus_handle(part, None).unwrap().is_focused(window)
+        })
+    };
+    confirm.update_in(cx, |c, window, cx| {
+        c.focus_handle(dialog::Part::Trigger, None)
+            .unwrap()
+            .focus(window, cx);
+    });
+
+    cx.simulate_keystrokes("enter");
+    assert!(confirm.update(cx, |c, _| c.primitive().is_open()));
+    assert!(
+        focused(cx, dialog::Part::Content),
+        "focus moved into the dialog"
+    );
+    cx.simulate_keystrokes("escape");
+    assert!(!confirm.update(cx, |c, _| c.primitive().is_open()));
+    assert!(focused(cx, dialog::Part::Trigger));
+}

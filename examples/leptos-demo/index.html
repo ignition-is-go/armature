@@ -56,6 +56,9 @@
       [role="listitem"] { padding: 6px 8px; margin: 2px 0; width: 12rem; border: 1px solid #ccd; border-radius: 6px; background: white; cursor: grab; outline: none; user-select: none; }
       [role="listitem"]:focus-visible { box-shadow: 0 0 0 2px #3b6fe0; }
       [role="listitem"][aria-selected="true"] { background: #e8eefc; border-style: dashed; }
+      [data-armature-part="Backdrop"] { position: fixed; inset: 0; background: rgba(20, 24, 40, 0.35); }
+      [role="dialog"] { position: fixed; top: 30%; left: 50%; transform: translateX(-50%); width: 18rem; padding: 1rem; background: white; border-radius: 10px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25); outline: none; }
+      [role="dialog"] [role="button"], [role="button"][aria-expanded][data-armature-part="Trigger"] { display: inline-block; width: auto; padding: 5px 10px; border: 1px solid #bbb; border-radius: 6px; cursor: default; }
     </style>
   </head>
   <body></body>
