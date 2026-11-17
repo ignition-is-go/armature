@@ -1277,3 +1277,35 @@ fn token_text_model() {
         );
     }
 }
+
+// command.test.ts, "fuzzy scores"
+#[test]
+fn fuzzy_scores() {
+    use armature_core::text_match::fuzzy_score;
+    // "the whole text beats a prefix, which beats a word, a substring and scattered letters"
+    let scores: Vec<u32> = [
+        "Set",
+        "Settings",
+        "Quick setup",
+        "Assets",
+        "Show emoji teams",
+    ]
+    .iter()
+    .map(|text| fuzzy_score("set", text).unwrap_or(0))
+    .collect();
+    let mut sorted = scores.clone();
+    sorted.sort_by(|a, b| b.cmp(a));
+    assert_eq!(scores, sorted, "best first");
+    assert!(scores.iter().all(|score| *score > 0));
+    assert!(
+        scores.windows(2).all(|pair| pair[0] > pair[1]),
+        "each strictly beats the next: {scores:?}"
+    );
+    // "letters in order match across words, and word starts count most"
+    assert!(fuzzy_score("gp", "Git push") > fuzzy_score("gp", "Grep"));
+    assert!(fuzzy_score("git ps", "git push").is_some());
+    assert_eq!(fuzzy_score("xyz", "Calendar"), None);
+    // "case and accents are ignored"
+    assert_eq!(fuzzy_score("rac", "Calendar"), None);
+    assert!(fuzzy_score("ECL", "Éclair").unwrap() > 900);
+}

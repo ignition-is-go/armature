@@ -22,27 +22,49 @@ pub fn match_ranges(query: &str, text: &str) -> Option<Vec<Range<usize>>> {
     Some(ranges)
 }
 
-/// How well `text` matches `query`; higher is better and `None` is no match. Runs of
-/// consecutive characters, word starts and a match at the very start all score up.
+/// How well `text` matches `query`, from 1 to 1000; `None` is no match. Case and
+/// accents are ignored. In order of preference: the whole text, a prefix, a word
+/// that starts with the query, any substring, then the query's letters in order,
+/// which score more at the start of a word or right after one another, so `gp`
+/// finds `Git push`. Among matches of one kind, covering more of the text ranks
+/// higher, so `set` puts `Set` above `Settings`.
 pub fn fuzzy_score(query: &str, text: &str) -> Option<u32> {
-    let ranges = match_ranges(query, text)?;
-    let mut score = 0u32;
-    for range in &ranges {
-        let length = text[range.clone()].chars().count() as u32;
-        // A run is worth more than the same letters at separate word starts, so a
-        // contiguous match always outranks an acronym-style one.
-        score += length + 10 * (length - 1);
-        let before = text[..range.start].chars().next_back();
-        score += match before {
-            None => 8,
-            Some(ch) if !ch.is_alphanumeric() => 6,
-            Some(_) => 0,
-        };
+    let needle: Vec<char> = crate::fold::fold_text(query, None).chars().collect();
+    if needle.is_empty() {
+        return Some(1000);
     }
-    let lead = ranges
-        .first()
-        .map_or(0, |first| text[..first.start].chars().count() as u32);
-    Some(score.saturating_sub(lead.min(5)))
+    let haystack: Vec<char> = crate::fold::fold_text(text, None).chars().collect();
+    if haystack == needle {
+        return Some(1000);
+    }
+    let starts_word = |index: usize| index == 0 || !haystack[index - 1].is_alphanumeric();
+    let found_at = |from: usize| {
+        (from..haystack.len().saturating_sub(needle.len() - 1))
+            .find(|at| haystack[*at..].starts_with(&needle))
+    };
+    let coverage = (90 * needle.len() / haystack.len().max(1)) as u32;
+    match found_at(0) {
+        Some(0) => return Some(900 + coverage),
+        Some(first) => {
+            let mut at = Some(first);
+            while let Some(index) = at.filter(|index| !starts_word(*index)) {
+                at = found_at(index + 1);
+            }
+            return Some(if at.is_some() { 750 } else { 600 } + coverage);
+        }
+        None => {}
+    }
+    // The letters in order, anywhere. Spaces in the query only separate words.
+    let (mut position, mut previous, mut bonus, mut letters) = (0, None, 0u32, 0u32);
+    for ch in needle.iter().filter(|ch| **ch != ' ') {
+        let found = (position..haystack.len()).find(|at| haystack[*at] == *ch)?;
+        letters += 1;
+        bonus += u32::from(starts_word(found))
+            + u32::from(previous.is_some_and(|previous: usize| found == previous + 1));
+        previous = Some(found);
+        position = found + 1;
+    }
+    (letters > 0).then(|| 100 + 400 * bonus / (2 * letters))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -130,7 +152,7 @@ mod tests {
 
     #[test]
     fn word_starts_beat_the_same_letters_mid_word() {
-        assert!(fuzzy_score("of", "open file") > fuzzy_score("of", "proof"));
+        assert!(fuzzy_score("of", "open file") > fuzzy_score("of", "oxford"));
         assert!(fuzzy_score("of", "open file") > fuzzy_score("of", "oxen safe"));
     }
 
