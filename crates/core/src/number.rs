@@ -57,15 +57,53 @@ impl NumberRange {
         value.clamp(self.min, self.max)
     }
 
+    /// Where the steps are counted from: the least value, or zero without one.
+    fn base(&self) -> f64 {
+        if self.min.is_finite() { self.min } else { 0.0 }
+    }
+
+    /// How many steps `value` is from the base, with float noise rounded away.
+    fn steps_from_base(&self, value: f64) -> f64 {
+        let count = (value - self.base()) / self.step;
+        format!("{count:.15e}")
+            .parse::<f64>()
+            .map_or(count, |rounded| {
+                // Fifteen significant digits, as far as a float can be trusted.
+                let scale =
+                    10f64.powi(14 - rounded.abs().log10().floor().clamp(-300.0, 300.0) as i32);
+                if scale.is_finite() && scale > 0.0 {
+                    (count * scale).round() / scale
+                } else {
+                    count
+                }
+            })
+    }
+
+    /// The last step at or below the most allowed.
+    pub fn max_on_grid(&self) -> f64 {
+        if !self.max.is_finite() || self.step <= 0.0 {
+            return self.max;
+        }
+        self.base() + ((self.max - self.base()) / self.step + 1e-9).floor() * self.step
+    }
+
+    /// A value brought within the range and written with only the decimals its
+    /// step and base have.
+    fn on_grid(&self, value: f64) -> f64 {
+        let decimals = decimals_of(self.step)
+            .max(decimals_of(self.base()))
+            .min(100);
+        let kept = value.clamp(self.min, self.max_on_grid().max(self.min));
+        format!("{kept:.decimals$}").parse().unwrap_or(kept)
+    }
+
     /// The nearest step to `value`, counted from `min` and kept in range.
     pub fn snap(&self, value: f64) -> f64 {
         if self.step <= 0.0 {
             return self.clamp(value);
         }
-        let steps = ((value - self.min) / self.step).round();
-        // Rounding away the float error that multiplying by a decimal step leaves.
-        let snapped = self.min + steps * self.step;
-        self.clamp((snapped * 1e9).round() / 1e9)
+        let steps = self.steps_from_base(value).round();
+        self.on_grid(self.base() + steps * self.step)
     }
 
     /// Where `value` sits between `min` and `max`, from 0 to 1.
@@ -93,7 +131,20 @@ impl NumberRange {
 
     /// `value` moved by a number of steps, which may be negative.
     pub fn nudge(&self, value: f64, steps: f64) -> f64 {
-        self.snap(value + steps * self.step)
+        if self.step <= 0.0 {
+            return self.clamp(value + steps);
+        }
+        // A value between steps goes onto the grid first, so one step up from 1.5
+        // is 2 and not 2.5.
+        let position = self.steps_from_base(value);
+        let from = if position.fract() == 0.0 {
+            position
+        } else if steps > 0.0 {
+            position.floor()
+        } else {
+            position.ceil()
+        };
+        self.on_grid(self.base() + (from + steps) * self.step)
     }
 }
 
@@ -138,9 +189,22 @@ pub fn format_number(value: f64, decimals: usize) -> String {
 
 /// How many decimal places a step calls for: none for 1, two for 0.25.
 pub fn decimals_of(step: f64) -> usize {
+    if !step.is_finite() || step.fract() == 0.0 {
+        return 0;
+    }
     let text = format!("{step}");
     text.split_once('.')
         .map_or(0, |(_, decimals)| decimals.trim_end_matches('0').len())
+}
+
+/// `value` brought round into the span from `min` up to, but not including, `max`,
+/// as an angle is brought back within a turn.
+pub fn wrap(value: f64, min: f64, max: f64) -> f64 {
+    let span = max - min;
+    if span <= 0.0 {
+        return min;
+    }
+    (value - min).rem_euclid(span) + min
 }
 
 /// A number written for reading, with thousands separated: `1,234.50`.
@@ -231,7 +295,7 @@ mod tests {
     fn values_snap_to_the_nearest_step_from_the_minimum() {
         let range = NumberRange::new(1.0, 10.0, 2.0);
         assert_eq!(range.snap(4.2), 5.0);
-        assert_eq!(range.snap(100.0), 10.0);
+        assert_eq!(range.snap(100.0), 9.0, "the last step at or below the most allowed");
         assert_eq!(range.snap(-3.0), 1.0);
     }
 

@@ -28,11 +28,18 @@ impl Date {
 
     /// Parses `YYYY-MM-DD`.
     pub fn parse(text: &str) -> Option<Date> {
-        let mut parts = text.trim().splitn(3, '-');
-        let year = parts.next()?.parse().ok()?;
-        let month = parts.next()?.parse().ok()?;
-        let day = parts.next()?.parse().ok()?;
-        Date::new(year, month, day)
+        // Exactly four, two and two digits: `2026-1-16` is not a date.
+        let parts: Vec<&str> = text.split('-').collect();
+        let [year, month, day] = parts.as_slice() else {
+            return None;
+        };
+        let digits = |part: &str, length: usize| {
+            part.len() == length && part.bytes().all(|byte| byte.is_ascii_digit())
+        };
+        if !(digits(year, 4) && digits(month, 2) && digits(day, 2)) {
+            return None;
+        }
+        Date::new(year.parse().ok()?, month.parse().ok()?, day.parse().ok()?)
     }
 
     pub fn format(self) -> String {
@@ -74,14 +81,45 @@ impl Date {
         (self.to_days() + 4).rem_euclid(7) as u8
     }
 
+    /// The first and last days there are. Arithmetic stops at them.
+    pub const FIRST: Date = Date {
+        year: 1,
+        month: 1,
+        day: 1,
+    };
+    pub const LAST: Date = Date {
+        year: 9999,
+        month: 12,
+        day: 31,
+    };
+
     pub fn add_days(self, days: i64) -> Date {
-        Date::from_days(self.to_days() + days)
+        let sum = self.to_days().saturating_add(days);
+        Date::from_days(sum.clamp(Date::FIRST.to_days(), Date::LAST.to_days()))
+    }
+
+    /// The last day of this date's month.
+    pub fn end_of_month(self) -> Date {
+        Date {
+            day: days_in_month(self.year, self.month),
+            ..self
+        }
     }
 
     /// The same day in another month. A day the month lacks becomes its last day, so
     /// 31 January plus one month is the end of February.
     pub fn add_months(self, months: i32) -> Date {
-        let index = self.year * 12 + self.month as i32 - 1 + months;
+        let index = self
+            .year
+            .saturating_mul(12)
+            .saturating_add(self.month as i32 - 1)
+            .saturating_add(months);
+        if index < 12 {
+            return Date::FIRST;
+        }
+        if index > 9999 * 12 + 11 {
+            return Date::LAST;
+        }
         let (year, month) = (index.div_euclid(12), index.rem_euclid(12) as u8 + 1);
         Date {
             year,
@@ -114,6 +152,24 @@ pub fn month_grid(year: i32, month: u8, week_start: u8) -> Vec<[Date; 7]> {
     while day <= last {
         weeks.push(std::array::from_fn(|offset| day.add_days(offset as i64)));
         day = day.add_days(7);
+    }
+    weeks
+}
+
+/// A month view that is always six weeks tall, so the calendar never changes height
+/// from one month to the next.
+pub fn month_grid_fixed(year: i32, month: u8, week_start: u8) -> Vec<[Date; 7]> {
+    let mut weeks = month_grid(year, month, week_start);
+    while weeks.len() < 6 {
+        let next = weeks.last().map_or(
+            Date {
+                year,
+                month,
+                day: 1,
+            },
+            |week| week[6].add_days(1),
+        );
+        weeks.push(std::array::from_fn(|offset| next.add_days(offset as i64)));
     }
     weeks
 }
