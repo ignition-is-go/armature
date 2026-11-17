@@ -512,6 +512,29 @@ where
         on_cleanup(move || away.remove());
     }
 
+    // A primitive whose value was set from outside may have a timer to start.
+    {
+        let waking = StoredValue::new(false);
+        Effect::new(move |_| {
+            let Some(delay) = machine.with(|m| m.wake_after()) else {
+                return;
+            };
+            if waking.get_value() {
+                return;
+            }
+            waking.set_value(true);
+            set_timeout(
+                move || {
+                    waking.set_value(false);
+                    ctx.dispatch(Input::Tick {
+                        now_ms: js_sys::Date::now() as u64,
+                    });
+                },
+                Duration::from_millis(delay),
+            );
+        });
+    }
+
     // Anything that opens joins the stack of layers while it is open.
     {
         let id = instance.to_string();

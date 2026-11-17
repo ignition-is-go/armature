@@ -106,6 +106,8 @@ pub struct Machine<P: Primitive> {
     /// The accessibility node each part was last drawn as, so parts can refer to
     /// one another.
     nodes: HashMap<PartKey<P>, accesskit::NodeId>,
+    /// Whether a tick the primitive asked for through `wake_after` is on its way.
+    waking: bool,
     /// Watches for the window being switched away from.
     away_watch: Option<gpui::Subscription>,
     /// Watches for focus leaving each part that has held it.
@@ -200,6 +202,7 @@ impl<P: Primitive> Machine<P> {
             announcements: Vec::new(),
             blur_watch: HashMap::new(),
             away_watch: None,
+            waking: false,
             nodes: HashMap::new(),
             gate: None,
             registration,
@@ -825,10 +828,18 @@ pub fn part<K: PartOf>(
     let record: RecordBounds = {
         let (state, key) = (state.clone(), key.clone());
         Box::new(move |bounds, node, window: &mut Window, cx: &mut App| {
+            let mut wake = None;
             let (scrolled, relinked) = state.update(cx, |state, _| {
                 state.bounds.insert(key.clone(), bounds);
                 let relinked =
                     node.is_some_and(|node| state.nodes.insert(key.clone(), node) != Some(node));
+                // A value set from outside may have left a timer to start.
+                if !state.waking
+                    && let Some(delay) = state.machine.wake_after()
+                {
+                    state.waking = true;
+                    wake = Some(state.now_ms() + delay);
+                }
                 // Scrolling is read off the handle each frame.
                 let now = (
                     -f32::from(state.scroll.offset().y) as f64,
@@ -836,6 +847,28 @@ pub fn part<K: PartOf>(
                 );
                 ((scrolls && now != state.scrolled).then_some(now), relinked)
             });
+            if let Some(at_ms) = wake {
+                let state = state.clone();
+                window.defer(cx, move |window, cx| {
+                    state.update(cx, |_, cx| {
+                        cx.spawn_in(window, async move |this, cx| {
+                            let wait = this
+                                .read_with(cx, |state, _| at_ms.saturating_sub(state.now_ms()))
+                                .unwrap_or(0);
+                            cx.background_executor()
+                                .timer(Duration::from_millis(wait))
+                                .await;
+                            let _ = this.update_in(cx, |state, window, cx| {
+                                state.waking = false;
+                                state.woke_at_ms = state.woke_at_ms.max(at_ms);
+                                let now_ms = state.now_ms();
+                                state.dispatch(Input::Tick { now_ms }, window, cx);
+                            });
+                        })
+                        .detach();
+                    });
+                });
+            }
             // Parts that refer to this one pick up its node on the next frame.
             if relinked {
                 let state = state.clone();

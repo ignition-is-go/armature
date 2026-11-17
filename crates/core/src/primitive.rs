@@ -341,6 +341,13 @@ pub trait Primitive: Clone + 'static {
         false
     }
 
+    /// How soon, in milliseconds, the primitive wants a `Tick` that nothing else will
+    /// bring. A value set from outside starts no timer by itself, so the adapter asks
+    /// this after every change and sends the tick.
+    fn wake_after(&self) -> Option<u64> {
+        None
+    }
+
     /// Where the primitive wants its scrolling part scrolled to. The adapter brings the
     /// part there after an agent action, which has no other way to ask.
     fn wanted_scroll(&self) -> Option<f64> {

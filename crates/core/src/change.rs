@@ -15,6 +15,8 @@ pub enum Reason {
     /// The content was edited, as opposed to what is selected.
     Edit,
     Action,
+    /// Time ran out, as when a notification has been shown for long enough.
+    Timer,
 }
 
 /// A value change offered to the owner before it is committed.

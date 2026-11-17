@@ -11,6 +11,7 @@ use armature_core::keys::Dir;
 use armature_core::picker::{self, Picker};
 use armature_core::popover::{self, Popover};
 use armature_core::primitive::{Item, Primitive};
+use armature_core::toast::{self, Toast, Toaster};
 use armature_core::toggle::{self, Toggle};
 use armature_core::tooltip::{self, Tooltip};
 use armature_core::virtual_list::{self, VirtualList};
@@ -477,4 +478,58 @@ fn a_press_while_a_dialog_is_up_does_not_close_the_popover_under_it(cx: &mut Tes
         "with the dialog gone, a press elsewhere closes it"
     );
     let _ = confirm;
+}
+
+#[gpui::test]
+fn a_toast_set_from_outside_starts_its_own_clock_and_leaves(cx: &mut TestAppContext) {
+    let (toaster, cx) = open(
+        cx,
+        Toaster::default(),
+        |toaster: &Entity<Machine<Toaster>>, cx: &mut App| {
+            let shown: Vec<String> = toaster
+                .read(cx)
+                .primitive()
+                .visible()
+                .iter()
+                .map(|toast| toast.id.clone())
+                .collect();
+            part(toaster, toast::Part::Region, None, cx)
+                .size(px(100.))
+                .children(
+                    shown
+                        .iter()
+                        .map(|id| part(toaster, toast::Part::Toast, Some(id), cx).h(px(ROW)))
+                        .collect::<Vec<_>>(),
+                )
+        },
+    );
+    let said = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    cx.update(|_, cx| {
+        let said = said.clone();
+        cx.subscribe(
+            &toaster,
+            move |_, announcement: &armature_gpui::Announcement, _| {
+                said.borrow_mut().push(announcement.message.clone());
+            },
+        )
+        .detach();
+    });
+    toaster.update(cx, |m, cx| {
+        m.set_value(vec![Toast::new("a", "Saved").encode()], cx)
+    });
+    cx.run_until_parked();
+    // A test window redraws on an event, so nudge it.
+    cx.simulate_mouse_move(point(px(300.), px(300.)), None, Modifiers::default());
+    cx.run_until_parked();
+    cx.executor().advance_clock(Duration::from_millis(100));
+    cx.run_until_parked();
+    assert_eq!(*said.borrow(), ["Saved"], "read out once it shows");
+    assert_eq!(toaster.read_with(cx, |m, _| m.value().len()), 1);
+
+    cx.executor().advance_clock(Duration::from_millis(6000));
+    cx.run_until_parked();
+    assert!(
+        toaster.read_with(cx, |m, _| m.value().is_empty()),
+        "its five seconds are up"
+    );
 }
