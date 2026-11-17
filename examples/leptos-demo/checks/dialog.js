@@ -84,5 +84,26 @@ async () => {
   key('ArrowUp', { metaKey: true }); await frame();
   out.appleKeys = `elsewhere=${linux} cmdDown=${last} ctrlP=${stepped} cmdUp=${at()}`;
   Object.defineProperty(Navigator.prototype, 'platform', real);
+  {
+  // A menu that closes on select, with a destructive entry.
+  const note = document.querySelector('[data-armature-part="Trigger"][aria-label="Note actions"]');
+  const noteItems = () => [...note.parentElement.querySelectorAll('[role^=menuitem]')];
+  note.scrollIntoView(); note.focus(); note.click(); await frame();
+  const marked = noteItems().filter(el => el.hasAttribute('data-destructive')).map(el => el.dataset.value).join(',');
+  const opened = note.getAttribute('aria-expanded');
+  noteItems().find(el => el.dataset.value === 'pin').click(); await frame();
+  out.noteMenu = `opened=${opened} destructive=${marked} afterCheckbox=${note.getAttribute('aria-expanded')} pinned=${window.armature.snapshot().find(s => s.label === 'Note actions').value.join(',')}`;
+  // An outline: Space picks a row up, Down moves it with its children, Space drops it.
+  const tree = document.querySelector('[role=tree][aria-label="Notes outline"]');
+  const row = (name) => [...tree.querySelectorAll('[role=treeitem]')].find(el => el.dataset.value === name);
+  const order = () => [...tree.querySelectorAll('[role=treeitem]')].map(el => `${el.dataset.value}@${el.getAttribute('aria-level')}`).join(' ');
+  const value = () => window.armature.snapshot().find(s => s.label === 'Notes outline').value.join(' ');
+  row('site').scrollIntoView(); row('site').focus(); await frame();
+  key(' '); await frame();
+  key('ArrowDown'); await frame();
+  const during = `${order()} | committed=${value()}`;
+  key(' '); await frame();
+  out.outline = `${during} | dropped=${value()} focus=${document.activeElement.dataset.value}`;
+  }
   return out;
 }

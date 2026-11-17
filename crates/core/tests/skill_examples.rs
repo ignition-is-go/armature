@@ -99,3 +99,81 @@ fn typing_narrows_a_combobox() {
         Some("ap")
     );
 }
+
+#[test]
+fn the_details_the_skill_states() {
+    use armature_core::accordion::Accordion;
+    use armature_core::calendar::Selecting;
+    use armature_core::date::Date;
+    use armature_core::keys::{Dir, Orientation};
+    use armature_core::listbox::{self, Listbox};
+    use armature_core::number::NumberRange;
+    use armature_core::number_input::NumberInput;
+    use armature_core::selection::Mode;
+
+    let _ = (
+        Dir::Ltr,
+        Dir::Rtl,
+        Orientation::Horizontal,
+        Orientation::Vertical,
+    );
+    let _ = (
+        Mode::Single,
+        Mode::Multiple,
+        Selecting::Single,
+        Selecting::Multiple,
+        Selecting::Range,
+    );
+    assert!(Date::new(2026, 2, 30).is_none() && Date::new(2026, 2, 28).is_some());
+    assert_eq!(
+        NumberInput::new(NumberRange::new(0.0, 10.0, 0.5), 2.5).value(),
+        ["2.5"]
+    );
+
+    // A fresh accordion has nothing open.
+    let mut accordion = Accordion::default();
+    accordion.upsert_item(Item {
+        key: "a".into(),
+        label: "a".into(),
+        disabled: false,
+    });
+    assert!(accordion.value().is_empty());
+
+    // Lists: arrows skip disabled items and only move focus; Enter chooses.
+    let mut list = Listbox::default();
+    for (key, disabled) in [("a", false), ("b", true), ("c", false)] {
+        list.upsert_item(Item {
+            key: key.into(),
+            label: key.into(),
+            disabled,
+        });
+    }
+    list.send(
+        Input::Focus {
+            part: listbox::Part::Option,
+            item: Some("a".into()),
+        },
+        &mut |_| true,
+    );
+    let key = |key| Input::Key {
+        key,
+        mods: Modifiers::default(),
+        now_ms: 0,
+    };
+    let moved = list.send(key(Key::ArrowDown), &mut |_| true);
+    assert_eq!(moved.focus_item(), Some("c"));
+    assert!(list.value().is_empty(), "arrows only move focus");
+    list.send(
+        Input::Focus {
+            part: listbox::Part::Option,
+            item: Some("c".into()),
+        },
+        &mut |_| true,
+    );
+    list.send(key(Key::Enter), &mut |_| true);
+    assert_eq!(list.value(), ["c"]);
+    assert_eq!(
+        list.act("select", Some("b"), &mut |_| true),
+        Err(ActError::Disabled("b".into()))
+    );
+}

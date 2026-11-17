@@ -21,6 +21,8 @@ Start with `references/core-contract.md`: the types, import paths and signatures
 need to drive any primitive, and each primitive's options. Read the source only for
 edge behavior the references do not cover.
 
+When a reference does not answer a question, these do:
+
 1. `crates/core/src/primitive.rs` is the whole contract between primitives and adapters.
 2. The primitive you will use, in `crates/core/src`. Its `Part` enum lists what you
    render. Its tests state its behavior.

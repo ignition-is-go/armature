@@ -423,6 +423,8 @@ pub struct Semantics {
     pub obscured: bool,
     /// Its content is still changing, so assistive technology should wait.
     pub busy: bool,
+    /// Choosing it destroys something, so it can be drawn as a warning.
+    pub destructive: bool,
     /// Depth in a tree, starting at 1.
     pub level: Option<u32>,
     pub range: Option<ValueRange>,

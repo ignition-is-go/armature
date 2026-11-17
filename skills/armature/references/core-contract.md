@@ -14,6 +14,22 @@ use armature_core::agent::ActError;
 use armature_core::tabs::{self, Tabs}; // one module per primitive: its type, `Part`, `Options`
 ```
 
+Each primitive's type is its module name in CamelCase: `accordion::Accordion`,
+`number_input::NumberInput`, `toggle::Toggle`, `listbox::Listbox`. Types used in
+options and constructors live elsewhere:
+
+```rust
+use armature_core::number::NumberRange;      // NumberRange::new(min, max, step), all f64
+use armature_core::keys::{Dir, Orientation}; // Dir::{Ltr, Rtl}; Orientation::{Horizontal, Vertical}
+use armature_core::selection::Mode;          // Mode::{Single, Multiple}, for a listbox
+use armature_core::calendar::Selecting;      // Selecting::{Single, Multiple, Range}
+use armature_core::date::Date;               // Date::new(year, month, day) -> Option<Date>
+```
+
+`Source`, `Reason`, `Key`, `Modifiers` and every `Part` enum are `Copy`, `Debug` and
+`PartialEq`. `ValueChange`, `ActError`, `FocusTarget` and `Item` are `Debug` and
+`PartialEq`, so `assert_eq!` works on all of them.
+
 ## Making one
 
 Every primitive implements `Default`. Most also have `new(Options)`, where `Options`
@@ -175,6 +191,17 @@ the module, such as `"number"` for `number_input`.
   `open_delay_ms` option), when it next hears `Input::Tick` at or past that time. The
   hover returns `Effect::Wake { at_ms }` saying when to tick. Focus opens it at once.
   Escape hides it whether or not anything was focused. It has `is_open()`.
+- **Lists.** In a listbox, tabs, radio group or menu, arrows skip disabled items, a
+  press on one does nothing, and `act("select", Some(key))` on one is
+  `Err(ActError::Disabled(key))`. Send `Input::Focus` to the item part with the item's
+  key. In a single-choice listbox arrows only move focus; Enter, Space or a press
+  chooses.
+- **Dialog.** Options default to dismissible and modal. `dismissible: false` refuses
+  Escape and outside presses together; `dismiss_on_escape` and `dismiss_on_backdrop`
+  turn off one each. The Close part, the trigger and agent actions always close.
+  Escape returns focus to `Part::Trigger`.
+- **Accordion.** A fresh one has nothing open.
+- **Agent actions.** The gate sees `Source::Agent` and `Reason::Action` for every one.
 - **Keys and focus.** Keys that act on one part or item (Enter on a button, arrows in
   a list) need `Input::Focus` first. Keys that mean the whole primitive, such as
   Escape on a popup, do not.

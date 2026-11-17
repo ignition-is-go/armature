@@ -373,6 +373,7 @@ impl Primitive for Menu {
                     checked,
                     expanded: (entry.kind == Kind::Submenu).then_some(false),
                     disabled: entry.disabled,
+                    destructive: entry.destructive,
                     hidden: !on_show,
                     focusable: if on_show {
                         Focusable::Programmatic

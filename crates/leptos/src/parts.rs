@@ -299,8 +299,25 @@ impl<P: Primitive + Send + Sync> Context<P> {
             width: size.width(),
             height: size.height(),
         };
-        let arrow = popup::arrow_offset(anchor_box, placed, popup_size, 12.0);
+        // Where the arrow's middle goes, and whether it had to stop short of a
+        // corner instead of pointing at the middle of the anchor.
+        let popup_box = Rect::new(placed.x, placed.y, popup_size.width, popup_size.height);
+        let (arrow, clamped) = popup::arrow_along(
+            anchor_box,
+            popup_box,
+            Size {
+                width: 0.0,
+                height: 0.0,
+            },
+            false,
+            12.0,
+        );
         let _ = style.set_property("--armature-arrow-x", &format!("{arrow}px"));
+        let _ = if clamped {
+            popup.set_attribute("data-arrow-clamped", "")
+        } else {
+            popup.remove_attribute("data-arrow-clamped")
+        };
         let side = if placed.side == Side::Bottom {
             "bottom"
         } else {
@@ -1192,6 +1209,15 @@ where
                 js_sys::Date::now() as u64,
             )));
             let last = Rc::new(Cell::new(from));
+            // The shape spanning this part and its popup: a pointer inside it is
+            // still on its way across.
+            let trigger = element.get_untracked().map(|own| {
+                let rect = own.get_bounding_client_rect();
+                Rect::new(rect.x(), rect.y(), rect.width(), rect.height())
+            });
+            let bridged = move |at: Point| {
+                trigger.is_some_and(|trigger| popup::bridges(trigger, popup, 4.0, at))
+            };
             type Held = Rc<std::cell::RefCell<Option<(WindowListenerHandle, IntervalHandle)>>>;
             let held: Held = Rc::default();
             // Ends the wait, telling the primitive the pointer left unless it arrived.
@@ -1215,7 +1241,9 @@ where
                     last.set(at);
                     if popup.contains(at) {
                         finish(true);
-                    } else if !area.borrow_mut().contains(at, js_sys::Date::now() as u64) {
+                    } else if !area.borrow_mut().contains(at, js_sys::Date::now() as u64)
+                        && !bridged(at)
+                    {
                         finish(false);
                     }
                 }
@@ -1328,6 +1356,7 @@ where
             ("aria-current", state.current.then(|| "true".to_string())),
             ("aria-invalid", state.invalid.then(|| "true".to_string())),
             ("aria-busy", state.busy.then(|| "true".to_string())),
+            ("data-destructive", state.destructive.then(String::new)),
             ("aria-multiselectable", flag(state.multiselectable)),
             ("aria-disabled", state.disabled.then(|| "true".to_string())),
             ("aria-level", state.level.map(|level| level.to_string())),

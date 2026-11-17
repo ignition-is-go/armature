@@ -157,7 +157,9 @@
     "modalPopover": "shown=true modal=true",
     "modalPopoverParts": "Close",
     "modalPopoverClosed": "shown=false",
-    "appleKeys": "elsewhere=Apple cmdDown=Cherry ctrlP=Blueberry cmdUp=Apple"
+    "appleKeys": "elsewhere=Apple cmdDown=Cherry ctrlP=Blueberry cmdUp=Apple",
+    "noteMenu": "opened=true destructive=erase afterCheckbox=false pinned=pin",
+    "outline": "inbox@1 projects@1 app@2 site@2 copy@3 archive@1 | committed=0:inbox 0:projects 1:site 2:copy 1:app 0:archive | dropped=0:inbox 0:projects 1:app 1:site 2:copy 0:archive focus=site"
   },
   "sheet": {
     "visible": true,

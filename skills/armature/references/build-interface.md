@@ -64,6 +64,7 @@ Each lives in `armature_core::<module>` and exports a `Part` enum.
 | Panel group | `panel_group` | `Root`, `Panel`, `Handle` | Each panel's share in percent. Key panels and the divider after each `0`, `1`. |
 | Rating | `rating` | `Root`, `Star` | The number of stars, in halves if allowed. Fill each star by `fill(star)`. |
 | Waterfall | `waterfall` | `Root`, `Row`, `Bar`, `Axis` | The selected span. Draw from `rows()`, `bar(key)` and `ticks(most)`. |
+| Outline | `outline` | `Root`, `Row` | The rows in order, each `depth:key`. The outline owns its rows: `Outline::new(options, rows)`. Draw from `rows()`, indenting by depth. Space picks a row up, arrows move and nest it, Space drops it. |
 
 A part marked as an item part (`Primitive::is_item`) is rendered once per item and takes
 that item's key. Some other parts also take a key: a tab's panel, an accordion's panel,

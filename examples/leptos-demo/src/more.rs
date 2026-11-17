@@ -62,6 +62,29 @@ fn MenuItems() -> impl IntoView {
 }
 
 #[component]
+fn OutlineRows() -> impl IntoView {
+    use armature_core::outline::{Outline, Part as OutlinePart};
+    let outline = use_primitive::<Outline>();
+    let rows = move || {
+        outline.with(|o| {
+            o.rows()
+                .iter()
+                .map(|row| (row.key.clone(), row.depth))
+                .collect::<Vec<_>>()
+        })
+    };
+    view! {
+        <Part part=OutlinePart::Root>
+            <For each=rows key=|row| row.clone() let:row>
+                <Part part=OutlinePart::Row item=row.0.clone()>
+                    <span style=format!("display:block;padding-left:{}px", row.1 * 24)>{row.0.clone()}</span>
+                </Part>
+            </For>
+        </Part>
+    }
+}
+
+#[component]
 fn BarMenus() -> impl IntoView {
     let bar = use_primitive::<Menubar>();
     let menu = move |key: &'static str, title: &'static str| {
@@ -598,6 +621,31 @@ pub fn More() -> impl IntoView {
             <Root machine=Menu::new(entries()).disabled() label="Locked actions">
                 <Part part=menu::Part::Trigger>"Locked"</Part>
                 <Part part=menu::Part::Content><span>"Never shown"</span></Part>
+            </Root>
+            // A menu that closes when a checkbox is chosen, with an entry that
+            // destroys something.
+            <Root
+                machine=Menu::new(vec![
+                    Entry::action("pin", "Pin").of(EntryKind::Checkbox),
+                    Entry::action("erase", "Erase all").destructive(),
+                ]).closing_on_select()
+                label="Note actions"
+            >
+                <Part part=menu::Part::Trigger>"Note"</Part>
+                <MenuItems />
+            </Root>
+            // An outline reordered and nested with the keyboard or by dragging.
+            <Root
+                machine=armature_core::outline::Outline::new(
+                    Default::default(),
+                    [("inbox", 0), ("projects", 0), ("site", 1), ("copy", 2), ("app", 1), ("archive", 0)]
+                        .iter()
+                        .map(|(key, depth)| armature_core::outline::OutlineRow { key: key.to_string(), depth: *depth })
+                        .collect(),
+                )
+                label="Notes outline"
+            >
+                <OutlineRows />
             </Root>
             // A popover that keeps the page behind it out of reach.
             <Root machine=armature_core::popover::Popover::default().modal() label="Modal details">
