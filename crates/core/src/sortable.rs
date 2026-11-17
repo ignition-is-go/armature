@@ -1,7 +1,7 @@
 use crate::agent::{ActError, Snapshot, SnapshotItem};
 use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::drag::{Drag, DragEvent};
-use crate::geometry::Rect;
+use crate::geometry::{Point, Rect};
 use crate::items::Items;
 use crate::keys::{Key, Orientation};
 use crate::primitive::{
@@ -30,6 +30,8 @@ pub struct Sortable {
     drag: Drag,
     /// The item under the pointer since it went down.
     pressed: Option<String>,
+    /// How far the dragged item has been carried.
+    carried: Option<Point>,
 }
 
 impl Sortable {
@@ -38,6 +40,12 @@ impl Sortable {
             orientation,
             ..Default::default()
         }
+    }
+
+    /// The item being dragged and how far the pointer has carried it, for drawing it
+    /// under the pointer while the others make room.
+    pub fn dragging(&self) -> Option<(&str, Point)> {
+        Some((self.pressed.as_deref()?, self.carried?))
     }
 
     /// The move in progress, for showing where the item would land.
@@ -269,6 +277,10 @@ impl Primitive for Sortable {
                 let Some(event) = self.drag.moved(pointer.at) else {
                     return Reaction::default();
                 };
+                self.carried = match event {
+                    DragEvent::Start { total, .. } | DragEvent::Move { total, .. } => Some(total),
+                    _ => self.carried,
+                };
                 if matches!(event, DragEvent::Start { .. })
                     && let Some(at) = self
                         .pressed
@@ -287,6 +299,7 @@ impl Primitive for Sortable {
             }
             PointerPhase::Up => {
                 self.pressed = None;
+                self.carried = None;
                 let ended = self.drag.up(pointer.at);
                 let reorder = self
                     .session
@@ -301,6 +314,7 @@ impl Primitive for Sortable {
             }
             PointerPhase::Cancel => {
                 self.pressed = None;
+                self.carried = None;
                 self.drag.cancel();
                 self.session.cancel();
                 Reaction::handled()
@@ -376,7 +390,6 @@ impl Primitive for Sortable {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::geometry::Point;
     use crate::keys::Modifiers;
 
     fn list() -> Sortable {
@@ -440,6 +453,7 @@ mod tests {
         pointer(&mut list, PointerPhase::Down, "milk", 10.0, &mut |_| true);
         pointer(&mut list, PointerPhase::Move, "milk", 55.0, &mut |_| true);
         assert_eq!(list.moving(), Some(Reorder { from: 0, to: 2 }));
+        assert_eq!(list.dragging(), Some(("milk", Point::new(0.0, 45.0))));
         let dropped = pointer(&mut list, PointerPhase::Up, "milk", 55.0, &mut |_| true);
         assert_eq!(list.value(), ["eggs", "bread", "milk", "jam"]);
         assert_eq!(spoken(&dropped), "milk dropped at position 3 of 4.");

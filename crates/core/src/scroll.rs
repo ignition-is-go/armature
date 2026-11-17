@@ -173,6 +173,13 @@ pub fn edge_scroll(container: Rect, at: Point, zone: f64, max_speed: f64) -> Poi
     )
 }
 
+/// How far to lift content so a focused field clears an on-screen keyboard. `visible`
+/// is the part of the window the keyboard has left showing. Zero when the field
+/// already shows, with `margin` to spare.
+pub fn avoid_keyboard(field: Rect, visible: Rect, margin: f64) -> f64 {
+    (field.bottom() + margin - visible.bottom()).max(0.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -244,5 +251,18 @@ mod tests {
         assert_eq!(speed(380.), 300.0);
         assert_eq!(speed(400.), 600.0);
         assert_eq!(speed(-50.), -600.0);
+    }
+
+    #[test]
+    fn a_field_under_the_keyboard_is_lifted_just_clear_of_it() {
+        let visible = Rect::new(0., 0., 400., 500.);
+        assert_eq!(
+            avoid_keyboard(Rect::new(20., 480., 200., 40.), visible, 16.),
+            36.0
+        );
+        assert_eq!(
+            avoid_keyboard(Rect::new(20., 100., 200., 40.), visible, 16.),
+            0.0
+        );
     }
 }

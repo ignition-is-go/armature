@@ -38,6 +38,21 @@ pub enum Input<Part> {
     PressOutside,
     /// The time asked for by `Effect::Wake` has arrived.
     Tick { now_ms: u64 },
+    /// The pointer came to rest over a part, or left it. Touch never hovers.
+    Hover {
+        part: Part,
+        item: Option<String>,
+        inside: bool,
+        now_ms: u64,
+    },
+    /// A scrolling part moved, or changed size. Both are lengths along its axis.
+    Scrolled {
+        part: Part,
+        offset: f64,
+        viewport: f64,
+    },
+    /// The person pasted text while focus was inside the primitive.
+    Paste { text: String },
     /// The person edited a text part.
     Text {
         part: Part,
@@ -79,6 +94,10 @@ pub enum Effect {
     Wake { at_ms: u64 },
     /// Keep sending this pointer's moves here until it is released, wherever it goes.
     CapturePointer,
+    /// Scroll the primitive's scrolling part to this offset.
+    ScrollTo { offset: u32 },
+    /// Put this text on the clipboard.
+    Copy { text: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -182,6 +201,7 @@ pub enum Role {
     ListItem,
     /// A draggable divider between two panels.
     Separator,
+    Tooltip,
 }
 
 /// A number within limits, as a slider or stepper reports it.
@@ -231,6 +251,8 @@ pub struct Relations<Part> {
     pub labelled_by: Option<Part>,
     /// The part this one shows, hides or changes.
     pub controls: Option<Part>,
+    /// The part whose text explains this one.
+    pub described_by: Option<Part>,
 }
 
 impl<Part> Default for Relations<Part> {
@@ -238,6 +260,7 @@ impl<Part> Default for Relations<Part> {
         Relations {
             labelled_by: None,
             controls: None,
+            described_by: None,
         }
     }
 }
@@ -255,6 +278,17 @@ pub trait Primitive: Clone + 'static {
 
     /// Whether a part is rendered once per item and registers that item.
     fn is_item(part: Self::Part) -> bool;
+
+    /// Whether the adapter should report the pointer hovering over a part.
+    fn hovers(_part: Self::Part) -> bool {
+        false
+    }
+
+    /// Whether a part scrolls, so the adapter reports its offset and size and carries
+    /// out `Effect::ScrollTo` on it.
+    fn scrolls(_part: Self::Part) -> bool {
+        false
+    }
 
     /// How a part relates to others, for assistive technology. A relation between
     /// parts that take an item joins the two that share an item.

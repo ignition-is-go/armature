@@ -8,6 +8,9 @@ pub struct Layer {
     pub modal: bool,
     pub dismiss_on_escape: bool,
     pub dismiss_on_outside_press: bool,
+    /// Stays usable whatever opens above it, even a modal, and is never dismissed by
+    /// a press elsewhere. A stack of notifications is the usual case.
+    pub persistent: bool,
 }
 
 impl Layer {
@@ -18,6 +21,18 @@ impl Layer {
             modal: false,
             dismiss_on_escape: true,
             dismiss_on_outside_press: true,
+            persistent: false,
+        }
+    }
+
+    /// A layer that stays usable above everything and that nothing else dismisses.
+    pub fn persistent(id: &str) -> Self {
+        Layer {
+            id: id.to_string(),
+            modal: false,
+            dismiss_on_escape: false,
+            dismiss_on_outside_press: false,
+            persistent: true,
         }
     }
 
@@ -28,6 +43,7 @@ impl Layer {
             modal: true,
             dismiss_on_escape: true,
             dismiss_on_outside_press: false,
+            persistent: false,
         }
     }
 }
@@ -67,9 +83,11 @@ impl LayerStack {
         self.layers.last().map(|layer| layer.id.as_str())
     }
 
-    /// Whether a layer cannot be interacted with because a modal sits above it.
+    /// Whether a layer cannot be interacted with because a modal sits above it. A
+    /// persistent layer never is.
     pub fn is_inert(&self, id: &str) -> bool {
         match self.layers.iter().position(|layer| layer.id == id) {
+            Some(at) if self.layers[at].persistent => false,
             Some(at) => self.layers[at + 1..].iter().any(|layer| layer.modal),
             None => self.layers.iter().any(|layer| layer.modal),
         }
@@ -77,30 +95,51 @@ impl LayerStack {
 
     /// Escape was pressed. Only the top layer may answer. Returns what closed.
     pub fn escape(&mut self) -> Vec<String> {
-        match self.layers.last() {
+        match self.layers.iter().rev().find(|layer| !layer.persistent) {
             Some(top) if top.dismiss_on_escape => {
                 let id = top.id.clone();
-                self.close(&id)
+                self.remove(&id)
             }
             _ => Vec::new(),
         }
+    }
+
+    /// Removes one layer and the non-persistent layers opened above it.
+    fn remove(&mut self, id: &str) -> Vec<String> {
+        let Some(at) = self.layers.iter().position(|layer| layer.id == id) else {
+            return Vec::new();
+        };
+        let mut closed = Vec::new();
+        let mut index = self.layers.len();
+        while index > at {
+            index -= 1;
+            if index == at || !self.layers[index].persistent {
+                closed.push(self.layers.remove(index).id);
+            }
+        }
+        closed
     }
 
     /// A press landed inside layer `inside`, or outside every layer. Layers above the
     /// pressed one close from the top down, stopping at the first that does not
     /// dismiss this way. Returns what closed.
     pub fn press(&mut self, inside: Option<&str>) -> Vec<String> {
-        let keep = inside
-            .and_then(|id| self.layers.iter().position(|layer| layer.id == id))
-            .map_or(0, |at| at + 1);
+        let pressed = inside.and_then(|id| self.layers.iter().position(|layer| layer.id == id));
+        if pressed.is_some_and(|at| self.layers[at].persistent) {
+            return Vec::new();
+        }
+        let keep = pressed.map_or(0, |at| at + 1);
         let mut closed = Vec::new();
-        while self.layers.len() > keep
-            && self
-                .layers
-                .last()
-                .is_some_and(|top| top.dismiss_on_outside_press)
-        {
-            closed.extend(self.layers.pop().map(|layer| layer.id));
+        let mut index = self.layers.len();
+        while index > keep {
+            index -= 1;
+            if self.layers[index].persistent {
+                continue;
+            }
+            if !self.layers[index].dismiss_on_outside_press {
+                break;
+            }
+            closed.push(self.layers.remove(index).id);
         }
         closed
     }
@@ -180,5 +219,24 @@ mod tests {
         assert_eq!(trapped_focus(Some(0), 3, true), Some(2));
         assert_eq!(trapped_focus(None, 3, true), Some(2));
         assert_eq!(trapped_focus(None, 0, false), None);
+    }
+
+    #[test]
+    fn a_persistent_layer_survives_everything_and_stays_usable_under_a_modal() {
+        let mut stack = stack(&[
+            Layer::persistent("toasts"),
+            Layer::dialog("confirm"),
+            Layer::popup("menu"),
+        ]);
+        assert!(!stack.is_inert("toasts"));
+        assert_eq!(
+            stack.press(Some("toasts")),
+            Vec::<String>::new(),
+            "pressing a toast dismisses nothing"
+        );
+        assert_eq!(stack.press(None), ["menu"]);
+        assert_eq!(stack.escape(), ["confirm"]);
+        assert_eq!(stack.escape(), Vec::<String>::new());
+        assert_eq!(stack.top(), Some("toasts"));
     }
 }

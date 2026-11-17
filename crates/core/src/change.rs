@@ -12,6 +12,8 @@ pub enum Reason {
     Drag,
     /// Typed into a text part.
     Text,
+    /// The content was edited, as opposed to what is selected.
+    Edit,
     Action,
 }
 

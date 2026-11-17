@@ -62,6 +62,16 @@ pub fn place(
     }
 }
 
+/// Where along a popup's edge its arrow sits so that it points at the middle of the
+/// anchor, measured from the popup's left. It stays `inset` clear of the corners.
+pub fn arrow_offset(anchor: Rect, placed: Placed, popup: Size, inset: f64) -> f64 {
+    let target = anchor.x + anchor.width / 2.0 - placed.x;
+    target.clamp(
+        inset.min(popup.width / 2.0),
+        (popup.width - inset).max(popup.width / 2.0),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -165,5 +175,31 @@ mod tests {
             4.0,
         );
         assert_eq!(placed.x, 300.0);
+    }
+
+    #[test]
+    fn the_arrow_points_at_the_anchors_middle_and_stays_off_the_corners() {
+        let placed = place(
+            anchor(50.0, 50.0),
+            POPUP,
+            VIEWPORT,
+            Side::Bottom,
+            Align::Start,
+            4.0,
+        );
+        assert_eq!(arrow_offset(anchor(50.0, 50.0), placed, POPUP, 12.0), 50.0);
+        let shifted = place(
+            anchor(750.0, 50.0),
+            POPUP,
+            VIEWPORT,
+            Side::Bottom,
+            Align::Start,
+            4.0,
+        );
+        assert_eq!(
+            arrow_offset(anchor(750.0, 50.0), shifted, POPUP, 12.0),
+            188.0,
+            "held clear of the corner"
+        );
     }
 }

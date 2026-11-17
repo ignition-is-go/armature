@@ -69,7 +69,13 @@ fn instances<P: Primitive>(items: &[Item]) -> Vec<Instance<P>> {
 /// Every input a primitive can receive, aimed at every part instance.
 fn inputs<P: Primitive>(items: &[Item]) -> Vec<Input<P::Part>> {
     let mods = Modifiers::default();
-    let mut all: Vec<Input<P::Part>> = vec![Input::PressOutside, Input::Tick { now_ms: 10_000 }];
+    let mut all: Vec<Input<P::Part>> = vec![
+        Input::PressOutside,
+        Input::Tick { now_ms: 10_000 },
+        Input::Paste {
+            text: "a\tb\nc\td".into(),
+        },
+    ];
     all.extend(KEYS.iter().map(|key| Input::Key {
         key: *key,
         mods,
@@ -87,8 +93,25 @@ fn inputs<P: Primitive>(items: &[Item]) -> Vec<Input<P::Part>> {
         });
         all.push(Input::Text {
             part,
-            item,
+            item: item.clone(),
             value: "12".into(),
+        });
+        all.push(Input::Hover {
+            part,
+            item: item.clone(),
+            inside: true,
+            now_ms: 0,
+        });
+        all.push(Input::Hover {
+            part,
+            item,
+            inside: false,
+            now_ms: 0,
+        });
+        all.push(Input::Scrolled {
+            part,
+            offset: 40.0,
+            viewport: 100.0,
         });
     }
     all
