@@ -59,10 +59,12 @@ impl Select {
     ) -> Reaction<Part> {
         match key {
             Key::Escape => self.dismiss(),
-            Key::Tab => {
-                self.open = false;
-                Reaction::default()
-            }
+            // Focus goes back to the trigger first, so the platform's own Tab then
+            // moves on from there and not from inside the popup.
+            Key::Tab => Reaction {
+                handled: false,
+                ..self.dismiss()
+            },
             Key::Enter | Key::Space => {
                 let choose = Input::Key {
                     key,
@@ -188,6 +190,27 @@ impl Primitive for Select {
                 key: Key::Enter | Key::Space | Key::ArrowDown | Key::ArrowUp,
                 ..
             } => self.show(),
+            Input::Key {
+                key: Key::Char(ch),
+                mods,
+                now_ms,
+            } if !mods.ctrl => {
+                let typed = Input::Key {
+                    key: Key::Char(ch),
+                    mods,
+                    now_ms,
+                };
+                if !self.tell_list(typed).handled {
+                    return Reaction::default();
+                }
+                let choose = Input::Key {
+                    key: Key::Enter,
+                    mods: Modifiers::default(),
+                    now_ms,
+                };
+                self.list.send(choose, gate);
+                Reaction::handled()
+            }
             _ => Reaction::default(),
         }
     }
@@ -316,11 +339,26 @@ mod tests {
     }
 
     #[test]
-    fn tab_closes_and_is_left_to_the_platform() {
+    fn tab_closes_and_moves_on_from_the_trigger() {
         let mut select = select();
         press(&mut select, Part::Trigger, None);
-        assert_eq!(key(&mut select, Key::Tab), Reaction::default());
+        let tabbed = key(&mut select, Key::Tab);
         assert!(!select.is_open());
+        assert!(!tabbed.handled, "the platform still performs the Tab");
+        assert_eq!(tabbed.focus, TO_TRIGGER);
+    }
+
+    #[test]
+    fn typing_on_a_closed_select_chooses_the_matching_option() {
+        let mut select = select();
+        assert!(key(&mut select, Key::Char('l')).handled);
+        assert_eq!(select.value(), ["large"]);
+        assert!(!select.is_open());
+        assert!(
+            !key(&mut select, Key::Char('m')).handled,
+            "medium is disabled"
+        );
+        assert_eq!(select.value(), ["large"]);
     }
 
     #[test]
