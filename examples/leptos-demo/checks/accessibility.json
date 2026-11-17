@@ -1,0 +1,15 @@
+[
+  ["dialog", "Share this page"],
+  ["button", "Share"],
+  ["checkbox", "All alerts"],
+  ["textbox", "Email"],
+  ["button", "Left"],
+  ["tab", "Fruit"],
+  ["tabpanel", "Fruit"],
+  ["slider", "Volume"],
+  ["switch", "Wi-Fi"],
+  ["tree", "Files"],
+  ["progressbar", "Upload"],
+  ["meter", "Storage"],
+  ["navigation", "Main"]
+]

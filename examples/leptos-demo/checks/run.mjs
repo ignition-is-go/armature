@@ -112,6 +112,41 @@ try {
     failed += problems.length;
     console.log(problems.length ? `FAIL ${name}\n  ${problems.join("\n  ")}` : `ok   ${name}`);
   }
+  // What assistive technology is given: the browser's own accessibility tree, read
+  // after putting a few components into a telling state.
+  await send("Page.navigate", { url: site }, sessionId);
+  await evaluate(`new Promise((resolve) => { const poll = () => window.armature ? resolve() : setTimeout(poll, 50); poll(); })`);
+  await evaluate(`new Promise((resolve) => setTimeout(resolve, 300))`);
+  await evaluate(`(${await readFile(join(here, "accessibility.js"), "utf8")})()`);
+  await send("Accessibility.enable", {}, sessionId);
+  const { nodes } = await send("Accessibility.getFullAXTree", {}, sessionId);
+  const wanted = JSON.parse(await readFile(join(here, "accessibility.json"), "utf8"));
+  const described = {};
+  for (const [role, name] of wanted) {
+    const node = nodes.find((node) => !node.ignored && node.role?.value === role && node.name?.value === name);
+    const facts = node ? Object.fromEntries((node.properties ?? [])
+      .filter((property) => ["expanded", "checked", "selected", "invalid", "live", "pressed", "modal", "level", "disabled"].includes(property.name))
+      .map((property) => [property.name, String(property.value.value)])) : "MISSING";
+    if (node?.value?.value !== undefined) facts.value = String(node.value.value);
+    if (node?.description?.value) facts.description = node.description.value;
+    described[`${role} "${name}"`] = facts;
+  }
+  // Every region whose changes are read out, with how urgently and what it holds.
+  const byId = new Map(nodes.map((node) => [node.nodeId, node]));
+  const textOf = (node) => node.role?.value === "StaticText" ? [node.name?.value ?? ""]
+    : (node.childIds ?? []).flatMap((id) => (byId.has(id) ? textOf(byId.get(id)) : []));
+  const liveOf = (node) => node.properties?.find((property) => property.name === "live")?.value.value;
+  described.live = nodes
+    .filter((node) => !node.ignored && liveOf(node) && !liveOf(byId.get(node.parentId) ?? {}))
+    .map((node) => `${node.role?.value} ${liveOf(node)}: ${textOf(node).join(" ").trim()}`)
+    .filter((line) => !line.endsWith(":"))
+    .sort();
+  observed.accessibility = described;
+  if (!record) {
+    const problems = differences(expected.accessibility, observed.accessibility, "accessibility");
+    failed += problems.length;
+    console.log(problems.length ? `FAIL accessibility\n  ${problems.join("\n  ")}` : "ok   accessibility");
+  }
   if (record) {
     await writeFile(expectedPath, JSON.stringify(without(observed, [...unstable, ...incidental]), null, 2) + "\n");
     console.log(`recorded ${expectedPath}`);

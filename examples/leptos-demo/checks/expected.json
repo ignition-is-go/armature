@@ -344,5 +344,48 @@
       "collapsed": "page@1 api@2",
       "selected": "Span: api"
     }
+  },
+  "accessibility": {
+    "dialog \"Share this page\"": {
+      "modal": "false",
+      "description": "Anyone with the link can view."
+    },
+    "button \"Share\"": {
+      "expanded": "true"
+    },
+    "checkbox \"All alerts\"": {
+      "checked": "mixed"
+    },
+    "textbox \"Email\"": {
+      "invalid": "true",
+      "value": "ada"
+    },
+    "button \"Left\"": {
+      "pressed": "true"
+    },
+    "tab \"Fruit\"": {
+      "selected": "true"
+    },
+    "tabpanel \"Fruit\"": {},
+    "slider \"Volume\"": {
+      "value": "30"
+    },
+    "switch \"Wi-Fi\"": {
+      "checked": "false"
+    },
+    "tree \"Files\"": {},
+    "progressbar \"Upload\"": {
+      "value": "60"
+    },
+    "meter \"Storage\"": {
+      "value": "40"
+    },
+    "navigation \"Main\"": {},
+    "live": [
+      "alert assertive: Enter an email address.",
+      "generic assertive: Dropped milk at position 2 of 4.",
+      "generic polite: Saved",
+      "status polite: Saved Undo ×"
+    ]
   }
 }
