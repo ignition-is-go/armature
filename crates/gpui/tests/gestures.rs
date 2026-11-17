@@ -287,3 +287,100 @@ fn a_dialog_opens_from_the_keyboard_and_escape_returns_focus(cx: &mut TestAppCon
     assert!(!confirm.update(cx, |c, _| c.primitive().is_open()));
     assert!(focused(cx, dialog::Part::Trigger));
 }
+
+#[gpui::test]
+fn a_calendar_keeps_focus_when_the_keyboard_pages_to_another_month(cx: &mut TestAppContext) {
+    use armature_core::calendar::{self, Calendar};
+    use armature_core::date::Date;
+
+    struct Page(Entity<Machine<Calendar>>);
+    impl Render for Page {
+        fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            let days: Vec<String> = self
+                .0
+                .read(cx)
+                .primitive()
+                .weeks()
+                .iter()
+                .flatten()
+                .map(|day| day.format())
+                .collect();
+            self.0.update(cx, |calendar, cx| {
+                calendar.track(calendar::Part::Day, days.clone(), cx)
+            });
+            let cells = days
+                .iter()
+                .map(|day| part(&self.0, calendar::Part::Day, Some(day), cx).size(px(ROW)));
+            part(&self.0, calendar::Part::Grid, None, cx)
+                .flex()
+                .flex_wrap()
+                .w(px(7. * ROW))
+                .children(cells.collect::<Vec<_>>())
+        }
+    }
+    let start = Date::parse("2026-11-30").unwrap();
+    let (page, cx) = cx.add_window_view(|_, cx| {
+        Page(cx.new(|cx| Machine::new(Calendar::new(Default::default(), start), "Date", [], cx)))
+    });
+    let calendar = page.update(cx, |page, _| page.0.clone());
+    calendar.update_in(cx, |c, window, cx| {
+        c.focus_handle(calendar::Part::Day, Some("2026-11-30"))
+            .unwrap()
+            .focus(window, cx);
+    });
+
+    cx.simulate_keystrokes("down down enter");
+
+    assert_eq!(
+        calendar.update(cx, |c, _| c.primitive().month()),
+        (2026, 12)
+    );
+    assert_eq!(
+        calendar.update(cx, |c, _| c.value()),
+        ["2026-12-14"],
+        "Enter reached the day focus moved to"
+    );
+    let focused = calendar.update_in(cx, |c, window, _| {
+        c.focus_handle(calendar::Part::Day, Some("2026-12-14"))
+            .unwrap()
+            .is_focused(window)
+    });
+    assert!(focused);
+}
+
+#[gpui::test]
+fn dragging_a_divider_resizes_the_panels(cx: &mut TestAppContext) {
+    use armature_core::resizable::{self, Resizable};
+
+    struct Page(Entity<Machine<Resizable>>);
+    impl Render for Page {
+        fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            let share = self.0.read(cx).primitive().percent() as f32;
+            part(&self.0, resizable::Part::Root, None, cx)
+                .flex()
+                .w(px(400.))
+                .h(px(100.))
+                .child(div().w(px(4. * share - 5.)))
+                .child(
+                    part(&self.0, resizable::Part::Handle, None, cx)
+                        .w(px(10.))
+                        .h_full(),
+                )
+        }
+    }
+    let (page, cx) = cx.add_window_view(|_, cx| {
+        Page(cx.new(|cx| Machine::new(Resizable::default(), "Panels", [], cx)))
+    });
+    let panels = page.update(cx, |page, _| page.0.clone());
+
+    down(cx, 200., 50.);
+    drag_to(cx, 100., 50.);
+    up(cx, 100., 50.);
+    assert_eq!(panels.update(cx, |p, _| p.primitive().percent()), 25.0);
+    cx.simulate_keystrokes("right end");
+    assert_eq!(
+        panels.update(cx, |p, _| p.primitive().percent()),
+        90.0,
+        "the drag focused the divider"
+    );
+}

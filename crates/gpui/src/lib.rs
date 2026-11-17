@@ -144,6 +144,26 @@ impl<P: Primitive> Machine<P> {
         self
     }
 
+    /// Tells the machine which items a part is being rendered for, when they are not
+    /// known up front: a calendar's days, or the tokens in a field. Call it before
+    /// rendering those parts so each has a focus handle.
+    pub fn track(
+        &mut self,
+        part: P::Part,
+        items: impl IntoIterator<Item = String>,
+        cx: &mut Context<Self>,
+    ) {
+        let wanted: Vec<String> = items.into_iter().collect();
+        self.handles.retain(|(p, item), _| {
+            *p != part || item.as_ref().is_none_or(|item| wanted.contains(item))
+        });
+        for item in wanted {
+            self.handles
+                .entry((part, Some(item)))
+                .or_insert_with(|| cx.focus_handle());
+        }
+    }
+
     /// Sets what agents may see and do with this component.
     pub fn agent_access(mut self, access: Access, cx: &mut Context<Self>) -> Self {
         self.secret = access.secret;
@@ -304,7 +324,14 @@ impl<P: Primitive> Machine<P> {
             .focus
             .clone()
             .map(|target| (target.part, target.item));
-        if let Some(handle) = target.and_then(|key| self.handles.get(&key)) {
+        // A target that has not been rendered yet, such as a day in the month just
+        // paged to, gets its handle now so focus is waiting for it.
+        if let Some(key) = target {
+            let handle = self
+                .handles
+                .entry(key)
+                .or_insert_with(|| cx.focus_handle())
+                .clone();
             handle.focus(window, cx);
         }
         for effect in &reaction.effects {

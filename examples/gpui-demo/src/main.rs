@@ -1,17 +1,21 @@
 use armature_core::accordion::{self, Accordion};
+use armature_core::calendar::{self, Calendar};
 use armature_core::command::{self, Command};
+use armature_core::date::Date;
 use armature_core::keys::Dir;
 use armature_core::listbox::{self, Listbox};
 use armature_core::number::NumberRange;
 use armature_core::number_input::{self, NumberInput};
 use armature_core::primitive::{Item, PartOf, Primitive};
 use armature_core::radio::{self, Radio};
+use armature_core::resizable::{self, Resizable};
 use armature_core::select::{self, Select};
 use armature_core::selection::Mode;
 use armature_core::slider::{self, Slider};
 use armature_core::sortable::{self, Sortable};
 use armature_core::tabs::{self, Tabs};
 use armature_core::toggle::{self, Toggle};
+use armature_core::toolbar::{self, Toolbar};
 use armature_core::tree::tree_from_paths;
 use armature_core::tree_view::{self, TreeView};
 use armature_gpui::{Machine, PartElement, Source, part};
@@ -64,6 +68,10 @@ struct Demo {
     commands: Entity<Machine<Command>>,
     quantity: Entity<Machine<NumberInput>>,
     groceries: Entity<Machine<Sortable>>,
+    date: Entity<Machine<Calendar>>,
+    formatting: Entity<Machine<Toolbar>>,
+    panels: Entity<Machine<Resizable>>,
+    pressed: Entity<String>,
 }
 
 impl Demo {
@@ -72,6 +80,8 @@ impl Demo {
             mode: Mode::Multiple,
             ..Default::default()
         };
+        let pressed = cx.new(|_| String::new());
+        cx.observe(&pressed, |_, _, cx| cx.notify()).detach();
         let all = |keys: &[&str]| items(&keys.iter().map(|key| (*key, false)).collect::<Vec<_>>());
         let tree = tree_from_paths(&[
             "src/main.rs",
@@ -143,6 +153,25 @@ impl Demo {
                 let range = NumberRange::new(0.0, 20.0, 1.0);
                 Machine::new(NumberInput::new(range, 2.0), "Quantity", [], cx)
             }),
+            date: cx.new(|cx| {
+                let start = Date::parse("2026-11-17").expect("a real date");
+                Machine::new(Calendar::new(Default::default(), start), "Date", [], cx)
+            }),
+            formatting: cx.new(|cx| {
+                let buttons = items(&[("Bold", false), ("Italic", true), ("Link", false)]);
+                let pressed = pressed.clone();
+                Machine::new(Toolbar::default(), "Formatting", buttons, cx).on_value_change(
+                    move |change, cx| {
+                        pressed.update(cx, |last, cx| {
+                            *last = change.value.join("");
+                            cx.notify();
+                        });
+                        true
+                    },
+                )
+            }),
+            panels: cx.new(|cx| Machine::new(Resizable::default(), "Panels", [], cx)),
+            pressed,
             groceries: cx.new(|cx| {
                 Machine::new(
                     Sortable::default(),
@@ -506,8 +535,130 @@ impl Demo {
     }
 }
 
+impl Demo {
+    fn latest(&self, cx: &App) -> Div {
+        let calendar = self.date.read(cx).primitive();
+        let (year, month) = calendar.month();
+        let month_button =
+            |kind, sign: &'static str| boxed(part(&self.date, kind, None, cx)).px_2().child(sign);
+        let day = |date: Date| {
+            let key = date.format();
+            let semantics = self
+                .date
+                .read(cx)
+                .semantics(calendar::Part::Day, Some(&key));
+            let chosen = semantics.selected == Some(true);
+            part(&self.date, calendar::Part::Day, Some(&key), cx)
+                .size(px(30.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded_md()
+                .border_1()
+                .border_color(rgb(WHITE))
+                .focus(|style| style.border_color(rgb(ACCENT)))
+                .when(!semantics.active, |el| el.text_color(rgb(LINE)))
+                .when(chosen, |el| el.bg(rgb(ACCENT)).text_color(rgb(WHITE)))
+                .child(date.day.to_string())
+        };
+        let weeks = calendar.weeks();
+        let chosen_day = self.date.read(cx).value().join("");
+
+        let button = |key: &'static str| {
+            let disabled = self
+                .formatting
+                .read(cx)
+                .semantics(toolbar::Part::Button, Some(key))
+                .disabled;
+            boxed(part(&self.formatting, toolbar::Part::Button, Some(key), cx))
+                .px_2()
+                .py_1()
+                .when(disabled, |el| el.text_color(rgb(LINE)))
+                .child(key)
+        };
+
+        let share = self.panels.read(cx).primitive().percent() as f32;
+        let dragging = self
+            .panels
+            .read(cx)
+            .semantics(resizable::Part::Handle, None)
+            .active;
+        let width = 220.;
+        let panels = part(&self.panels, resizable::Part::Root, None, cx)
+            .flex()
+            .w(px(width))
+            .h(px(70.))
+            .border_1()
+            .border_color(rgb(LINE))
+            .rounded_md()
+            .child(div().w(px(width * share / 100. - 4.)).p_1().child("Left"))
+            .child(
+                part(&self.panels, resizable::Part::Handle, None, cx)
+                    .w(px(6.))
+                    .h_full()
+                    .bg(rgb(if dragging { ACCENT } else { LINE }))
+                    .focus(|style| style.bg(rgb(ACCENT))),
+            )
+            .child(div().p_1().child("Right"));
+
+        div()
+            .flex()
+            .flex_col()
+            .gap_4()
+            .child(
+                section("CALENDAR")
+                    .child(format!("Day: {chosen_day}"))
+                    .child(
+                        div()
+                            .flex()
+                            .gap_2()
+                            .items_center()
+                            .child(month_button(calendar::Part::PreviousMonth, "‹"))
+                            .child(format!("{year}-{month:02}"))
+                            .child(month_button(calendar::Part::NextMonth, "›")),
+                    )
+                    .child(
+                        part(&self.date, calendar::Part::Grid, None, cx)
+                            .flex()
+                            .flex_col()
+                            .children(
+                                weeks
+                                    .into_iter()
+                                    .map(|week| div().flex().children(week.map(day))),
+                            ),
+                    ),
+            )
+            .child(
+                section("TOOLBAR")
+                    .child(format!("Pressed: {}", self.pressed.read(cx)))
+                    .child(
+                        part(&self.formatting, toolbar::Part::Root, None, cx)
+                            .flex()
+                            .gap_1()
+                            .children(["Bold", "Italic", "Link"].map(button)),
+                    ),
+            )
+            .child(
+                section("RESIZABLE")
+                    .child(format!("Split: {share}%"))
+                    .child(panels),
+            )
+    }
+}
+
 impl Render for Demo {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let days: Vec<String> = self
+            .date
+            .read(cx)
+            .primitive()
+            .weeks()
+            .iter()
+            .flatten()
+            .map(|day| day.format())
+            .collect();
+        self.date
+            .update(cx, |date, cx| date.track(calendar::Part::Day, days, cx));
         div()
             .size_full()
             .bg(rgb(WHITE))
@@ -519,6 +670,7 @@ impl Render for Demo {
             .on_action(|_: &FocusPrev, window, cx| window.focus_prev(cx))
             .child(self.classic(cx))
             .child(self.newer(cx))
+            .child(self.latest(cx))
     }
 }
 
@@ -528,7 +680,7 @@ fn main() {
             KeyBinding::new("tab", FocusNext, None),
             KeyBinding::new("shift-tab", FocusPrev, None),
         ]);
-        let bounds = Bounds::centered(None, size(px(620.), px(900.)), cx);
+        let bounds = Bounds::centered(None, size(px(900.), px(900.)), cx);
         cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
