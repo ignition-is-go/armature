@@ -90,6 +90,7 @@ pub mod toast;
 pub mod toggle;
 pub mod toggle_group;
 pub mod token_input;
+pub mod token_text;
 pub mod toolbar;
 pub mod tooltip;
 pub mod transfer;

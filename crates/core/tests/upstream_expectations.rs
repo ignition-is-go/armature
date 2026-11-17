@@ -1121,3 +1121,159 @@ fn trigger_matching() {
         }
     }
 }
+
+// token-input-model.test.ts
+#[test]
+fn token_text_model() {
+    use armature_core::token_text::*;
+    let alice = || Token::new("mention", "alice", "@Alice").with_id("a");
+    let file = || Token::new("file", "src/a.ts", "a.ts").with_id("f");
+    let text = |text: &str| Segment::Text(text.to_string());
+    let token = |segment: &Segment| match segment {
+        Segment::Token(token) => token.clone(),
+        Segment::Text(_) => panic!("expected a token"),
+    };
+    // "normalizing merges strings, drops empty ones and gives tokens ids"
+    let value = normalize(vec![
+        "a".into(),
+        "".into(),
+        "b".into(),
+        Token::new("x", "1", "One").into(),
+        "".into(),
+        "c".into(),
+    ]);
+    assert_eq!(value.len(), 3);
+    assert_eq!(value[0], text("ab"));
+    let made = token(&value[1]).id;
+    assert!(made.starts_with('t') && made[1..].chars().all(|ch| ch.is_ascii_digit()));
+    assert_eq!(normalize(vec![alice().into()])[0], Segment::Token(alice()));
+    // "a repeated id stays with the first token, and the next gets a new one"
+    let pair = normalize(vec![alice().into(), alice().into()]);
+    assert_eq!(token(&pair[0]).id, "a");
+    assert_ne!(token(&pair[1]).id, "a");
+    // "a supplied id too large to count past leaves generated ids unique"
+    normalize(vec![
+        Token::new("file", "x", "x")
+            .with_id("t99999999999999999999")
+            .into(),
+    ]);
+    let first = token(&normalize(vec![Token::new("file", "x", "x").into()])[0]).id;
+    let second = token(&normalize(vec![Token::new("file", "x", "x").into()])[0]).id;
+    assert_ne!(first, second);
+    // "a token counts as one offset"
+    let value = normalize(vec![
+        "hi ".into(),
+        alice().into(),
+        " and ".into(),
+        file().into(),
+    ]);
+    assert_eq!(value_length(&value), 10);
+    assert_eq!(offset_text(&value), "hi \u{FFFC} and \u{FFFC}");
+    assert_eq!(token_at(&value, 3), Some(&alice()));
+    assert_eq!(offset_of_token(&value, "f"), Some(9));
+    // "slicing keeps whole tokens"
+    let value = normalize(vec!["hi ".into(), alice().into(), "!".into()]);
+    assert_eq!(slice_value(&value, 2, 4), [text(" "), alice().into()]);
+    assert_eq!(slice_value(&value, 4, usize::MAX), [text("!")]);
+    // "an edit over a token removes all of it, and edits before it shift it"
+    let value = normalize(vec!["ab".into(), alice().into(), "cd".into()]);
+    assert_eq!(
+        replace_range(&value, 1, 3, vec!["X".into()]),
+        [text("aXcd")]
+    );
+    assert_eq!(
+        offset_of_token(&replace_range(&value, 0, 0, vec!["zz".into()]), "a"),
+        Some(4)
+    );
+    assert_eq!(
+        removed_tokens(&value, &replace_range(&value, 2, 3, vec![])),
+        [alice()]
+    );
+    // "word deletion stops at tokens, and removes just the token when it's next"
+    let value = normalize(vec!["one ".into(), alice().into(), "two three".into()]);
+    assert_eq!(word_boundary(&value, 14, false), 9);
+    assert_eq!(word_boundary(&value, 8, false), 5);
+    assert_eq!(word_boundary(&value, 5, false), 4);
+    assert_eq!(word_boundary(&value, 4, false), 0);
+    assert_eq!(word_boundary(&value, 4, true), 5);
+    // "line deletion goes to the start of the line"
+    let value = normalize(vec!["one\ntwo".into()]);
+    assert_eq!(line_boundary(&value, 7, false), 4);
+    assert_eq!(line_boundary(&value, 4, false), 3);
+    assert_eq!(line_boundary(&value, 0, true), 3);
+    // "tokens are written as links and labels as text"
+    let value = normalize(vec![
+        "Summarize ".into(),
+        file().into(),
+        " for ".into(),
+        alice().into(),
+    ]);
+    assert_eq!(
+        to_text(&value),
+        "Summarize [@a.ts](file:src/a.ts) for [@@Alice](mention:alice)"
+    );
+    assert_eq!(to_label(&value), "Summarize a.ts for @Alice");
+    // Compares content, since reading text back makes new ids.
+    let strip = |value: &[Segment]| -> Vec<Segment> {
+        value
+            .iter()
+            .map(|segment| match segment {
+                Segment::Token(token) => Segment::Token(Token {
+                    id: String::new(),
+                    ..token.clone()
+                }),
+                other => other.clone(),
+            })
+            .collect()
+    };
+    // "labels and values with brackets and parentheses round-trip"
+    let odd = Token::new("file", "a (copy).ts", "[draft] a\\b").with_id("x");
+    assert_eq!(
+        strip(&from_text(&to_text(&[odd.clone().into()]))),
+        strip(&[odd.into()])
+    );
+    // "text that looks like a token stays text"
+    let value = normalize(vec!["see [@x](y:z) and \\[@q](r:s)".into()]);
+    assert_eq!(from_text(&to_text(&value)), value);
+    // "malformed links are text"
+    assert_eq!(from_text("[@open](type:val"), [text("[@open](type:val")]);
+    assert_eq!(from_text("[@a](b c:d)"), [text("[@a](b c:d)")]);
+    // "any value round-trips through the codec"
+    let mut seed: u64 = 42;
+    let mut random = || {
+        seed = (seed * 1_103_515_245 + 12_345) % (1 << 31);
+        seed as f64 / (1u64 << 31) as f64
+    };
+    let alphabet = [
+        "a", "b", " ", "\n", "[", "]", "(", ")", "@", "\\", ":", "é", "山", "[@", "\\[@",
+    ];
+    let kinds = ["mention", "file", "skill-run", "a_b"];
+    for run in 0..3000 {
+        let words = |random: &mut dyn FnMut() -> f64| -> String {
+            let count = (random() * 8.0) as usize;
+            (0..count)
+                .map(|_| alphabet[(random() * alphabet.len() as f64) as usize])
+                .collect()
+        };
+        let mut segments: Vec<Segment> = Vec::new();
+        for _ in 0..(random() * 6.0) as usize {
+            if random() < 0.5 {
+                segments.push(Segment::Text(words(&mut random)));
+            } else {
+                let kind = kinds[(random() * kinds.len() as f64) as usize];
+                let value = words(&mut random);
+                let label = words(&mut random);
+                // Upstream draws twice more here, for a status and for data.
+                random();
+                random();
+                segments.push(Token::new(kind, &value, &label).into());
+            }
+        }
+        let value = normalize(segments);
+        assert_eq!(
+            strip(&from_text(&to_text(&value))),
+            strip(&value),
+            "run {run}: {value:?}"
+        );
+    }
+}
