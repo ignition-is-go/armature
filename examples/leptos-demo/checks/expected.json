@@ -73,6 +73,11 @@
       "panelLabelledByTab": true,
       "headerControls": "region",
       "regionLabelledBy": true
+    },
+    "upstream": {
+      "selectClear": "small -> []",
+      "numberEnds": "end=100 home=0",
+      "comboboxEscape": "apricot/Apricot -> [] -> apricot/Apricot"
     }
   },
   "gestures": {

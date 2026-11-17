@@ -66,5 +66,34 @@ async () => {
     const region = document.getElementById(header.getAttribute('aria-controls'));
     return { tabControls: panel?.getAttribute('role'), panelLabelledByTab: panel?.getAttribute('aria-labelledby') === tab.id, headerControls: region?.getAttribute('role'), regionLabelledBy: region?.getAttribute('aria-labelledby') === header.id };
   });
+  // Behaviors taken from upstream's tests, seen through the real page.
+  await step('upstream', async () => {
+    const a = window.armature;
+    const of = (label) => a.snapshot().find(s => s.label === label);
+    const r = {};
+    // Select: an agent can clear the choice.
+    a.act(of('Size').ref, 'select', 'small'); await frame();
+    const chosen = of('Size').value.join(',');
+    a.act(of('Size').ref, 'clear'); await frame();
+    r.selectClear = `${chosen} -> [${of('Size').value.join(',')}]`;
+    // Number input: End and Home go to the ends of the range.
+    const before = of('Amount').value.join(',');
+    const amount = [...document.querySelectorAll('input')].find(el => el.getAttribute('aria-label') === 'Amount' || el.closest('[aria-label="Amount"]'));
+    key(amount, 'End'); await frame();
+    const atEnd = of('Amount').value.join(',');
+    key(amount, 'Home'); await frame();
+    r.numberEnds = `end=${atEnd} home=${of('Amount').value.join(',')}`;
+    a.act(of('Amount').ref, 'set', before); await frame();
+    // Combobox: deleting the text clears the choice, and Escape brings it back.
+    const fruit = [...document.querySelectorAll('input')].find(el => el.getAttribute('aria-label') === 'Favourite fruit' || el.closest('[aria-label="Favourite fruit"]'));
+    a.act(of('Favourite fruit').ref, 'select', 'apricot'); await frame();
+    const picked = `${of('Favourite fruit').value.join(',')}/${fruit.value}`;
+    await type(fruit, '');
+    const deleted = `[${of('Favourite fruit').value.join(',')}]`;
+    key(fruit, 'Escape'); await frame();
+    r.comboboxEscape = `${picked} -> ${deleted} -> ${of('Favourite fruit').value.join(',')}/${fruit.value}`;
+    a.act(of('Favourite fruit').ref, 'clear'); await frame();
+    return r;
+  });
   return out;
 }
