@@ -990,3 +990,113 @@ fn number_input_behaviors() {
     key(&mut typed, Key::Enter);
     assert_eq!(typed.number(), 10.0, "Enter clamps what was typed");
 }
+
+use armature_core::combobox::{self, Combobox};
+
+fn frameworks(opts: combobox::Options) -> Combobox {
+    let mut combobox = Combobox::new(opts);
+    for (key, label) in [("astro", "Astro"), ("next", "Next.js"), ("nuxt", "Nuxt")] {
+        combobox.upsert_item(Item {
+            key: key.into(),
+            label: label.into(),
+            disabled: false,
+        });
+    }
+    combobox.set_value(vec!["astro".into()]);
+    combobox
+}
+
+// combobox.test.ts
+#[test]
+fn combobox_behaviors() {
+    use armature_core::change::Reason;
+    use combobox::Part;
+    let typed = |combobox: &mut Combobox, text: &str, allow: bool| {
+        combobox.send(
+            Input::Text {
+                part: Part::Input,
+                item: None,
+                value: text.into(),
+            },
+            &mut |_| allow,
+        );
+    };
+    let query = |combobox: &Combobox| combobox.text(Part::Input, None).unwrap_or_default();
+    // "clearing empties the value and the text"
+    let mut cleared = frameworks(Default::default());
+    cleared.act("clear", None, &mut |_| true).unwrap();
+    assert!(cleared.value().is_empty() && query(&cleared).is_empty());
+    // "a canceled clear keeps the value and its label in the input"
+    let mut kept = frameworks(Default::default());
+    assert!(kept.act("clear", None, &mut |_| false).is_err());
+    assert_eq!(
+        (kept.value(), query(&kept)),
+        (vec!["astro".to_string()], "Astro".to_string())
+    );
+    // "Escape after deleting the text brings the value back with the reason escape-key"
+    let mut combobox = frameworks(Default::default());
+    let mut reasons = Vec::new();
+    combobox.send(
+        Input::Text {
+            part: Part::Input,
+            item: None,
+            value: String::new(),
+        },
+        &mut |change| {
+            reasons.push(change.reason);
+            true
+        },
+    );
+    assert!(combobox.value().is_empty());
+    combobox.send(
+        Input::Key {
+            key: Key::Escape,
+            mods: Modifiers::default(),
+            now_ms: 0,
+        },
+        &mut |change| {
+            reasons.push(change.reason);
+            true
+        },
+    );
+    assert_eq!(
+        (combobox.value(), query(&combobox)),
+        (vec!["astro".to_string()], "Astro".to_string())
+    );
+    assert_eq!(reasons, [Reason::Text, Reason::Keyboard]);
+    // "Escape after clearing keeps the value cleared"
+    let mut combobox = frameworks(Default::default());
+    typed(&mut combobox, "", true);
+    typed(&mut combobox, "N", true);
+    combobox.act("clear", None, &mut |_| true).unwrap();
+    typed(&mut combobox, "N", true);
+    key(&mut combobox, Key::Escape);
+    assert!(combobox.value().is_empty());
+    // "Escape brings back the value deleted last, not an earlier one"
+    let mut combobox = frameworks(Default::default());
+    typed(&mut combobox, "", true);
+    combobox.set_value(vec!["next".into()]);
+    typed(&mut combobox, "N", true);
+    typed(&mut combobox, "", true);
+    key(&mut combobox, Key::Escape);
+    assert_eq!(
+        (combobox.value(), query(&combobox)),
+        (vec!["next".to_string()], "Next.js".to_string())
+    );
+    // "clearing with nothing selected still empties the text"
+    let mut empty = frameworks(Default::default());
+    empty.set_value(Vec::new());
+    typed(&mut empty, "ne", true);
+    empty.act("clear", None, &mut |_| true).unwrap();
+    assert!(query(&empty).is_empty());
+    // "a read-only combobox ignores clear"
+    let mut locked = frameworks(combobox::Options {
+        read_only: true,
+        ..Default::default()
+    });
+    let _ = locked.act("clear", None, &mut |_| true);
+    assert_eq!(
+        (locked.value(), query(&locked)),
+        (vec!["astro".to_string()], "Astro".to_string())
+    );
+}

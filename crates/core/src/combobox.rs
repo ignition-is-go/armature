@@ -55,6 +55,8 @@ pub struct Options {
     /// answers with `set("loaded", request)` or `set("failed", request)`. An
     /// answer to a request that has since been replaced is ignored.
     pub remote: bool,
+    /// Shown but not to be changed: typing, choosing and clearing are ignored.
+    pub read_only: bool,
 }
 
 const ACTIONS: &[&str] = &["select", "remove", "clear", "type", "open", "close"];
@@ -75,6 +77,8 @@ pub struct Combobox {
     /// Whether the highlight has just reached the last option.
     at_end: bool,
     requests: crate::async_options::Requests,
+    /// The value that deleting the text took away, which Escape brings back.
+    deleted: Option<String>,
 }
 
 impl Combobox {
@@ -146,6 +150,7 @@ impl Combobox {
 
     fn commit(&mut self, next: Vec<String>, source: Source, reason: Reason, gate: Gate) -> bool {
         if next == self.selected {
+            self.deleted = None;
             return true;
         }
         let allowed = gate(&ValueChange {
@@ -155,6 +160,7 @@ impl Combobox {
         });
         if allowed {
             self.selected = next;
+            self.deleted = None;
         }
         allowed
     }
@@ -392,6 +398,9 @@ impl Primitive for Combobox {
     }
 
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
+        if self.opts.read_only && !matches!(input, Input::Focus { .. } | Input::Blur { .. }) {
+            return Reaction::default();
+        }
         match input {
             Input::Focus { part, .. } => {
                 self.on_clear = part == Part::Clear;
@@ -405,6 +414,14 @@ impl Primitive for Combobox {
                 value,
                 ..
             } => {
+                // Deleting all the text of a single choice clears it. Escape can
+                // still bring it back.
+                if value.is_empty() && !self.opts.multiple && !self.opts.custom {
+                    let was = self.selected.first().cloned();
+                    if was.is_some() && self.commit(Vec::new(), Source::User, Reason::Text, gate) {
+                        self.deleted = was;
+                    }
+                }
                 self.text = value;
                 self.open = true;
                 if self.opts.remote {
@@ -534,6 +551,18 @@ impl Primitive for Combobox {
                 }
                 None => Reaction::default(),
             },
+            // Escape brings back a value that deleting the text took away.
+            Input::Key {
+                key: Key::Escape, ..
+            } if self.deleted.is_some() => {
+                let back = self.deleted.take().unwrap_or_default();
+                if self.commit(vec![back.clone()], Source::User, Reason::Keyboard, gate) {
+                    self.text = self.label(&back);
+                }
+                self.open = false;
+                self.active = None;
+                Reaction::handled()
+            }
             // Escape closes the list first, and only then clears the field.
             Input::Key {
                 key: Key::Escape, ..
@@ -585,6 +614,7 @@ impl Primitive for Combobox {
             self.text = next.first().map(|key| self.label(key)).unwrap_or_default();
         }
         self.selected = next;
+        self.deleted = None;
     }
 
     fn snapshot(&self, label: &str) -> Snapshot {
@@ -615,7 +645,9 @@ impl Primitive for Combobox {
                 return Ok(());
             }
             "clear" => {
-                if !self.commit(Vec::new(), Source::Agent, Reason::Action, gate) {
+                if self.opts.read_only
+                    || !self.commit(Vec::new(), Source::Agent, Reason::Action, gate)
+                {
                     return Err(ActError::Refused);
                 }
                 self.text.clear();
