@@ -68,6 +68,8 @@ pub struct DateInput {
     focused: Segment,
     /// The digits typed into the focused piece so far.
     typed: String,
+    /// The earliest and latest dates taken. A date outside them is refused.
+    limits: (Option<Date>, Option<Date>),
 }
 
 impl Default for DateInput {
@@ -83,7 +85,28 @@ impl DateInput {
             fields: [None; 5],
             focused: Segment::Year,
             typed: String::new(),
+            limits: (None, None),
         }
+    }
+
+    pub fn between(mut self, earliest: Option<Date>, latest: Option<Date>) -> Self {
+        self.limits = (earliest, latest);
+        self
+    }
+
+    /// Whether a complete date lies outside the earliest and latest taken.
+    pub fn out_of_range(&self, fields: &[Option<u32>; 5]) -> bool {
+        let get = |segment: Segment| fields[segment as usize];
+        let (Some(year), Some(month), Some(day)) =
+            (get(Segment::Year), get(Segment::Month), get(Segment::Day))
+        else {
+            return false;
+        };
+        let Some(date) = Date::new(year as i32, month as u8, day as u8) else {
+            return true;
+        };
+        self.limits.0.is_some_and(|earliest| date < earliest)
+            || self.limits.1.is_some_and(|latest| date > latest)
     }
 
     /// The pieces shown, in order.
@@ -148,7 +171,17 @@ impl DateInput {
         };
         let (_, longest) = trial.limits(Segment::Day);
         fields[Segment::Day as usize] = fields[Segment::Day as usize].map(|day| day.min(longest));
-        let (before, after) = (self.written(&self.fields), self.written(&fields));
+        // A date outside the limits is kept on screen to be corrected, but is not a value.
+        let after = if self.out_of_range(&fields) {
+            Vec::new()
+        } else {
+            self.written(&fields)
+        };
+        let before = if self.out_of_range(&self.fields) {
+            Vec::new()
+        } else {
+            self.written(&self.fields)
+        };
         if before != after
             && !gate(&ValueChange {
                 value: after,
@@ -217,6 +250,7 @@ impl Primitive for DateInput {
                 let (min, max) = self.limits(segment);
                 Semantics {
                     role: Some(Role::SpinButton),
+                    invalid: self.out_of_range(&self.fields),
                     range: self.get(segment).map(|now| ValueRange {
                         now: now as f64,
                         min: min as f64,
@@ -340,7 +374,11 @@ impl Primitive for DateInput {
     }
 
     fn value(&self) -> Vec<String> {
-        self.written(&self.fields)
+        if self.out_of_range(&self.fields) {
+            Vec::new()
+        } else {
+            self.written(&self.fields)
+        }
     }
 
     fn set_value(&mut self, value: Vec<String>) {
@@ -497,5 +535,22 @@ mod tests {
     fn it_conforms() {
         crate::testing::assert_conforms(DateInput::default, &[]);
         crate::testing::assert_conforms(|| DateInput::new(true), &[]);
+    }
+
+    #[test]
+    fn a_date_outside_the_limits_stays_on_screen_but_is_not_a_value() {
+        let earliest = Date::new(2026, 6, 1);
+        let mut input = DateInput::default().between(earliest, None);
+        type_digits(&mut input, "20260315");
+        assert!(input.value().is_empty());
+        assert!(input.semantics(Part::Segment, Some("day")).invalid);
+        assert_eq!(
+            input.text(Part::Segment, Some("month")).as_deref(),
+            Some("03"),
+            "still there to correct"
+        );
+        key(&mut input, Key::ArrowLeft);
+        type_digits(&mut input, "07");
+        assert_eq!(input.value(), ["2026-07-15"]);
     }
 }

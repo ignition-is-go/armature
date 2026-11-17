@@ -145,17 +145,37 @@ impl Primitive for NumberInput {
                 self.draft = Some(value);
                 Reaction::handled()
             }
+            // PageUp, PageDown and Shift with an arrow go ten steps at a time.
             Input::Key {
-                key: Key::ArrowUp, ..
+                key: Key::PageUp, ..
             } => {
-                self.step(1.0, Reason::Keyboard, gate);
+                self.step(10.0, Reason::Keyboard, gate);
+                Reaction::handled()
+            }
+            Input::Key {
+                key: Key::PageDown, ..
+            } => {
+                self.step(-10.0, Reason::Keyboard, gate);
+                Reaction::handled()
+            }
+            Input::Key {
+                key: Key::ArrowUp,
+                mods,
+                ..
+            } => {
+                self.step(if mods.shift { 10.0 } else { 1.0 }, Reason::Keyboard, gate);
                 Reaction::handled()
             }
             Input::Key {
                 key: Key::ArrowDown,
+                mods,
                 ..
             } => {
-                self.step(-1.0, Reason::Keyboard, gate);
+                self.step(
+                    if mods.shift { -10.0 } else { -1.0 },
+                    Reason::Keyboard,
+                    gate,
+                );
                 Reaction::handled()
             }
             Input::Key {
@@ -352,5 +372,24 @@ mod tests {
         let mut input = NumberInput::new(NumberRange::new(0.0, 10.0, 1.0), 5.0);
         pointer(&mut input, PointerPhase::Down, Part::Decrement, 0);
         assert_eq!(input.number(), 4.0);
+    }
+
+    #[test]
+    fn page_keys_and_shift_go_ten_steps_at_a_time() {
+        let mut input = NumberInput::new(NumberRange::new(0.0, 100.0, 1.0), 5.0);
+        key(&mut input, Key::PageUp);
+        assert_eq!(input.value(), ["15"]);
+        input.send(
+            Input::Key {
+                key: Key::ArrowDown,
+                mods: Modifiers {
+                    shift: true,
+                    ..Default::default()
+                },
+                now_ms: 0,
+            },
+            &mut |_| true,
+        );
+        assert_eq!(input.value(), ["5"]);
     }
 }

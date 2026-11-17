@@ -20,6 +20,8 @@ pub struct Radio {
     dir: Dir,
     items: Items,
     selected: Option<String>,
+    /// Whether choosing the chosen option again clears it, as a rating allows.
+    deselectable: bool,
 }
 
 impl Radio {
@@ -44,8 +46,25 @@ impl Radio {
         }
     }
 
+    pub fn deselectable(mut self) -> Self {
+        self.deselectable = true;
+        self
+    }
+
     fn select(&mut self, key: &str, source: Source, reason: Reason, gate: Gate) -> bool {
         if self.selected.as_deref() == Some(key) {
+            // Only a press clears it. The arrows pass over the chosen option freely.
+            if self.deselectable && reason != Reason::Keyboard {
+                let allowed = gate(&ValueChange {
+                    value: Vec::new(),
+                    source,
+                    reason,
+                });
+                if allowed {
+                    self.selected = None;
+                }
+                return allowed;
+            }
             return true;
         }
         let allowed = gate(&ValueChange {
@@ -297,5 +316,31 @@ mod tests {
         radio.set_value(vec!["a".into()]);
         key(&mut radio, Key::ArrowLeft);
         assert_eq!(radio.value(), ["b"]);
+    }
+
+    #[test]
+    fn a_rating_can_be_cleared_by_pressing_the_chosen_star_again() {
+        let mut rating = Radio::new(Dir::Ltr).deselectable();
+        for key in ["1", "2", "3"] {
+            rating.upsert_item(Item {
+                key: key.into(),
+                label: key.into(),
+                disabled: false,
+            });
+        }
+        let press = |rating: &mut Radio| {
+            rating.send(
+                Input::Press {
+                    part: Part::Option,
+                    item: Some("2".into()),
+                    mods: Modifiers::default(),
+                },
+                &mut |_| true,
+            );
+        };
+        press(&mut rating);
+        assert_eq!(rating.value(), ["2"]);
+        press(&mut rating);
+        assert!(rating.value().is_empty());
     }
 }

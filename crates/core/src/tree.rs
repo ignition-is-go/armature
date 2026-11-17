@@ -175,6 +175,21 @@ impl Tree {
         next
     }
 
+    /// Every node's key, in the order the tree lists them with everything open.
+    pub fn subtree_order(&self) -> Vec<String> {
+        fn walk(tree: &Tree, at: usize, keys: &mut Vec<String>) {
+            keys.push(tree.nodes[at].key.clone());
+            for child in &tree.nodes[at].children {
+                walk(tree, *child, keys);
+            }
+        }
+        let mut keys = Vec::new();
+        for root in self.roots() {
+            walk(self, root, &mut keys);
+        }
+        keys
+    }
+
     /// The checked nodes as `strategy` reports them, in display order.
     pub fn checked_value(&self, checked: &HashSet<String>, strategy: CheckStrategy) -> Vec<String> {
         let states = self.checked_states(checked);

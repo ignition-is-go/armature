@@ -26,6 +26,16 @@ pub enum Part {
 /// How long scrolling must pause before a scrolled sheet settles.
 const REST_MS: u64 = 120;
 
+/// An edge of the screen.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Edge {
+    #[default]
+    Bottom,
+    Top,
+    Left,
+    Right,
+}
+
 const ACTIONS: &[&str] = &["open", "close", "snap"];
 
 /// A panel that slides up from the bottom edge and rests at one of several heights.
@@ -45,6 +55,8 @@ pub struct Sheet {
     speed: VelocityTracker,
     /// Whether the trigger holds focus, so Enter and Space can press it.
     on_trigger: bool,
+    /// The edge of the screen it slides in from.
+    side: Edge,
     /// Where scrolling has the sheet, and when it settles if nothing more moves it.
     scrolled: Option<(f64, u64)>,
 }
@@ -66,7 +78,29 @@ impl Sheet {
             height: 0.0,
             speed: VelocityTracker::default(),
             on_trigger: false,
+            side: Edge::Bottom,
             scrolled: None,
+        }
+    }
+
+    /// Slides in from another edge, as a navigation drawer does from the side. Its
+    /// sizes are then widths, and it is dragged along that edge's own direction.
+    pub fn from_edge(mut self, side: Edge) -> Self {
+        self.side = side;
+        self
+    }
+
+    pub fn edge(&self) -> Edge {
+        self.side
+    }
+
+    /// Where the pointer is along the way the sheet grows.
+    fn along(&self, pointer: &Pointer<Part>) -> f64 {
+        match self.side {
+            Edge::Bottom => -pointer.at.y,
+            Edge::Top => pointer.at.y,
+            Edge::Left => pointer.at.x,
+            Edge::Right => -pointer.at.x,
         }
     }
 
@@ -293,10 +327,17 @@ impl Primitive for Sheet {
                 Some(_),
             ) => self.dismiss(Reason::Keyboard, gate),
             (Input::Key { key, .. }, Some(at)) => {
+                let (grow, shrink) = match self.side {
+                    Edge::Bottom => (Key::ArrowUp, Key::ArrowDown),
+                    Edge::Top => (Key::ArrowDown, Key::ArrowUp),
+                    Edge::Left => (Key::ArrowRight, Key::ArrowLeft),
+                    Edge::Right => (Key::ArrowLeft, Key::ArrowRight),
+                };
                 let target = match key {
-                    Key::ArrowUp => (at + 1).min(last),
-                    Key::ArrowDown if at == 0 => return self.dismiss(Reason::Keyboard, gate),
-                    Key::ArrowDown => at - 1,
+                    // The arrow that points away from its edge makes it larger.
+                    k if k == grow => (at + 1).min(last),
+                    k if k == shrink && at == 0 => return self.dismiss(Reason::Keyboard, gate),
+                    k if k == shrink => at - 1,
                     Key::Home => 0,
                     Key::End => last,
                     _ => return Reaction::default(),
@@ -316,7 +357,7 @@ impl Primitive for Sheet {
             (PointerPhase::Down, Part::Backdrop) => self.dismiss(Reason::Press, gate),
             (PointerPhase::Down, Part::Handle) => {
                 self.height = self.detents[at];
-                self.grabbed = Some((pointer.at.y, self.height));
+                self.grabbed = Some((self.along(&pointer), self.height));
                 self.speed = VelocityTracker::default();
                 Reaction::focusing(Part::Handle).with(Effect::CapturePointer)
             }
@@ -325,7 +366,7 @@ impl Primitive for Sheet {
                     return Reaction::default();
                 };
                 // Dragging up makes the sheet taller. Past the tallest height it resists.
-                let wanted = (started + from - pointer.at.y).max(0.0);
+                let wanted = (started + self.along(&pointer) - from).max(0.0);
                 let tallest = self.detents.last().copied().unwrap_or(0.0);
                 self.height = if wanted > tallest {
                     tallest + rubber_band(wanted - tallest, tallest.max(1.0), 0.55)
@@ -583,5 +624,48 @@ mod tests {
         let closed = sheet.send(Input::Tick { now_ms: 620 }, &mut |_| true);
         assert!(!sheet.is_open(), "scrolled well below the lowest height");
         assert_eq!(closed.focus.unwrap().part, Part::Trigger);
+    }
+
+    #[test]
+    fn a_drawer_from_the_left_is_dragged_and_keyed_sideways() {
+        let mut drawer = Sheet::new(vec![240.0, 400.0], true).from_edge(Edge::Left);
+        drawer.act("open", None, &mut |_| true).unwrap();
+        let at = |x: f64, phase, now_ms| Pointer {
+            phase,
+            part: Part::Handle,
+            item: None,
+            at: crate::geometry::Point::new(x, 0.0),
+            mods: Modifiers::default(),
+            now_ms,
+        };
+        drawer.pointer(at(240.0, PointerPhase::Down, 0), &|_, _| None, &mut |_| {
+            true
+        });
+        drawer.pointer(
+            at(380.0, PointerPhase::Move, 500),
+            &|_, _| None,
+            &mut |_| true,
+        );
+        assert_eq!(drawer.height(), 380.0, "pulled to the right, it gets wider");
+        drawer.pointer(at(380.0, PointerPhase::Up, 1000), &|_, _| None, &mut |_| {
+            true
+        });
+        assert_eq!(drawer.value(), ["1"]);
+        let key = |drawer: &mut Sheet, key| {
+            drawer.send(
+                Input::Key {
+                    key,
+                    mods: Modifiers::default(),
+                    now_ms: 0,
+                },
+                &mut |_| true,
+            )
+        };
+        key(&mut drawer, Key::ArrowLeft);
+        assert_eq!(drawer.value(), ["0"]);
+        assert!(
+            !key(&mut drawer, Key::ArrowUp).handled,
+            "up and down are not its arrows"
+        );
     }
 }

@@ -33,6 +33,10 @@ pub struct TreeView {
     disabled: HashSet<String>,
     labels: HashMap<String, String>,
     selected: Option<String>,
+    /// Whether several nodes can be selected. A press or Space then adds a node to
+    /// the selection or takes it out.
+    multiple: bool,
+    picked: Vec<String>,
     /// How the checked nodes are reported, for a tree of checkboxes.
     check: Option<CheckStrategy>,
     /// The checked leaves.
@@ -89,6 +93,20 @@ impl TreeView {
             })
     }
 
+    /// Lets several nodes be selected at once.
+    pub fn multiple(mut self) -> Self {
+        self.multiple = true;
+        self
+    }
+
+    fn is_selected(&self, key: &str) -> bool {
+        if self.multiple {
+            self.picked.iter().any(|picked| picked == key)
+        } else {
+            self.selected.as_deref() == Some(key)
+        }
+    }
+
     /// Turns the tree into one of checkboxes. Choosing a node checks or unchecks it
     /// and everything beneath it, and the value becomes the checked nodes as
     /// `strategy` reports them.
@@ -115,6 +133,24 @@ impl TreeView {
             });
             if allowed {
                 self.checked = next;
+            }
+            return allowed;
+        }
+        if self.multiple {
+            let mut next = self.picked.clone();
+            match next.iter().position(|picked| picked == key) {
+                Some(at) => drop(next.remove(at)),
+                None => next.push(key.to_string()),
+            }
+            let order: Vec<String> = Tree::new(&self.data).subtree_order();
+            next.sort_by_key(|key| order.iter().position(|node| node == key));
+            let allowed = gate(&ValueChange {
+                value: next.clone(),
+                source,
+                reason,
+            });
+            if allowed {
+                self.picked = next;
             }
             return allowed;
         }
@@ -388,10 +424,7 @@ impl Primitive for TreeView {
             role: Some(Role::TreeItem),
             level: Some(row.level as u32),
             expanded: row.has_children.then_some(row.expanded),
-            selected: self
-                .check
-                .is_none()
-                .then(|| self.selected.as_deref() == Some(key)),
+            selected: self.check.is_none().then(|| self.is_selected(key)),
             checked: self
                 .check
                 .map(|_| self.checked_state(key) == Checked::Checked),
@@ -508,6 +541,7 @@ impl Primitive for TreeView {
     fn value(&self) -> Vec<String> {
         match self.check {
             Some(strategy) => Tree::new(&self.data).checked_value(&self.checked, strategy),
+            None if self.multiple => self.picked.clone(),
             None => self.selected.iter().cloned().collect(),
         }
     }
@@ -522,6 +556,14 @@ impl Primitive for TreeView {
                 .flat_map(|key| tree.subtree(key))
                 .filter(leaf)
                 .map(str::to_string)
+                .collect();
+            return;
+        }
+        if self.multiple {
+            let order = tree.subtree_order();
+            self.picked = order
+                .into_iter()
+                .filter(|node| value.contains(node))
                 .collect();
             return;
         }
@@ -880,5 +922,17 @@ mod tests {
             .checkable(CheckStrategy::Leaf)
         };
         crate::testing::assert_conforms(make, &[]);
+    }
+
+    #[test]
+    fn several_nodes_can_be_selected_and_are_reported_in_tree_order() {
+        let mut tree = tree().multiple();
+        tree.act("select", Some("README.md"), &mut |_| true)
+            .unwrap();
+        tree.act("select", Some("src"), &mut |_| true).unwrap();
+        assert_eq!(tree.value(), ["src", "README.md"]);
+        assert_eq!(tree.semantics(Part::Node, Some("src")).selected, Some(true));
+        tree.act("select", Some("src"), &mut |_| true).unwrap();
+        assert_eq!(tree.value(), ["README.md"]);
     }
 }

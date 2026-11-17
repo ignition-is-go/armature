@@ -51,6 +51,8 @@ pub struct ImageCropper {
     image: Size,
     /// Width over height to hold the selection to, if any.
     aspect: Option<f64>,
+    /// The smallest the selection may be, in the picture's own pixels.
+    min: Size,
     selection: Rect,
     /// The part being dragged, where the drag began on screen, the selection then,
     /// and how many picture pixels one screen unit is.
@@ -72,15 +74,29 @@ impl Default for ImageCropper {
 
 impl ImageCropper {
     pub fn new(image: Size, aspect: Option<f64>) -> Self {
+        let min = Size {
+            width: MIN_SIDE,
+            height: MIN_SIDE,
+        };
         let mut cropper = ImageCropper {
             image,
             aspect,
+            min,
             selection: Rect::default(),
             drag: None,
             focused: None,
         };
         cropper.selection = cropper.largest();
         cropper
+    }
+
+    /// Sets the smallest selection allowed, so what is kept is never too small to use.
+    pub fn at_least(mut self, width: f64, height: f64) -> Self {
+        self.min = Size {
+            width: width.max(MIN_SIDE),
+            height: height.max(MIN_SIDE),
+        };
+        self
     }
 
     /// The selection, in the picture's own pixels.
@@ -180,10 +196,7 @@ impl ImageCropper {
 
     fn limits(&self) -> ResizeLimits {
         ResizeLimits {
-            min: Size {
-                width: MIN_SIDE,
-                height: MIN_SIDE,
-            },
+            min: self.min,
             max: None,
             bounds: Some(self.bounds()),
         }
@@ -511,5 +524,19 @@ mod tests {
     #[test]
     fn it_conforms() {
         crate::testing::assert_conforms(ImageCropper::default, &[]);
+    }
+
+    #[test]
+    fn the_selection_cannot_be_made_smaller_than_the_least_allowed() {
+        let mut cropper = ImageCropper::default().at_least(200.0, 100.0);
+        cropper.set_value(vec!["0,0,400,300".into()]);
+        drag(
+            &mut cropper,
+            Part::Handle,
+            Some("se"),
+            (0.0, 0.0),
+            (-390.0, -290.0),
+        );
+        assert_eq!(cropper.value(), ["0,0,200,100"]);
     }
 }

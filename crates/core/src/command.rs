@@ -26,6 +26,11 @@ pub struct Command {
     query: String,
     highlighted: Option<String>,
     selected: Option<String>,
+    /// The pages opened, outermost first. The options shown are those of the last.
+    pages: Vec<String>,
+    /// Which option opens which page, and which options each page holds.
+    opens: Vec<(String, String)>,
+    held: Vec<(String, String)>,
 }
 
 impl Command {
@@ -33,8 +38,34 @@ impl Command {
         &self.query
     }
 
+    /// Adds a page of options: `opener` opens it in place of running, and it shows
+    /// only `options`. Backspace in an empty field goes back.
+    pub fn page(mut self, name: &str, opener: &str, options: &[&str]) -> Self {
+        self.opens.push((opener.to_string(), name.to_string()));
+        self.held.extend(
+            options
+                .iter()
+                .map(|option| (option.to_string(), name.to_string())),
+        );
+        self
+    }
+
+    /// The pages opened, outermost first, for showing where the person is.
+    pub fn pages(&self) -> &[String] {
+        &self.pages
+    }
+
+    fn on_page(&self, key: &str) -> bool {
+        let page = self
+            .held
+            .iter()
+            .find(|(option, _)| option == key)
+            .map(|(_, page)| page);
+        page == self.pages.last()
+    }
+
     fn matches(&self, item: &Item) -> bool {
-        fuzzy_score(&self.query, &item.label).is_some()
+        self.on_page(&item.key) && fuzzy_score(&self.query, &item.label).is_some()
     }
 
     /// The options still shown, best match first.
@@ -42,6 +73,7 @@ impl Command {
         let mut scored: Vec<(u32, &str)> = self
             .items
             .iter()
+            .filter(|item| self.on_page(&item.key))
             .filter_map(|item| Some((fuzzy_score(&self.query, &item.label)?, item.key.as_str())))
             .collect();
         scored.sort_by_key(|scored| std::cmp::Reverse(scored.0));
@@ -68,6 +100,12 @@ impl Command {
     }
 
     fn choose(&mut self, key: &str, source: Source, reason: Reason, gate: Gate) -> bool {
+        // An option that opens a page shows that page's options and runs nothing.
+        if let Some((_, page)) = self.opens.iter().find(|(opener, _)| opener == key).cloned() {
+            self.pages.push(page);
+            self.search(String::new());
+            return true;
+        }
         let allowed = gate(&ValueChange {
             value: vec![key.to_string()],
             source,
@@ -154,6 +192,14 @@ impl Primitive for Command {
         match input {
             Input::Text { value, .. } => {
                 self.search(value);
+                Reaction::handled()
+            }
+            Input::Key {
+                key: Key::Backspace,
+                ..
+            } if self.query.is_empty() && !self.pages.is_empty() => {
+                self.pages.pop();
+                self.search(String::new());
                 Reaction::handled()
             }
             Input::Key {
@@ -373,5 +419,37 @@ mod tests {
         key(&mut command, Key::Enter);
         assert!(command.value().is_empty());
         assert!(command.snapshot("Commands").items.is_empty());
+    }
+
+    #[test]
+    fn an_option_can_open_a_page_of_more_options_and_backspace_goes_back() {
+        let mut command = Command::default().page("theme", "change-theme", &["light", "dark"]);
+        for (key, label) in [
+            ("save", "Save file"),
+            ("change-theme", "Change theme"),
+            ("light", "Light"),
+            ("dark", "Dark"),
+        ] {
+            command.upsert_item(Item {
+                key: key.into(),
+                label: label.into(),
+                disabled: false,
+            });
+        }
+        assert_eq!(
+            command.results(),
+            ["save", "change-theme"],
+            "the page's options wait their turn"
+        );
+        typed(&mut command, "theme");
+        key(&mut command, Key::Enter);
+        assert_eq!(command.pages(), ["theme"]);
+        assert_eq!(command.results(), ["light", "dark"]);
+        assert!(command.value().is_empty(), "opening a page runs nothing");
+        key(&mut command, Key::ArrowDown);
+        key(&mut command, Key::Enter);
+        assert_eq!(command.value(), ["dark"]);
+        key(&mut command, Key::Backspace);
+        assert_eq!(command.results(), ["save", "change-theme"]);
     }
 }

@@ -43,6 +43,10 @@ pub struct Options {
     /// Whether the first match is highlighted as soon as there is one, so Enter
     /// takes it.
     pub auto_highlight: bool,
+    /// The most options that may be chosen at once, where several can be.
+    pub max_selected: Option<usize>,
+    /// Whether the list opens as soon as the field takes focus.
+    pub open_on_focus: bool,
 }
 
 const ACTIONS: &[&str] = &["select", "remove", "clear", "type", "open", "close"];
@@ -133,6 +137,14 @@ impl Combobox {
             let mut next = self.selected.clone();
             match next.iter().position(|chosen| chosen == key) {
                 Some(at) => drop(next.remove(at)),
+                // Full, so nothing more is taken until one is let go.
+                None if self
+                    .opts
+                    .max_selected
+                    .is_some_and(|most| next.len() >= most) =>
+                {
+                    return false;
+                }
                 None => next.push(key.to_string()),
             }
             let done = self.commit(next, source, reason, gate);
@@ -343,6 +355,9 @@ impl Primitive for Combobox {
         match input {
             Input::Focus { part, .. } => {
                 self.on_clear = part == Part::Clear;
+                if part == Part::Input && self.opts.open_on_focus {
+                    self.open = true;
+                }
                 Reaction::default()
             }
             Input::Text {
@@ -749,5 +764,34 @@ mod tests {
         combobox.set("status", "idle");
         assert!(!combobox.semantics(Part::Empty, None).hidden);
         assert!(!combobox.set("colour", "red"), "not a setting it has");
+    }
+
+    #[test]
+    fn no_more_than_the_limit_can_be_chosen_and_focus_can_open_the_list() {
+        let mut combobox = fruit(Options {
+            multiple: true,
+            max_selected: Some(2),
+            open_on_focus: true,
+            ..Default::default()
+        });
+        combobox.send(
+            Input::Focus {
+                part: Part::Input,
+                item: None,
+            },
+            &mut |_| true,
+        );
+        assert!(combobox.is_open());
+        for key in ["apple", "banana", "cherry"] {
+            combobox.send(
+                Input::Press {
+                    part: Part::Option,
+                    item: Some(key.into()),
+                    mods: Modifiers::default(),
+                },
+                &mut |_| true,
+            );
+        }
+        assert_eq!(combobox.value(), ["apple", "banana"]);
     }
 }
