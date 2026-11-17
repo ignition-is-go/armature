@@ -843,3 +843,84 @@ fn outline_moves() {
         None
     );
 }
+
+// shortcuts.test.ts
+#[test]
+fn shortcuts() {
+    use armature_core::keys::Modifiers;
+    use armature_core::shortcut::{Platform, Shortcut, shortcut_allowed};
+    let held = |shift: bool, ctrl: bool, alt: bool| Modifiers { shift, ctrl, alt };
+    let is = |text: &str, typed: &str, code: &str, mods: Modifiers| {
+        Shortcut::parse(text)
+            .unwrap()
+            .matches_typed(typed, code, mods)
+    };
+    // "letters match the typed key, case-insensitively"
+    assert!(is("mod+n", "n", "KeyN", held(false, true, false)));
+    assert!(is("mod+shift+n", "N", "KeyN", held(true, true, false)));
+    // "Option shortcuts on a Mac match by physical key"
+    assert!(is("alt+n", "˜", "KeyN", held(false, false, true)));
+    assert!(is("alt+n", "Dead", "KeyN", held(false, false, true)));
+    assert!(is("alt+1", "¡", "Digit1", held(false, false, true)));
+    // "other alphabets match by physical key"
+    assert!(is("mod+n", "т", "KeyN", held(false, true, false)));
+    // "a Latin letter matches by what it types, so other layouts keep their letters"
+    assert!(!is("mod+a", "q", "KeyA", held(false, true, false)));
+    assert!(is("mod+a", "a", "KeyQ", held(false, true, false)));
+    // "shifted digits match by physical key"
+    assert!(is("shift+1", "!", "Digit1", held(true, false, false)));
+    // "other keys match by name, with aliases"
+    assert!(is(
+        "mod+backspace",
+        "Backspace",
+        "Backspace",
+        held(false, true, false)
+    ));
+    assert!(is("esc", "Escape", "", Modifiers::default()));
+    assert!(is("alt+up", "ArrowUp", "", held(false, false, true)));
+    assert!(is("ctrl+space", " ", "Space", held(false, true, false)));
+    assert!(is("mod+/", "/", "Slash", held(false, true, false)));
+    // "modifiers must match exactly"
+    assert!(!is("mod+n", "n", "KeyN", held(true, true, false)));
+    assert!(!is("mod+n", "n", "KeyN", Modifiers::default()));
+    assert!(!is("mod+n", "m", "KeyM", held(false, true, false)));
+    // "Apple platforms show glyphs"
+    let shown = |text: &str, platform| Shortcut::parse(text).unwrap().format(platform);
+    assert_eq!(shown("mod+n", Platform::Mac), "⌘N");
+    assert_eq!(shown("alt+n", Platform::Mac), "⌥N");
+    assert_eq!(shown("mod+backspace", Platform::Mac), "⌘⌫");
+    assert_eq!(shown("shift+enter", Platform::Mac), "⇧↩");
+    assert_eq!(shown("esc", Platform::Mac), "⎋");
+    assert_eq!(shown("alt+up", Platform::Mac), "⌥↑");
+    assert_eq!(shown("mod+down", Platform::Mac), "⌘↓");
+    assert_eq!(shown("mod+left", Platform::Mac), "⌘←");
+    assert_eq!(shown("mod+right", Platform::Mac), "⌘→");
+    // "other platforms show readable names"
+    assert_eq!(shown("mod+n", Platform::Other), "Ctrl+N");
+    assert_eq!(shown("mod+backspace", Platform::Other), "Ctrl+Backspace");
+    assert_eq!(shown("shift+enter", Platform::Other), "Shift+Enter");
+    assert_eq!(shown("esc", Platform::Other), "Esc");
+    assert_eq!(shown("alt+up", Platform::Other), "Alt+Up");
+    assert_eq!(shown("ctrl+space", Platform::Other), "Ctrl+Space");
+    // "the text is isolated left to right, so right-to-left layouts don't reorder it"
+    assert_eq!(
+        Shortcut::parse("mod+n").unwrap().display(Platform::Mac),
+        "\u{2066}⌘N\u{2069}"
+    );
+    assert_eq!(
+        Shortcut::parse("mod+n").unwrap().display(Platform::Other),
+        "\u{2066}Ctrl+N\u{2069}"
+    );
+    // "aria-keyshortcuts uses standard key names"
+    let aria = |text: &str, platform| Shortcut::parse(text).unwrap().aria(platform);
+    assert_eq!(aria("mod+backspace", Platform::Mac), "Meta+Backspace");
+    assert_eq!(aria("option+esc", Platform::Other), "Alt+Escape");
+    assert_eq!(aria("shift+space", Platform::Mac), "Shift+Space");
+    // "a page shortcut runs until a modal opens, and a modal's own shortcut keeps running"
+    assert!(shortcut_allowed(Some(0), None));
+    assert!(!shortcut_allowed(Some(0), Some(3)));
+    assert!(shortcut_allowed(Some(3), Some(3)) && shortcut_allowed(Some(4), Some(3)));
+    assert!(!shortcut_allowed(Some(2), Some(3)));
+    // "a shortcut of a closed popup never runs"
+    assert!(!shortcut_allowed(None, None));
+}

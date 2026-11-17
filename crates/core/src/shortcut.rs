@@ -23,9 +23,9 @@ impl Shortcut {
         let mut key = None;
         for part in text.split('+').map(|part| part.trim().to_lowercase()) {
             match part.as_str() {
-                "mod" | "ctrl" | "cmd" => mods.ctrl = true,
+                "mod" | "ctrl" | "control" | "cmd" | "command" | "meta" => mods.ctrl = true,
                 "shift" => mods.shift = true,
-                "alt" | "option" => mods.alt = true,
+                "alt" | "option" | "opt" => mods.alt = true,
                 name if key.is_none() => key = Some(key_named(name)?),
                 _ => return None,
             }
@@ -42,9 +42,59 @@ impl Shortcut {
         same_key && self.mods == mods
     }
 
+    /// Whether a key event is this shortcut, given the character it typed and the
+    /// physical key's code (`KeyN`, `Digit1`). Letters and digits match by the
+    /// physical key when the layout types something that is not a Latin letter or
+    /// digit there: Option+N on a Mac types `˜`, Shift+1 types `!`, and other
+    /// alphabets type their own letters. A layout that types a different Latin
+    /// letter keeps its letters, so AZERTY's A is not QWERTY's.
+    pub fn matches_typed(&self, typed: &str, code: &str, mods: Modifiers) -> bool {
+        if self.mods != mods {
+            return false;
+        }
+        let Key::Char(wanted) = self.key else {
+            return key_from_name(typed).is_some_and(|key| key == self.key);
+        };
+        let wanted = wanted.to_ascii_lowercase();
+        let mut chars = typed.chars();
+        let typed = match (chars.next(), chars.next()) {
+            (Some(one), None) => one.to_lowercase().next(),
+            _ => None,
+        };
+        if typed == Some(wanted) {
+            return true;
+        }
+        if !wanted.is_ascii_alphanumeric()
+            || typed.is_some_and(|typed| typed.is_ascii_alphanumeric())
+        {
+            return false;
+        }
+        let physical = if wanted.is_ascii_digit() {
+            format!("Digit{wanted}")
+        } else {
+            format!("Key{}", wanted.to_ascii_uppercase())
+        };
+        code == physical
+    }
+
+    /// `format`, wrapped so that a right-to-left layout never reorders it.
+    pub fn display(&self, platform: Platform) -> String {
+        format!("\u{2066}{}\u{2069}", self.format(platform))
+    }
+
     /// How to show the shortcut to a person on `platform`.
     pub fn format(&self, platform: Platform) -> String {
-        let key = key_label(self.key);
+        let key = match (platform, self.key) {
+            (Platform::Mac, key) => mac_glyph(key)
+                .map(String::from)
+                .unwrap_or_else(|| key_label(key)),
+            (Platform::Other, Key::Escape) => "Esc".to_string(),
+            (Platform::Other, Key::ArrowUp) => "Up".to_string(),
+            (Platform::Other, Key::ArrowDown) => "Down".to_string(),
+            (Platform::Other, Key::ArrowLeft) => "Left".to_string(),
+            (Platform::Other, Key::ArrowRight) => "Right".to_string(),
+            (Platform::Other, key) => key_label(key),
+        };
         match platform {
             Platform::Mac => {
                 let mut out = String::new();
@@ -89,6 +139,53 @@ impl Shortcut {
     }
 }
 
+/// Whether a shortcut may run. `order` is the layer it belongs to: 0 for the page,
+/// and `None` for a popup that is closed. `blocking` is the lowest layer that is
+/// modal, if any: only shortcuts at or above it run.
+pub fn shortcut_allowed(order: Option<u32>, blocking: Option<u32>) -> bool {
+    order.is_some_and(|order| blocking.is_none_or(|blocking| order >= blocking))
+}
+
+fn mac_glyph(key: Key) -> Option<&'static str> {
+    Some(match key {
+        Key::Backspace => "⌫",
+        Key::Enter => "↩",
+        Key::Escape => "⎋",
+        Key::Tab => "⇥",
+        Key::Space => "␣",
+        Key::ArrowUp => "↑",
+        Key::ArrowDown => "↓",
+        Key::ArrowLeft => "←",
+        Key::ArrowRight => "→",
+        Key::PageUp => "⇞",
+        Key::PageDown => "⇟",
+        Key::Home => "↖",
+        Key::End => "↘",
+        _ => return None,
+    })
+}
+
+/// A key from the name a platform gives it, such as `ArrowUp`, `Escape` or ` `.
+fn key_from_name(name: &str) -> Option<Key> {
+    Some(match name {
+        " " => Key::Space,
+        "ArrowUp" => Key::ArrowUp,
+        "ArrowDown" => Key::ArrowDown,
+        "ArrowLeft" => Key::ArrowLeft,
+        "ArrowRight" => Key::ArrowRight,
+        "PageUp" => Key::PageUp,
+        "PageDown" => Key::PageDown,
+        other => {
+            let named = key_named(&other.to_lowercase())?;
+            // A single character that is not a named key is typed text.
+            match named {
+                Key::Char(ch) => Key::Char(ch),
+                key => key,
+            }
+        }
+    })
+}
+
 fn key_named(name: &str) -> Option<Key> {
     Some(match name {
         "enter" | "return" => Key::Enter,
@@ -98,10 +195,10 @@ fn key_named(name: &str) -> Option<Key> {
         "backspace" => Key::Backspace,
         "f2" => Key::F2,
         "f6" => Key::F6,
-        "up" => Key::ArrowUp,
-        "down" => Key::ArrowDown,
-        "left" => Key::ArrowLeft,
-        "right" => Key::ArrowRight,
+        "up" | "arrowup" => Key::ArrowUp,
+        "down" | "arrowdown" => Key::ArrowDown,
+        "left" | "arrowleft" => Key::ArrowLeft,
+        "right" | "arrowright" => Key::ArrowRight,
         "home" => Key::Home,
         "end" => Key::End,
         "pageup" => Key::PageUp,
