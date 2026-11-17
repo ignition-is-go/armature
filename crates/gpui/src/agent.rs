@@ -5,26 +5,66 @@ use std::io::{self, BufRead, BufReader, Write};
 use std::path::Path;
 use std::sync::mpsc::Sender;
 
-use armature_core::agent::{Error, Registry, Snapshot};
+use armature_core::agent::{
+    Entry, Error, Found, Registry, Run, Snapshot, Step, TOOLS, describe_entry,
+};
+use armature_core::change::Source;
 use futures::StreamExt;
 use futures::channel::mpsc::{UnboundedSender, unbounded};
 use gpui::{App, Global};
 use serde_json::{Value, json};
 
 #[derive(Default)]
-struct Agents(Registry<App>);
+struct Agents {
+    registry: Registry<App>,
+    history: Vec<Entry>,
+}
 
 impl Global for Agents {}
 
 pub(crate) fn registry(cx: &mut App) -> &mut Registry<App> {
-    &mut cx.default_global::<Agents>().0
+    &mut cx.default_global::<Agents>().registry
 }
 
-/// Every live component as `(ref, snapshot)`.
-pub fn snapshot(cx: &App) -> Vec<(String, Snapshot)> {
+/// A copy of the registry, so the app is not borrowed while application code runs.
+fn registry_copy(cx: &App) -> Registry<App> {
     cx.try_global::<Agents>()
-        .map(|agents| agents.0.snapshot(cx))
+        .map(|agents| agents.registry.clone())
         .unwrap_or_default()
+}
+
+/// Remembers a change that was committed, if it was one. A secret component's values
+/// are never kept.
+pub(crate) fn record(
+    label: String,
+    before: Vec<String>,
+    after: Vec<String>,
+    source: Source,
+    secret: bool,
+    cx: &mut App,
+) {
+    if before == after {
+        return;
+    }
+    let shown = |value: Vec<String>| {
+        if secret {
+            vec!["[redacted]".to_string()]
+        } else {
+            value
+        }
+    };
+    let entry = Entry {
+        label,
+        before: shown(before),
+        after: shown(after),
+        source,
+    };
+    cx.default_global::<Agents>().history.push(entry);
+}
+
+/// Every live component an agent may see, as `(ref, snapshot)`.
+pub fn snapshot(cx: &App) -> Vec<(String, Snapshot)> {
+    registry_copy(cx).snapshot(cx)
 }
 
 /// Runs one action and returns the component's value afterwards.
@@ -34,32 +74,119 @@ pub fn act(
     action: &str,
     item: Option<&str>,
 ) -> Result<Vec<String>, Error> {
-    let target = registry(cx).target(reference)?;
-    target.act(cx, action, item)
+    registry_copy(cx).target(reference)?.act(cx, action, item)
 }
 
-/// Answers one JSON request with one JSON response. Requests are
-/// `{"method":"snapshot"}` and `{"method":"act","ref":..,"action":..,"item":..}`.
+/// Components and items whose labels match `text`, best match first.
+pub fn query(cx: &App, text: &str) -> Vec<Found> {
+    registry_copy(cx).query(cx, text)
+}
+
+/// Runs steps in order, stopping at the first failure. `approve` is asked before any
+/// step on a component that needs a person's approval.
+pub fn run(cx: &mut App, steps: &[Step], approve: impl FnMut(&Step, &str) -> bool) -> Run {
+    armature_core::agent::run(registry_copy, cx, steps, approve)
+}
+
+/// Every committed change so far, oldest first.
+pub fn history(cx: &App) -> Vec<Entry> {
+    cx.try_global::<Agents>()
+        .map(|agents| agents.history.clone())
+        .unwrap_or_default()
+}
+
+/// Answers one JSON request with one JSON response. The methods are `snapshot`,
+/// `query` (with `text`), `act` (with `ref`, `action` and `item`), `run` (with
+/// `steps`), `history` and `tools`. A `run` over this channel has nobody to ask, so a
+/// step that needs a person's approval is refused.
 pub fn handle(request: &str, cx: &mut App) -> String {
     let failure = |error: String| json!({ "ok": false, "error": error });
-    let response = match serde_json::from_str::<Value>(request) {
-        Err(error) => failure(format!("invalid JSON: {error}")),
-        Ok(request) => match request["method"].as_str() {
-            Some("snapshot") => {
-                let components: Vec<Value> = snapshot(cx).iter().map(component).collect();
-                json!({ "ok": true, "components": components })
-            }
-            Some("act") => match (request["ref"].as_str(), request["action"].as_str()) {
-                (Some(reference), Some(action)) => {
-                    match act(cx, reference, action, request["item"].as_str()) {
-                        Ok(value) => json!({ "ok": true, "value": value }),
-                        Err(error) => failure(error.to_string()),
-                    }
-                }
-                _ => failure("act needs \"ref\" and \"action\"".into()),
+    let request = match serde_json::from_str::<Value>(request) {
+        Ok(request) => request,
+        Err(error) => return failure(format!("invalid JSON: {error}")).to_string(),
+    };
+    let text = |key: &str| request[key].as_str();
+    let response = match text("method") {
+        Some("snapshot") => {
+            let components: Vec<Value> = snapshot(cx).iter().map(component).collect();
+            json!({ "ok": true, "components": components })
+        }
+        Some("query") => {
+            let found: Vec<Value> = query(cx, text("text").unwrap_or_default())
+                .into_iter()
+                .map(|found| json!({ "ref": found.reference, "item": found.item, "label": found.label }))
+                .collect();
+            json!({ "ok": true, "found": found })
+        }
+        Some("act") => match (text("ref"), text("action")) {
+            (Some(reference), Some(action)) => match act(cx, reference, action, text("item")) {
+                Ok(value) => json!({ "ok": true, "value": value }),
+                Err(error) => failure(error.to_string()),
             },
-            _ => failure("unknown method; valid methods: snapshot, act".into()),
+            _ => failure("act needs \"ref\" and \"action\"".into()),
         },
+        Some("run") => {
+            let steps: Vec<Step> = request["steps"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|step| Step {
+                    target: step["target"]
+                        .as_str()
+                        .or(step["ref"].as_str())
+                        .unwrap_or_default()
+                        .to_string(),
+                    action: step["action"].as_str().unwrap_or_default().to_string(),
+                    item: step["item"].as_str().map(str::to_string),
+                })
+                .collect();
+            let outcome = run(cx, &steps, |_, _| false);
+            let changes: Vec<Value> = outcome
+                .changes
+                .iter()
+                .map(|change| {
+                    json!({
+                        "ref": change.reference,
+                        "label": change.label,
+                        "before": change.before,
+                        "after": change.after,
+                    })
+                })
+                .collect();
+            let failed = outcome
+                .failed
+                .as_ref()
+                .map(|(step, error)| json!({ "step": step, "error": error.to_string() }));
+            json!({ "ok": outcome.ok(), "changes": changes, "appeared": outcome.appeared, "failed": failed })
+        }
+        Some("history") => {
+            let entries: Vec<Value> = history(cx)
+                .iter()
+                .map(|entry| {
+                    json!({
+                        "text": describe_entry(entry),
+                        "label": entry.label,
+                        "before": entry.before,
+                        "after": entry.after,
+                        "source": if entry.source == Source::Agent { "agent" } else { "user" },
+                    })
+                })
+                .collect();
+            json!({ "ok": true, "entries": entries })
+        }
+        Some("tools") => {
+            let tools: Vec<Value> = TOOLS
+                .iter()
+                .map(|tool| {
+                    let schema: Value = serde_json::from_str(tool.input_schema).unwrap_or(Value::Null);
+                    json!({ "name": tool.name, "description": tool.description, "inputSchema": schema })
+                })
+                .collect();
+            json!({ "ok": true, "tools": tools })
+        }
+        _ => failure(
+            "unknown method; valid methods: snapshot, query, act, run, history, tools".into(),
+        ),
     };
     response.to_string()
 }

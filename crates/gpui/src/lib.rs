@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use armature_core::agent::{ActError, Target};
+use armature_core::agent::{Access, ActError, Target};
 use armature_core::change::ValueChange;
 use armature_core::geometry::{Point as CorePoint, Rect};
 use armature_core::keys::{Key, Modifiers, Orientation};
@@ -49,6 +49,9 @@ pub struct Machine<P: Primitive> {
     captured: Option<PartKey<P>>,
     announcements: Vec<Announcement>,
     gate: Option<ChangeGate>,
+    registration: u32,
+    /// Whether the value must be kept out of anything an agent can read.
+    secret: bool,
     created: Instant,
     /// The latest time a timer was asked to fire at. The clock never reads earlier,
     /// so timers stay in step with each other when the executor's clock is not the
@@ -90,18 +93,29 @@ impl<P: Primitive> Machine<P> {
                     Some(state.machine.snapshot(&state.label))
                 }
             }),
-            act: Rc::new(move |cx: &mut App, action, item| {
-                let state = this.upgrade().ok_or(ActError::Refused)?;
-                state.update(cx, |state, cx| {
-                    let mut gate = state.gate.take();
-                    let result = state.machine.act(action, item, &mut |change| {
-                        gate.as_mut().is_none_or(|gate| gate(change, cx))
-                    });
-                    state.gate = gate;
-                    cx.notify();
-                    result.map(|()| state.machine.value())
-                })
+            act: Rc::new({
+                let this = this.clone();
+                move |cx: &mut App, action, item| {
+                    let state = this.upgrade().ok_or(ActError::Refused)?;
+                    state.update(cx, |state, cx| {
+                        let before = state.machine.value();
+                        let mut gate = state.gate.take();
+                        let result = state.machine.act(action, item, &mut |change| {
+                            gate.as_mut().is_none_or(|gate| gate(change, cx))
+                        });
+                        state.gate = gate;
+                        state.remember(before, Source::Agent, cx);
+                        cx.notify();
+                        result.map(|()| state.machine.value())
+                    })
+                }
             }),
+            set: Rc::new(move |cx: &mut App, value| {
+                if let Some(state) = this.upgrade() {
+                    state.update(cx, |state, cx| state.set_value(value, cx));
+                }
+            }),
+            access: Access::default(),
         });
         cx.on_release(move |_, cx| agent::registry(cx).unregister(registration))
             .detach();
@@ -114,6 +128,8 @@ impl<P: Primitive> Machine<P> {
             captured: None,
             announcements: Vec::new(),
             gate: None,
+            registration,
+            secret: false,
             created: Instant::now(),
             woke_at_ms: 0,
         }
@@ -126,6 +142,26 @@ impl<P: Primitive> Machine<P> {
     ) -> Self {
         self.gate = Some(Box::new(gate));
         self
+    }
+
+    /// Sets what agents may see and do with this component.
+    pub fn agent_access(mut self, access: Access, cx: &mut Context<Self>) -> Self {
+        self.secret = access.secret;
+        agent::registry(cx).set_access(self.registration, access);
+        self
+    }
+
+    /// Records a committed change in the shared history.
+    fn remember(&self, before: Vec<String>, source: Source, cx: &mut App) {
+        let after = self.machine.value();
+        agent::record(
+            self.label.to_string(),
+            before,
+            after,
+            source,
+            self.secret,
+            cx,
+        );
     }
 
     /// The primitive itself, for what only it knows, such as a slider's fraction.
@@ -245,6 +281,7 @@ impl<P: Primitive> Machine<P> {
             &mut dyn FnMut(&ValueChange) -> bool,
         ) -> Reaction<P::Part>,
     ) -> Reaction<P::Part> {
+        let before = self.machine.value();
         let mut gate = self.gate.take();
         let bounds = &self.bounds;
         let measure = |part: P::Part, item: Option<&str>| {
@@ -261,6 +298,7 @@ impl<P: Primitive> Machine<P> {
             gate.as_mut().is_none_or(|gate| gate(change, cx))
         });
         self.gate = gate;
+        self.remember(before, Source::User, cx);
 
         let target = reaction
             .focus

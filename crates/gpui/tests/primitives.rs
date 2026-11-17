@@ -218,8 +218,99 @@ fn the_json_protocol_reads_and_operates_components(cx: &mut TestAppContext) {
     let unknown = ask(cx, r#"{"method":"click"}"#);
     assert_eq!(
         unknown["error"],
-        "unknown method; valid methods: snapshot, act"
+        "unknown method; valid methods: snapshot, query, act, run, history, tools"
     );
     let missing = ask(cx, r#"{"method":"act","ref":"e404","action":"select"}"#);
     assert_eq!(missing["error"], "no component with ref \"e404\"");
+}
+
+#[gpui::test]
+fn agents_search_run_steps_and_respect_access_rules(cx: &mut TestAppContext) {
+    use armature_core::agent::{Access, Step};
+    use armature_core::toggle::Toggle;
+
+    let (_demo, cx) = open(cx);
+    let (guarded, pin, hidden) = cx.update(|_, cx| {
+        let confirm = Access {
+            confirm: Some("Delete the account".into()),
+            ..Default::default()
+        };
+        let secret = Access {
+            secret: true,
+            ..Default::default()
+        };
+        let absent = Access {
+            hidden: true,
+            ..Default::default()
+        };
+        (
+            cx.new(|cx| {
+                Machine::new(Toggle::default(), "Delete account", [], cx).agent_access(confirm, cx)
+            }),
+            cx.new(|cx| {
+                Machine::new(Toggle::default(), "PIN lock", [], cx).agent_access(secret, cx)
+            }),
+            cx.new(|cx| {
+                Machine::new(Toggle::default(), "Admin mode", [], cx).agent_access(absent, cx)
+            }),
+        )
+    });
+    let step = |target: &str, action: &str, item: Option<&str>| Step {
+        target: target.into(),
+        action: action.into(),
+        item: item.map(str::to_string),
+    };
+
+    cx.update(|_, cx| {
+        let labels: Vec<String> = agent::snapshot(cx)
+            .into_iter()
+            .map(|(_, s)| s.label)
+            .collect();
+        assert_eq!(
+            labels,
+            ["Settings", "Fruit", "Delete account", "PIN lock"],
+            "the hidden one is absent"
+        );
+        assert_eq!(
+            agent::query(cx, "blue")[0].item.as_deref(),
+            Some("blueberry")
+        );
+
+        let steps = [
+            step("Fruit", "select", Some("apple")),
+            step("Settings", "select", Some("billing")),
+        ];
+        let outcome = agent::run(cx, &steps, |_, _| true);
+        assert_eq!(outcome.changes.len(), 1);
+        assert_eq!(
+            outcome.failed.unwrap().1.to_string(),
+            "item \"billing\" is disabled"
+        );
+
+        let delete = [step("Delete account", "check", None)];
+        assert!(!agent::run(cx, &delete, |_, _| false).ok());
+        assert!(agent::run(cx, &delete, |_, what| what == "Delete the account").ok());
+
+        let locked = agent::run(cx, &[step("PIN lock", "check", None)], |_, _| true);
+        assert_eq!(locked.changes[0].after, ["[redacted]"]);
+
+        let history: Vec<String> = agent::history(cx)
+            .iter()
+            .map(armature_core::agent::describe_entry)
+            .collect();
+        assert_eq!(
+            history,
+            [
+                "Fruit changed from nothing to apple by an agent.",
+                "Delete account changed from nothing to on by an agent.",
+                "PIN lock changed from [redacted] to [redacted] by an agent.",
+            ]
+        );
+    });
+    assert!(guarded.update(cx, |m, _| m.primitive().is_on()));
+    assert!(
+        pin.update(cx, |m, _| m.primitive().is_on()),
+        "the secret change still happened"
+    );
+    assert!(!hidden.update(cx, |m, _| m.primitive().is_on()));
 }
