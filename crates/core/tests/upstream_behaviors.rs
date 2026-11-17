@@ -1161,3 +1161,117 @@ fn menu_behaviors() {
     assert!(!disabled.is_open());
     assert!(disabled.semantics(Part::Trigger, None).disabled);
 }
+
+use armature_core::toast::{self, Toast, Toaster};
+
+// toast.test.ts
+#[test]
+fn toast_behaviors() {
+    use toast::Part;
+    let stack = |toasts: &[Toast]| {
+        let mut toaster = Toaster::default();
+        toaster.set_value(toasts.iter().map(Toast::encode).collect());
+        toaster
+    };
+    let tick = |toaster: &mut Toaster, now_ms: u64, allow: bool| {
+        toaster.send(Input::Tick { now_ms }, &mut |_| allow);
+    };
+    let hover = |toaster: &mut Toaster, inside: bool, now_ms: u64| {
+        toaster.send(
+            Input::Hover {
+                part: Part::Region,
+                item: None,
+                inside,
+                now_ms,
+            },
+            &mut |_| true,
+        );
+    };
+    let count = |toaster: &Toaster| toaster.value().len();
+    // "a shown toast expires after its duration"
+    let mut toaster = stack(&[Toast::new("a", "Saved")]);
+    tick(&mut toaster, 0, true);
+    tick(&mut toaster, 4999, true);
+    assert_eq!(count(&toaster), 1);
+    tick(&mut toaster, 5000, true);
+    assert_eq!(count(&toaster), 0);
+    // "Infinity never expires": a loading toast stays
+    let mut loading = stack(&[Toast::new("a", "Saving").of(toast::Kind::Loading)]);
+    tick(&mut loading, 0, true);
+    tick(&mut loading, 1_000_000, true);
+    assert_eq!(count(&loading), 1);
+    // "pausing keeps the time left, and resuming continues from it"
+    let mut paused = stack(&[Toast::new("a", "Saved")]);
+    tick(&mut paused, 0, true);
+    hover(&mut paused, true, 4000);
+    tick(&mut paused, 9000, true);
+    assert_eq!(count(&paused), 1);
+    hover(&mut paused, false, 10_000);
+    tick(&mut paused, 10_999, true);
+    assert_eq!(count(&paused), 1);
+    tick(&mut paused, 11_000, true);
+    assert_eq!(count(&paused), 0);
+    // "pause reasons hold separately: one clearing never resumes while another holds"
+    let mut both = stack(&[Toast::new("a", "Saved")]);
+    tick(&mut both, 0, true);
+    hover(&mut both, true, 1000);
+    both.send(
+        Input::Focus {
+            part: Part::Close,
+            item: Some("a".into()),
+        },
+        &mut |_| true,
+    );
+    hover(&mut both, false, 2000);
+    tick(&mut both, 20_000, true);
+    assert_eq!(count(&both), 1, "focus still holds it");
+    both.send(
+        Input::Blur {
+            part: Part::Close,
+            item: Some("a".into()),
+        },
+        &mut |_| true,
+    );
+    assert_eq!(
+        both.wake_after(),
+        Some(0),
+        "asks to be woken so the clocks can run again"
+    );
+    tick(&mut both, 30_000, true);
+    tick(&mut both, 33_999, true);
+    assert_eq!(count(&both), 1);
+    tick(&mut both, 34_000, true);
+    assert_eq!(count(&both), 0);
+    // Focus alone holds too.
+    let mut focused = stack(&[Toast::new("a", "Saved")]);
+    tick(&mut focused, 0, true);
+    focused.send(
+        Input::Focus {
+            part: Part::Close,
+            item: Some("a".into()),
+        },
+        &mut |_| true,
+    );
+    tick(&mut focused, 100, true);
+    tick(&mut focused, 9000, true);
+    assert_eq!(count(&focused), 1);
+    // "onDismiss can keep a toast" and "a canceled timeout counts the full duration again"
+    let mut kept = stack(&[Toast::new("a", "Saved")]);
+    tick(&mut kept, 0, true);
+    tick(&mut kept, 5000, false);
+    assert_eq!(count(&kept), 1);
+    tick(&mut kept, 9999, true);
+    assert_eq!(count(&kept), 1);
+    tick(&mut kept, 10_000, true);
+    assert_eq!(count(&kept), 0);
+    // "dismiss closes one toast by id, or all of them"
+    let mut several = stack(&[
+        Toast::new("a", "One"),
+        Toast::new("b", "Two"),
+        Toast::new("c", "Three"),
+    ]);
+    several.act("dismiss", Some("b"), &mut |_| true).unwrap();
+    assert_eq!(count(&several), 2);
+    several.act("dismiss_all", None, &mut |_| true).unwrap();
+    assert_eq!(count(&several), 0);
+}

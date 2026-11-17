@@ -287,7 +287,9 @@ impl Primitive for Toaster {
     }
 
     fn wake_after(&self) -> Option<u64> {
-        (self.paused.is_none() && !self.unstarted().is_empty()).then_some(0)
+        let held = self.hovered || self.focused.is_some();
+        (held != self.paused.is_some() || (self.paused.is_none() && !self.unstarted().is_empty()))
+            .then_some(0)
     }
 
     fn upsert_item(&mut self, _: Item) {}
@@ -338,6 +340,15 @@ impl Primitive for Toaster {
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
         match input {
             Input::Tick { now_ms } => {
+                // Reading with the pointer and with the keyboard hold the clocks
+                // separately: they run again only once neither does.
+                let held = self.hovered || self.focused.is_some();
+                if held != self.paused.is_some() {
+                    let resumed = self.hold(held, now_ms);
+                    if held {
+                        return resumed;
+                    }
+                }
                 if self.paused.is_some() {
                     return Reaction::default();
                 }
