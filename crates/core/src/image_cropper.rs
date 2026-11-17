@@ -1,6 +1,7 @@
 use crate::agent::{ActError, Snapshot};
 use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::geometry::{Point, Rect, Size};
+use crate::keys::Key;
 use crate::motion::{Handle, ResizeLimits, key_delta, moved, resized};
 use crate::primitive::{
     Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction,
@@ -53,6 +54,9 @@ pub struct ImageCropper {
     aspect: Option<f64>,
     /// The smallest the selection may be, in the picture's own pixels.
     min: Size,
+    /// How far the picture is magnified, from 1, and the most it may be.
+    zoom: f64,
+    max_zoom: f64,
     selection: Rect,
     /// The part being dragged, where the drag began on screen, the selection then,
     /// and how many picture pixels one screen unit is.
@@ -82,6 +86,8 @@ impl ImageCropper {
             image,
             aspect,
             min,
+            zoom: 1.0,
+            max_zoom: 4.0,
             selection: Rect::default(),
             drag: None,
             focused: None,
@@ -99,6 +105,24 @@ impl ImageCropper {
         self
     }
 
+    pub fn zoom(&self) -> f64 {
+        self.zoom
+    }
+
+    /// The part of the picture on show at this magnification, centred on the
+    /// selection and kept inside the picture. Draw the picture so this fills the area.
+    pub fn view(&self) -> Rect {
+        let (width, height) = (self.image.width / self.zoom, self.image.height / self.zoom);
+        let centre = self.selection.center();
+        let x = (centre.x - width / 2.0).clamp(0.0, self.image.width - width);
+        let y = (centre.y - height / 2.0).clamp(0.0, self.image.height - height);
+        Rect::new(x, y, width, height)
+    }
+
+    fn zoom_to(&mut self, zoom: f64) {
+        self.zoom = zoom.clamp(1.0, self.max_zoom);
+    }
+
     /// The selection, in the picture's own pixels.
     pub fn selection(&self) -> Rect {
         self.selection
@@ -107,12 +131,12 @@ impl ImageCropper {
     /// The selection as fractions of the picture, for placing it over the picture
     /// whatever size that is shown at: left, top, width and height from 0 to 1.
     pub fn fractions(&self) -> [f64; 4] {
-        let Size { width, height } = self.image;
+        let view = self.view();
         [
-            self.selection.x / width,
-            self.selection.y / height,
-            self.selection.width / width,
-            self.selection.height / height,
+            (self.selection.x - view.x) / view.width,
+            (self.selection.y - view.y) / view.height,
+            self.selection.width / view.width,
+            self.selection.height / view.height,
         ]
     }
 
@@ -222,6 +246,18 @@ impl Primitive for ImageCropper {
         matches!(part, Part::Selection | Part::Handle)
     }
 
+    fn wheels(&self, part: Part) -> bool {
+        part == Part::Area
+    }
+
+    fn set(&mut self, name: &str, value: &str) -> bool {
+        match (name, value.parse::<f64>()) {
+            ("zoom", Ok(zoom)) => self.zoom_to(zoom),
+            _ => return false,
+        }
+        true
+    }
+
     fn named_part(&self) -> Option<Part> {
         Some(Part::Selection)
     }
@@ -259,6 +295,18 @@ impl Primitive for ImageCropper {
             Input::Focus { part, item } => {
                 self.focused = if part == Part::Handle { item } else { None };
                 Reaction::default()
+            }
+            // The wheel, and plus and minus, magnify the picture under the selection.
+            Input::Wheel { delta, .. } => {
+                self.zoom_to(self.zoom * if delta > 0.0 { 1.1 } else { 1.0 / 1.1 });
+                Reaction::handled()
+            }
+            Input::Key {
+                key: Key::Char(sign @ ('+' | '=' | '-')),
+                ..
+            } => {
+                self.zoom_to(self.zoom * if sign == '-' { 1.0 / 1.25 } else { 1.25 });
+                Reaction::handled()
             }
             // Arrows move the selection, or the edge whose grip has focus. Shift goes
             // ten times as far.
@@ -298,11 +346,12 @@ impl Primitive for ImageCropper {
                 if pointer.part == Part::Handle && grip.is_none() {
                     return Reaction::default();
                 }
+                // Magnified, a screen unit covers less of the picture.
                 self.drag = Some((
                     grip,
                     pointer.at,
                     self.selection,
-                    self.image.width / shown.max(1.0),
+                    self.image.width / self.zoom / shown.max(1.0),
                 ));
                 Reaction::handled().with(Effect::CapturePointer)
             }
@@ -538,5 +587,42 @@ mod tests {
             (-390.0, -290.0),
         );
         assert_eq!(cropper.value(), ["0,0,200,100"]);
+    }
+
+    #[test]
+    fn magnifying_shows_less_of_the_picture_and_drags_cover_less_of_it() {
+        let mut cropper = ImageCropper::default();
+        cropper.set_value(vec!["300,200,200,200".into()]);
+        assert!(cropper.set("zoom", "2"));
+        assert_eq!(
+            cropper.view(),
+            Rect::new(200.0, 150.0, 400.0, 300.0),
+            "half the picture, around the selection"
+        );
+        assert_eq!(cropper.fractions(), [0.25, 1.0 / 6.0, 0.5, 2.0 / 3.0]);
+        drag(
+            &mut cropper,
+            Part::Selection,
+            None,
+            (100.0, 100.0),
+            (150.0, 100.0),
+        );
+        assert_eq!(
+            cropper.value(),
+            ["350,200,200,200"],
+            "fifty on screen is fifty in the picture at twice the size"
+        );
+        cropper.send(
+            Input::Wheel {
+                part: Part::Area,
+                item: None,
+                delta: -1.0,
+                mods: Modifiers::default(),
+            },
+            &mut |_| true,
+        );
+        assert!(cropper.zoom() < 2.0);
+        cropper.set("zoom", "99");
+        assert_eq!(cropper.zoom(), 4.0);
     }
 }

@@ -15,7 +15,12 @@ pub enum Part {
     /// Steps up once when pressed and keeps stepping while held.
     Increment,
     Decrement,
+    /// Optional. A label or grip that is dragged sideways to change the number.
+    Scrub,
 }
+
+/// How far a scrub is dragged for one step.
+const PIXELS_PER_STEP: f64 = 4.0;
 
 const ACTIONS: &[&str] = &["set", "increment", "decrement"];
 
@@ -29,6 +34,10 @@ pub struct NumberInput {
     repeat: Repeat,
     /// Which way the held button steps.
     held: f64,
+    /// Whether the field holds focus, so the wheel may change it.
+    focused: bool,
+    /// Where a scrub began, and the number then.
+    scrub: Option<(f64, f64)>,
 }
 
 impl Default for NumberInput {
@@ -45,6 +54,8 @@ impl NumberInput {
             draft: None,
             repeat: Repeat::default(),
             held: 0.0,
+            focused: false,
+            scrub: None,
         }
     }
 
@@ -99,7 +110,7 @@ impl Primitive for NumberInput {
     type Part = Part;
 
     fn parts() -> &'static [Part] {
-        &[Part::Input, Part::Increment, Part::Decrement]
+        &[Part::Input, Part::Increment, Part::Decrement, Part::Scrub]
     }
 
     fn is_item(_: Part) -> bool {
@@ -108,6 +119,12 @@ impl Primitive for NumberInput {
 
     fn tracks_pointer(part: Part) -> bool {
         part != Part::Input
+    }
+
+    /// The wheel changes the number only while the field has focus, so scrolling
+    /// past it never does.
+    fn wheels(&self, part: Part) -> bool {
+        part == Part::Input && self.focused
     }
 
     fn upsert_item(&mut self, _: Item) {}
@@ -136,6 +153,10 @@ impl Primitive for NumberInput {
                 disabled: self.value <= self.range.min,
                 ..Default::default()
             },
+            Part::Scrub => Semantics {
+                active: self.scrub.is_some(),
+                ..Default::default()
+            },
         }
     }
 
@@ -143,6 +164,19 @@ impl Primitive for NumberInput {
         match input {
             Input::Text { value, .. } => {
                 self.draft = Some(value);
+                Reaction::handled()
+            }
+            Input::Focus { part, .. } => {
+                self.focused = part == Part::Input;
+                Reaction::default()
+            }
+            Input::Blur { .. } => {
+                self.focused = false;
+                Reaction::default()
+            }
+            Input::Wheel { delta, mods, .. } if self.focused => {
+                let steps = if mods.shift { 10.0 } else { 1.0 };
+                self.step(delta.signum() * steps, Reason::Drag, gate);
                 Reaction::handled()
             }
             // PageUp, PageDown and Shift with an arrow go ten steps at a time.
@@ -204,6 +238,28 @@ impl Primitive for NumberInput {
     }
 
     fn pointer(&mut self, pointer: Pointer<Part>, _: Measure<Part>, gate: Gate) -> Reaction<Part> {
+        if pointer.part == Part::Scrub || self.scrub.is_some() {
+            return match (pointer.phase, self.scrub) {
+                (PointerPhase::Down, _) => {
+                    self.scrub = Some((pointer.at.x, self.value));
+                    Reaction::handled().with(Effect::CapturePointer)
+                }
+                (PointerPhase::Move, Some((from, started))) => {
+                    let steps = ((pointer.at.x - from) / PIXELS_PER_STEP).trunc();
+                    self.set(
+                        self.range.nudge(started, steps),
+                        Source::User,
+                        Reason::Drag,
+                        gate,
+                    );
+                    Reaction::handled()
+                }
+                _ => {
+                    self.scrub = None;
+                    Reaction::handled()
+                }
+            };
+        }
         match pointer.phase {
             PointerPhase::Down => {
                 self.held = if pointer.part == Part::Increment {
@@ -391,5 +447,53 @@ mod tests {
             &mut |_| true,
         );
         assert_eq!(input.value(), ["5"]);
+    }
+
+    #[test]
+    fn the_wheel_steps_the_number_only_while_the_field_has_focus() {
+        let mut input = NumberInput::new(NumberRange::new(0.0, 100.0, 1.0), 5.0);
+        let wheel = |input: &mut NumberInput, delta| {
+            input.send(
+                Input::Wheel {
+                    part: Part::Input,
+                    item: None,
+                    delta,
+                    mods: Modifiers::default(),
+                },
+                &mut |_| true,
+            )
+        };
+        assert!(
+            !wheel(&mut input, 1.0).handled,
+            "scrolling past it leaves it alone"
+        );
+        input.send(
+            Input::Focus {
+                part: Part::Input,
+                item: None,
+            },
+            &mut |_| true,
+        );
+        wheel(&mut input, 1.0);
+        wheel(&mut input, -3.0);
+        assert_eq!(input.value(), ["5"], "one step per notch, whichever way");
+    }
+
+    #[test]
+    fn dragging_the_scrub_sideways_changes_the_number() {
+        let mut input = NumberInput::new(NumberRange::new(0.0, 100.0, 1.0), 5.0);
+        let at = |x: f64, phase| Pointer {
+            phase,
+            part: Part::Scrub,
+            item: None,
+            at: crate::geometry::Point::new(x, 0.0),
+            mods: Modifiers::default(),
+            now_ms: 0,
+        };
+        input.pointer(at(100.0, PointerPhase::Down), &|_, _| None, &mut |_| true);
+        input.pointer(at(140.0, PointerPhase::Move), &|_, _| None, &mut |_| true);
+        assert_eq!(input.value(), ["15"], "ten steps of four pixels");
+        input.pointer(at(140.0, PointerPhase::Up), &|_, _| None, &mut |_| true);
+        assert!(!input.semantics(Part::Scrub, None).active);
     }
 }

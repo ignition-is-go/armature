@@ -839,6 +839,33 @@ pub fn part<K: PartOf>(
         };
     }
 
+    {
+        let (state, item) = (state.clone(), item.map(str::to_string));
+        el = el.on_scroll(move |event: &gpui::ScrollEvent, window, cx| {
+            let lines = match event.delta {
+                gpui::ScrollDelta::Lines(lines) => lines.y as f64,
+                gpui::ScrollDelta::Pixels(pixels) => f32::from(pixels.y) as f64 / 20.0,
+            };
+            let taken = state.update(cx, |state, cx| {
+                // The wheel goes to a part that asks for it now, and scrolls otherwise.
+                if !state.machine.wheels(part) {
+                    return false;
+                }
+                let input = Input::Wheel {
+                    part,
+                    item: item.clone(),
+                    delta: lines,
+                    mods: modifiers(event.modifiers),
+                };
+                state.dispatch(input, window, cx);
+                true
+            });
+            if taken {
+                cx.stop_propagation();
+            }
+        });
+    }
+
     if K::Primitive::context(part) {
         let (state, item) = (state.clone(), item.map(str::to_string));
         el = el.on_mouse_down(

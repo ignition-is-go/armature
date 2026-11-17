@@ -59,6 +59,7 @@ pub mod primitive;
 pub mod prompt;
 pub mod radio;
 pub mod range_slider;
+pub mod rating;
 pub mod reorder;
 pub mod resizable;
 pub mod roving;

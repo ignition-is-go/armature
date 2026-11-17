@@ -111,6 +111,12 @@ fn inputs<P: Primitive>(items: &[Item]) -> Vec<Input<P::Part>> {
             value: "12".into(),
         });
         all.push(Input::Loaded { part, ok: true });
+        all.push(Input::Wheel {
+            part,
+            item: item.clone(),
+            delta: 1.0,
+            mods,
+        });
         all.push(Input::ContextMenu {
             part,
             item: item.clone(),

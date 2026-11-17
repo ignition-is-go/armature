@@ -45,6 +45,14 @@ pub enum Input<Part> {
     Files { files: Vec<FileInfo>, dropped: bool },
     /// Files being dragged came over a part that takes drops, or left it.
     DragOver { inside: bool },
+    /// The wheel turned, or two fingers moved, over a part that asks for it. `delta`
+    /// is positive away from the person, in lines.
+    Wheel {
+        part: Part,
+        item: Option<String>,
+        delta: f64,
+        mods: Modifiers,
+    },
     /// One of the primitive's `hotkeys` was pressed, wherever focus was.
     Hotkey { shortcut: crate::shortcut::Shortcut },
     /// The platform's gesture for a context menu, such as a right click or a long
@@ -177,6 +185,17 @@ impl<Part> Input<Part> {
             },
             Input::PressOutside => Input::PressOutside,
             Input::Hotkey { shortcut } => Input::Hotkey { shortcut },
+            Input::Wheel {
+                part,
+                item,
+                delta,
+                mods,
+            } => Input::Wheel {
+                part: to(part)?,
+                item,
+                delta,
+                mods,
+            },
             Input::ContextMenu { part, item, at } => Input::ContextMenu {
                 part: to(part)?,
                 item,
@@ -489,6 +508,11 @@ pub trait Primitive: Clone + 'static {
     /// A point to place the popup at in place of its anchor, as for a context menu.
     fn popup_point(&self) -> Option<crate::geometry::Point> {
         None
+    }
+
+    /// Whether a part takes the wheel for itself, in place of scrolling the page.
+    fn wheels(&self, _part: Self::Part) -> bool {
+        false
     }
 
     /// Whether files may be dropped on a part. The adapter then sends

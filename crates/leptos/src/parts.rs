@@ -932,6 +932,7 @@ where
             let Some(element) = element.get() else { return };
             let item = item.clone();
             let for_context = item.clone();
+            let for_wheel = item.clone();
             let found = Closure::<dyn Fn()>::new(move || {
                 ctx.dispatch(Input::Found {
                     part,
@@ -941,8 +942,30 @@ where
             let _ = element
                 .add_event_listener_with_callback("beforematch", found.as_ref().unchecked_ref());
             found.forget();
-            // The platform's gesture for a context menu goes to a part that takes it,
-            // in place of the browser's own menu.
+            // The wheel goes to a part that asks for it at that moment, and scrolls the
+            // page otherwise.
+            {
+                let item = for_wheel;
+                let turned =
+                    Closure::<dyn Fn(web_sys::WheelEvent)>::new(move |ev: web_sys::WheelEvent| {
+                        if !ctx.machine.with_untracked(|m| m.wheels(part)) {
+                            return;
+                        }
+                        ev.prevent_default();
+                        let mods =
+                            modifiers(ev.shift_key(), ev.ctrl_key() || ev.meta_key(), ev.alt_key());
+                        ctx.dispatch(Input::Wheel {
+                            part,
+                            item: item.clone(),
+                            delta: -ev.delta_y() / 100.0,
+                            mods,
+                        });
+                    });
+                let _ = element
+                    .add_event_listener_with_callback("wheel", turned.as_ref().unchecked_ref());
+                turned.forget();
+            }
+            // The platform's gesture for a context menu goes to a part that takes it,// in place of the browser's own menu.
             if K::Primitive::context(part) {
                 let item = for_context;
                 let asked =
