@@ -152,6 +152,51 @@ impl Hsl {
     }
 }
 
+impl Rgb {
+    /// This colour with `amount` of `other` mixed in, from 0 for none to 1 for all.
+    pub fn mix(self, other: Rgb, amount: f64) -> Rgb {
+        let amount = amount.clamp(0.0, 1.0);
+        let blend = |a: u8, b: u8| (a as f64 + (b as f64 - a as f64) * amount).round() as u8;
+        Rgb::new(
+            blend(self.r, other.r),
+            blend(self.g, other.g),
+            blend(self.b, other.b),
+        )
+    }
+
+    /// The colour a basic colour name stands for, in any case.
+    pub fn named(name: &str) -> Option<Rgb> {
+        let hex = match name.trim().to_lowercase().as_str() {
+            "black" => "#000000",
+            "silver" => "#c0c0c0",
+            "gray" | "grey" => "#808080",
+            "white" => "#ffffff",
+            "maroon" => "#800000",
+            "red" => "#ff0000",
+            "purple" => "#800080",
+            "fuchsia" | "magenta" => "#ff00ff",
+            "green" => "#008000",
+            "lime" => "#00ff00",
+            "olive" => "#808000",
+            "yellow" => "#ffff00",
+            "navy" => "#000080",
+            "blue" => "#0000ff",
+            "teal" => "#008080",
+            "aqua" | "cyan" => "#00ffff",
+            "orange" => "#ffa500",
+            "pink" => "#ffc0cb",
+            "brown" => "#a52a2a",
+            _ => return None,
+        };
+        Rgb::from_hex(hex)
+    }
+
+    /// Text read as a colour: a hex value or a basic colour name.
+    pub fn parse(text: &str) -> Option<Rgb> {
+        Rgb::from_hex(text).or_else(|| Rgb::named(text))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,5 +252,20 @@ mod tests {
         assert_eq!(white.contrast(white), 1.0);
         assert_eq!(black.contrast(white), white.contrast(black));
         assert!(Rgb::new(118, 118, 118).contrast(white) >= 4.5);
+    }
+
+    #[test]
+    fn colours_mix_and_basic_names_are_understood() {
+        assert_eq!(
+            Rgb::new(0, 0, 0).mix(Rgb::new(255, 255, 255), 0.5),
+            Rgb::new(128, 128, 128)
+        );
+        assert_eq!(
+            Rgb::new(10, 20, 30).mix(Rgb::new(200, 0, 0), 0.0),
+            Rgb::new(10, 20, 30)
+        );
+        assert_eq!(Rgb::parse("Teal"), Some(Rgb::new(0, 128, 128)));
+        assert_eq!(Rgb::parse("#fff"), Some(Rgb::new(255, 255, 255)));
+        assert_eq!(Rgb::parse("blurple"), None);
     }
 }

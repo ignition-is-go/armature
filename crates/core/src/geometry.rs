@@ -94,3 +94,14 @@ impl Rect {
             && other.y < self.bottom()
     }
 }
+/// Where to draw a marker that slides between the items of a group, such as the
+/// pill behind the chosen tab: the chosen item's box, measured from the group's own
+/// corner so it can be positioned inside the group.
+pub fn indicator(group: Rect, chosen: Rect) -> Rect {
+    Rect::new(
+        chosen.x - group.x,
+        chosen.y - group.y,
+        chosen.width,
+        chosen.height,
+    )
+}

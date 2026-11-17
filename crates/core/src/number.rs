@@ -6,11 +6,51 @@ pub struct NumberRange {
     pub min: f64,
     pub max: f64,
     pub step: f64,
+    /// How positions along a track map to values.
+    pub scale: Scale,
+}
+
+/// How evenly a range is spread along a track.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Scale {
+    #[default]
+    Linear,
+    /// Each step along the track multiplies the value, as for a frequency or a zoom
+    /// level. The range must be above zero.
+    Log,
+}
+
+impl Scale {
+    fn to(self, value: f64) -> f64 {
+        if self == Scale::Log {
+            value.ln()
+        } else {
+            value
+        }
+    }
+
+    fn from(self, position: f64) -> f64 {
+        if self == Scale::Log {
+            position.exp()
+        } else {
+            position
+        }
+    }
 }
 
 impl NumberRange {
     pub fn new(min: f64, max: f64, step: f64) -> Self {
-        NumberRange { min, max, step }
+        NumberRange {
+            min,
+            max,
+            step,
+            scale: Scale::Linear,
+        }
+    }
+
+    pub fn log(mut self) -> Self {
+        self.scale = Scale::Log;
+        self
     }
 
     pub fn clamp(&self, value: f64) -> f64 {
@@ -33,12 +73,22 @@ impl NumberRange {
         if self.max <= self.min {
             return 0.0;
         }
-        ((value - self.min) / (self.max - self.min)).clamp(0.0, 1.0)
+        let low = self.scale.to(self.min);
+        let fraction = (self.scale.to(self.clamp(value)) - low) / (self.scale.to(self.max) - low);
+        if fraction.is_finite() {
+            fraction.clamp(0.0, 1.0)
+        } else {
+            0.0
+        }
     }
 
     /// The stepped value at `fraction` of the way from `min` to `max`.
     pub fn at_fraction(&self, fraction: f64) -> f64 {
-        self.snap(self.min + fraction.clamp(0.0, 1.0) * (self.max - self.min))
+        let low = self.scale.to(self.min);
+        self.snap(
+            self.scale
+                .from(low + fraction.clamp(0.0, 1.0) * (self.scale.to(self.max) - low)),
+        )
     }
 
     /// `value` moved by a number of steps, which may be negative.
@@ -126,5 +176,13 @@ mod tests {
         assert_eq!(format_number(1234567.891, 2), "1,234,567.89");
         assert_eq!(format_number(-999.0, 0), "-999");
         assert_eq!(format_number(-0.001, 2), "0.00");
+    }
+
+    #[test]
+    fn a_log_scale_puts_each_tenfold_step_the_same_distance_apart() {
+        let range = NumberRange::new(1.0, 1000.0, 1.0).log();
+        assert!((range.fraction(10.0) - 1.0 / 3.0).abs() < 1e-9);
+        assert_eq!(range.at_fraction(2.0 / 3.0), 100.0);
+        assert_eq!(NumberRange::new(0.0, 100.0, 1.0).at_fraction(0.5), 50.0);
     }
 }

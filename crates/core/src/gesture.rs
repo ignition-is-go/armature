@@ -137,6 +137,48 @@ impl Spring {
     }
 }
 
+/// How dark the backdrop behind a sheet should be, from 0 to 1, when the sheet is
+/// `extent` tall. It darkens between the last height that leaves the page usable
+/// (`largest_undimmed`, an index into `heights`, or `None` for closed) and the next.
+pub fn dim_amount(extent: f64, heights: &[f64], largest_undimmed: Option<usize>) -> f64 {
+    let lower = largest_undimmed
+        .and_then(|at| heights.get(at))
+        .copied()
+        .unwrap_or(0.0);
+    let upper = heights
+        .get(largest_undimmed.map_or(0, |at| at + 1))
+        .copied();
+    match upper {
+        Some(upper) if upper > lower => ((extent - lower) / (upper - lower)).clamp(0.0, 1.0),
+        _ => (extent > lower) as u8 as f64,
+    }
+}
+
+/// How far a sheet is between its second tallest height and its tallest, from 0 to 1.
+pub fn expand_amount(extent: f64, heights: &[f64]) -> f64 {
+    let Some(largest) = heights.last().copied() else {
+        return 0.0;
+    };
+    let lower = if heights.len() > 1 {
+        heights[heights.len() - 2]
+    } else {
+        0.0
+    };
+    if largest <= lower {
+        (extent >= largest) as u8 as f64
+    } else {
+        ((extent - lower) / (largest - lower)).clamp(0.0, 1.0)
+    }
+}
+
+/// How far a sheet is from closed to its tallest height, from 0 to 1.
+pub fn progress_amount(extent: f64, heights: &[f64]) -> f64 {
+    match heights.last() {
+        Some(largest) if *largest > 0.0 => (extent / largest).clamp(0.0, 1.0),
+        _ => 0.0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -261,5 +303,23 @@ mod tests {
             let (_, speed) = spring.solve(0.0, 100.0, 40.0, 0.3);
             assert!((speed - (after - before) / (2.0 * h)).abs() < 1e-3);
         }
+    }
+
+    #[test]
+    fn a_sheet_reports_how_dim_expanded_and_open_it_is() {
+        let heights = [200.0, 480.0];
+        assert_eq!(
+            dim_amount(100.0, &heights, None),
+            0.5,
+            "half way to its first height"
+        );
+        assert_eq!(
+            dim_amount(200.0, &heights, Some(0)),
+            0.0,
+            "the page is still usable at the first"
+        );
+        assert_eq!(dim_amount(340.0, &heights, Some(0)), 0.5);
+        assert_eq!(expand_amount(340.0, &heights), 0.5);
+        assert_eq!(progress_amount(240.0, &heights), 0.5);
     }
 }
