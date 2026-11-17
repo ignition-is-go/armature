@@ -197,6 +197,86 @@ impl Rgb {
     }
 }
 
+/// How a colour is written out.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Notation {
+    Hex,
+    /// `rgb(59, 111, 224)`
+    Rgb,
+    /// `hsl(221, 73%, 55%)`
+    Hsl,
+}
+
+impl Rgb {
+    /// How different two colours look, from 0 for the same to about 765 for black
+    /// against white. Red, green and blue are weighted by how strongly the eye
+    /// answers to each.
+    pub fn distance(self, other: Rgb) -> f64 {
+        let mean = (self.r as f64 + other.r as f64) / 2.0;
+        let (dr, dg, db) = (
+            self.r as f64 - other.r as f64,
+            self.g as f64 - other.g as f64,
+            self.b as f64 - other.b as f64,
+        );
+        ((2.0 + mean / 256.0) * dr * dr + 4.0 * dg * dg + (2.0 + (255.0 - mean) / 256.0) * db * db)
+            .sqrt()
+    }
+
+    pub fn write(self, notation: Notation) -> String {
+        match notation {
+            Notation::Hex => self.to_hex(),
+            Notation::Rgb => format!("rgb({}, {}, {})", self.r, self.g, self.b),
+            Notation::Hsl => {
+                let hsl = self.to_hsl();
+                format!(
+                    "hsl({}, {}%, {}%)",
+                    hsl.h.round(),
+                    (hsl.s * 100.0).round(),
+                    (hsl.l * 100.0).round()
+                )
+            }
+        }
+    }
+
+    /// Text read as a colour in any notation: hex, `rgb(..)`, `hsl(..)` or a name.
+    pub fn read(text: &str) -> Option<Rgb> {
+        let text = text.trim();
+        let numbers = |body: &str| -> Vec<f64> {
+            body.split(|ch: char| ch == ',' || ch == '/' || ch.is_whitespace())
+                .filter(|piece| !piece.is_empty())
+                .filter_map(|piece| piece.trim_end_matches('%').parse().ok())
+                .collect()
+        };
+        let inside = |name: &str| {
+            text.strip_prefix(name)
+                .and_then(|rest| rest.trim().strip_prefix('('))
+                .and_then(|rest| rest.strip_suffix(')'))
+        };
+        if let Some(body) = inside("rgb").or_else(|| inside("rgba")) {
+            let n = numbers(body);
+            return (n.len() >= 3).then(|| {
+                Rgb::new(
+                    n[0].clamp(0.0, 255.0) as u8,
+                    n[1].clamp(0.0, 255.0) as u8,
+                    n[2].clamp(0.0, 255.0) as u8,
+                )
+            });
+        }
+        if let Some(body) = inside("hsl").or_else(|| inside("hsla")) {
+            let n = numbers(body);
+            return (n.len() >= 3).then(|| {
+                Hsl {
+                    h: n[0].rem_euclid(360.0),
+                    s: (n[1] / 100.0).clamp(0.0, 1.0),
+                    l: (n[2] / 100.0).clamp(0.0, 1.0),
+                }
+                .to_rgb()
+            });
+        }
+        Rgb::parse(text)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -267,5 +347,30 @@ mod tests {
         assert_eq!(Rgb::parse("Teal"), Some(Rgb::new(0, 128, 128)));
         assert_eq!(Rgb::parse("#fff"), Some(Rgb::new(255, 255, 255)));
         assert_eq!(Rgb::parse("blurple"), None);
+    }
+
+    #[test]
+    fn colours_are_read_and_written_in_each_notation() {
+        let blue = Rgb::new(59, 111, 224);
+        assert_eq!(blue.write(Notation::Rgb), "rgb(59, 111, 224)");
+        assert_eq!(Rgb::read("rgb(59 111 224)"), Some(blue));
+        assert_eq!(Rgb::read(" hsl(0, 100%, 50%) "), Some(Rgb::new(255, 0, 0)));
+        assert_eq!(
+            Rgb::read(&Rgb::new(255, 0, 0).write(Notation::Hsl)),
+            Some(Rgb::new(255, 0, 0))
+        );
+        assert_eq!(Rgb::read("teal"), Some(Rgb::new(0, 128, 128)));
+        assert_eq!(Rgb::read("rgb(1, 2)"), None);
+    }
+
+    #[test]
+    fn distance_is_nothing_for_the_same_colour_and_most_for_black_and_white() {
+        let (black, white) = (Rgb::new(0, 0, 0), Rgb::new(255, 255, 255));
+        assert_eq!(black.distance(black), 0.0);
+        assert!(black.distance(white) > black.distance(Rgb::new(128, 128, 128)));
+        assert!(
+            Rgb::new(0, 200, 0).distance(black) > Rgb::new(0, 0, 200).distance(black),
+            "green counts for more than blue"
+        );
     }
 }

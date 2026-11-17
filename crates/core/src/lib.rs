@@ -1,6 +1,7 @@
 pub mod accordion;
 pub mod agent;
 pub mod area;
+pub mod async_options;
 pub mod avatar;
 pub mod button;
 pub mod calendar;

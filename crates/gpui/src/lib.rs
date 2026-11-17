@@ -1337,6 +1337,7 @@ fn accessibility_role(role: Role) -> gpui::Role {
         Role::Status => gpui::Role::Status,
         Role::Alert => gpui::Role::Alert,
         Role::ScrollBar => gpui::Role::ScrollBar,
+        Role::AlertDialog => gpui::Role::AlertDialog,
         Role::Feed => gpui::Role::Feed,
         Role::Article => gpui::Role::Article,
     }

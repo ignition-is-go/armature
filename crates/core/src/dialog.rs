@@ -20,6 +20,9 @@ pub enum Part {
 pub struct Options {
     pub dismiss_on_backdrop: bool,
     pub dismiss_on_escape: bool,
+    /// Whether it interrupts with something that must be answered, such as
+    /// confirming a deletion. Assistive technology then announces it at once.
+    pub alert: bool,
 }
 
 impl Default for Options {
@@ -27,6 +30,7 @@ impl Default for Options {
         Options {
             dismiss_on_backdrop: true,
             dismiss_on_escape: true,
+            alert: false,
         }
     }
 }
@@ -132,7 +136,11 @@ impl Primitive for Dialog {
                 ..Default::default()
             },
             Part::Content => Semantics {
-                role: Some(Role::Dialog),
+                role: Some(if self.opts.alert {
+                    Role::AlertDialog
+                } else {
+                    Role::Dialog
+                }),
                 hidden,
                 modal: true,
                 focusable: Focusable::Programmatic,
@@ -321,7 +329,12 @@ mod tests {
         let mut dialog = opened(Options {
             dismiss_on_backdrop: false,
             dismiss_on_escape: false,
+            alert: true,
         });
+        assert_eq!(
+            dialog.semantics(Part::Content, None).role,
+            Some(Role::AlertDialog)
+        );
         dialog.send(
             Input::Key {
                 key: Key::Escape,

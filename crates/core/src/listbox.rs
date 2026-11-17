@@ -19,6 +19,10 @@ pub struct Options {
 pub enum Part {
     Root,
     Option,
+    /// Optional. Wraps options that belong together, keyed by the group.
+    Group,
+    /// The heading of a group, keyed like it. It names the group.
+    GroupLabel,
 }
 
 const ACTIONS: &[&str] = &["select", "deselect", "clear"];
@@ -157,8 +161,18 @@ impl PartOf for Part {
 impl Primitive for Listbox {
     type Part = Part;
 
+    fn relations(part: Part) -> crate::primitive::Relations<Part> {
+        match part {
+            Part::Group => crate::primitive::Relations {
+                labelled_by: Some(Part::GroupLabel),
+                ..Default::default()
+            },
+            _ => Default::default(),
+        }
+    }
+
     fn parts() -> &'static [Part] {
-        &[Part::Root, Part::Option]
+        &[Part::Root, Part::Option, Part::Group, Part::GroupLabel]
     }
 
     fn is_item(part: Part) -> bool {
@@ -182,6 +196,11 @@ impl Primitive for Listbox {
 
     fn semantics(&self, part: Part, item: Option<&str>) -> Semantics {
         match (part, item) {
+            (Part::Group, _) => Semantics {
+                role: Some(Role::Group),
+                ..Default::default()
+            },
+            (Part::GroupLabel, _) => Semantics::default(),
             (Part::Root, _) => Semantics {
                 role: Some(Role::Listbox),
                 multiselectable: Some(self.opts.mode == Mode::Multiple),
@@ -554,5 +573,18 @@ mod tests {
             Err(ActError::Refused)
         );
         assert_eq!(lb.highlighted(), None, "a refused action leaves no trace");
+    }
+
+    #[test]
+    fn a_group_of_options_is_named_by_its_heading() {
+        let list = Listbox::default();
+        assert_eq!(
+            list.semantics(Part::Group, Some("citrus")).role,
+            Some(Role::Group)
+        );
+        assert_eq!(
+            Listbox::relations(Part::Group).labelled_by,
+            Some(Part::GroupLabel)
+        );
     }
 }

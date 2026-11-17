@@ -179,6 +179,44 @@ pub fn progress_amount(extent: f64, heights: &[f64]) -> f64 {
     }
 }
 
+impl Spring {
+    /// How long the spring takes to come to rest within half a unit, in seconds.
+    pub fn settle_time(&self, from: f64, to: f64, velocity: f64) -> f64 {
+        let mut seconds = 0.0;
+        while seconds < 10.0 {
+            let (position, speed) = self.solve(from, to, velocity, seconds);
+            if (position - to).abs() <= 0.5 && speed.abs() <= 20.0 {
+                return seconds;
+            }
+            seconds += 1.0 / 120.0;
+        }
+        seconds
+    }
+
+    /// The spring as a timing curve a style sheet can play: a `linear(..)` easing
+    /// sampled along its path, to use with a duration of `settle_time`.
+    pub fn easing(&self, from: f64, to: f64, velocity: f64) -> String {
+        let distance = to - from;
+        if distance.abs() < 1e-6 {
+            return "linear".to_string();
+        }
+        let duration = self.settle_time(from, to, velocity);
+        let steps = ((duration * 60.0).ceil() as usize).clamp(2, 120);
+        let stops: Vec<String> = (0..steps)
+            .map(|step| {
+                let (position, _) =
+                    self.solve(from, to, velocity, duration * step as f64 / steps as f64);
+                format!(
+                    "{}",
+                    (((position - from) / distance) * 10_000.0).round() / 10_000.0
+                )
+            })
+            .chain(["1".to_string()])
+            .collect();
+        format!("linear({})", stops.join(", "))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -321,5 +359,22 @@ mod tests {
         assert_eq!(dim_amount(340.0, &heights, Some(0)), 0.5);
         assert_eq!(expand_amount(340.0, &heights), 0.5);
         assert_eq!(progress_amount(240.0, &heights), 0.5);
+    }
+
+    #[test]
+    fn a_spring_can_be_played_by_a_style_sheet() {
+        let spring = Spring {
+            stiffness: 300.0,
+            damping: 30.0,
+            mass: 1.0,
+        };
+        let settle = spring.settle_time(0.0, 100.0, 0.0);
+        assert!(settle > 0.1 && settle < 2.0, "{settle}");
+        let easing = spring.easing(0.0, 100.0, 0.0);
+        assert!(
+            easing.starts_with("linear(0, ") && easing.ends_with(", 1)"),
+            "{easing}"
+        );
+        assert_eq!(spring.easing(5.0, 5.0, 0.0), "linear");
     }
 }

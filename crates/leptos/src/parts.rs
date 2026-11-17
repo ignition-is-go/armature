@@ -438,6 +438,7 @@ fn aria_role(role: Role) -> &'static str {
         Role::Status => "status",
         Role::Alert => "alert",
         Role::ScrollBar => "scrollbar",
+        Role::AlertDialog => "alertdialog",
         Role::Feed => "feed",
         Role::Article => "article",
     }

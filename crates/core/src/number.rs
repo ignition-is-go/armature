@@ -136,6 +136,56 @@ pub fn format_number(value: f64, decimals: usize) -> String {
     }
 }
 
+/// How many decimal places a step calls for: none for 1, two for 0.25.
+pub fn decimals_of(step: f64) -> usize {
+    let text = format!("{step}");
+    text.split_once('.')
+        .map_or(0, |(_, decimals)| decimals.trim_end_matches('0').len())
+}
+
+/// A number written for reading, with thousands separated: `1,234.50`.
+pub fn format_grouped(value: f64, decimals: usize) -> String {
+    let text = format!("{:.*}", decimals, value.abs());
+    let (whole, fraction) = text.split_once('.').unwrap_or((&text, ""));
+    let mut grouped = String::new();
+    for (at, digit) in whole.chars().enumerate() {
+        if at > 0 && (whole.len() - at) % 3 == 0 {
+            grouped.push(',');
+        }
+        grouped.push(digit);
+    }
+    let sign = if value < 0.0 && text.chars().any(|ch| ch.is_ascii_digit() && ch != '0') {
+        "-"
+    } else {
+        ""
+    };
+    if fraction.is_empty() {
+        format!("{sign}{grouped}")
+    } else {
+        format!("{sign}{grouped}.{fraction}")
+    }
+}
+
+/// A size in bytes written for reading: `512 B`, `1.5 KB`, `3.2 MB`.
+pub fn format_file_size(bytes: u64) -> String {
+    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+    let mut size = bytes as f64;
+    let mut unit = 0;
+    while size >= 1024.0 && unit < UNITS.len() - 1 {
+        size /= 1024.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{bytes} B")
+    } else {
+        format!(
+            "{} {}",
+            format_number(size, if size < 10.0 { 1 } else { 0 }),
+            UNITS[unit]
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -184,5 +234,19 @@ mod tests {
         assert!((range.fraction(10.0) - 1.0 / 3.0).abs() < 1e-9);
         assert_eq!(range.at_fraction(2.0 / 3.0), 100.0);
         assert_eq!(NumberRange::new(0.0, 100.0, 1.0).at_fraction(0.5), 50.0);
+    }
+
+    #[test]
+    fn numbers_and_sizes_are_written_for_reading() {
+        assert_eq!(
+            (decimals_of(1.0), decimals_of(0.25), decimals_of(0.5)),
+            (0, 2, 1)
+        );
+        assert_eq!(format_grouped(1234567.891, 2), "1,234,567.89");
+        assert_eq!(format_grouped(-999.0, 0), "-999");
+        assert_eq!(format_grouped(1000.0, 0), "1,000");
+        assert_eq!(format_file_size(512), "512 B");
+        assert_eq!(format_file_size(1536), "1.5 KB");
+        assert_eq!(format_file_size(34 * 1024 * 1024), "34 MB");
     }
 }

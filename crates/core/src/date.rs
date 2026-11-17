@@ -143,6 +143,102 @@ pub fn date_for_key(
     })
 }
 
+const MONTHS: [&str; 12] = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+];
+const WEEKDAYS: [&str; 7] = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+];
+
+/// A month's English name, counting from 1. Other languages are the host's to supply.
+pub fn month_name(month: u8) -> &'static str {
+    MONTHS[(month.clamp(1, 12) - 1) as usize]
+}
+
+/// A weekday's English name, with Sunday as 0.
+pub fn weekday_name(weekday: u8) -> &'static str {
+    WEEKDAYS[(weekday % 7) as usize]
+}
+
+/// The day a week starts on where a language is spoken, with Sunday as 0. It is
+/// Sunday across the Americas and parts of Asia, Saturday in much of the Arab
+/// world, and Monday elsewhere.
+pub fn first_day_of_week(locale: &str) -> u8 {
+    let region = locale
+        .rsplit(['-', '_'])
+        .next()
+        .unwrap_or_default()
+        .to_uppercase();
+    match region.as_str() {
+        "US" | "CA" | "MX" | "BR" | "JP" | "KR" | "IL" | "IN" | "PH" | "AU" | "ZA" => 0,
+        "EG" | "SA" | "AE" | "DZ" | "IQ" | "JO" | "KW" | "QA" | "BH" | "OM" | "AF" | "IR" => 6,
+        _ => 1,
+    }
+}
+
+impl Date {
+    pub fn add_years(self, years: i32) -> Date {
+        self.add_months(years * 12)
+    }
+
+    /// The date brought within the earliest and latest allowed.
+    pub fn clamped(self, earliest: Option<Date>, latest: Option<Date>) -> Date {
+        let date = earliest.map_or(self, |earliest| self.max(earliest));
+        latest.map_or(date, |latest| date.min(latest))
+    }
+
+    /// The first day of the week this date falls in, for a week starting on
+    /// `week_start` (Sunday is 0).
+    pub fn start_of_week(self, week_start: u8) -> Date {
+        self.add_days(-(((self.weekday() + 7 - week_start % 7) % 7) as i64))
+    }
+
+    pub fn end_of_week(self, week_start: u8) -> Date {
+        self.start_of_week(week_start).add_days(6)
+    }
+
+    /// The date for people to read, such as `17 November 2026`.
+    pub fn long(self) -> String {
+        format!("{} {} {}", self.day, month_name(self.month), self.year)
+    }
+}
+
+/// A span of dates for people to read, saying only once what the two ends share:
+/// `12 to 20 November 2026`, `28 November to 3 December 2026`.
+pub fn format_range(first: Date, last: Date) -> String {
+    if first == last {
+        first.long()
+    } else if (first.year, first.month) == (last.year, last.month) {
+        format!("{} to {}", first.day, last.long())
+    } else if first.year == last.year {
+        format!(
+            "{} {} to {}",
+            first.day,
+            month_name(first.month),
+            last.long()
+        )
+    } else {
+        format!("{} to {}", first.long(), last.long())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -215,5 +311,47 @@ mod tests {
         assert_eq!(go(Key::Home, none, Dir::Ltr), date("2026-11-15"));
         assert_eq!(go(Key::End, none, Dir::Ltr), date("2026-11-21"));
         assert_eq!(date_for_key(day, Key::Enter, none, Dir::Ltr, 0), None);
+    }
+
+    #[test]
+    fn weeks_names_and_spans_read_as_people_expect() {
+        let tuesday = Date::new(2026, 11, 17).unwrap();
+        assert_eq!(weekday_name(tuesday.weekday()), "Tuesday");
+        assert_eq!(tuesday.start_of_week(1).format(), "2026-11-16");
+        assert_eq!(tuesday.end_of_week(0).format(), "2026-11-21");
+        assert_eq!(
+            (
+                first_day_of_week("en-US"),
+                first_day_of_week("de-DE"),
+                first_day_of_week("ar-EG")
+            ),
+            (0, 1, 6)
+        );
+        assert_eq!(tuesday.add_years(-1).format(), "2025-11-17");
+        assert_eq!(
+            tuesday.clamped(Date::new(2026, 12, 1), None).format(),
+            "2026-12-01"
+        );
+        assert_eq!(
+            format_range(
+                Date::new(2026, 11, 12).unwrap(),
+                Date::new(2026, 11, 20).unwrap()
+            ),
+            "12 to 20 November 2026"
+        );
+        assert_eq!(
+            format_range(
+                Date::new(2026, 11, 28).unwrap(),
+                Date::new(2026, 12, 3).unwrap()
+            ),
+            "28 November to 3 December 2026"
+        );
+        assert_eq!(
+            format_range(
+                Date::new(2026, 12, 30).unwrap(),
+                Date::new(2027, 1, 2).unwrap()
+            ),
+            "30 December 2026 to 2 January 2027"
+        );
     }
 }

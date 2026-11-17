@@ -112,6 +112,26 @@ impl TextEdit {
     }
 }
 
+/// What changed between two texts, as one replaced stretch: where it starts, what
+/// was taken out and what was put in. Enough to say what a single edit did.
+pub fn text_diff(before: &str, after: &str) -> (usize, String, String) {
+    let (old, new): (Vec<char>, Vec<char>) = (before.chars().collect(), after.chars().collect());
+    let start = old.iter().zip(&new).take_while(|(a, b)| a == b).count();
+    let room = old.len().min(new.len()) - start;
+    let end = old
+        .iter()
+        .rev()
+        .zip(new.iter().rev())
+        .take(room)
+        .take_while(|(a, b)| a == b)
+        .count();
+    (
+        start,
+        old[start..old.len() - end].iter().collect(),
+        new[start..new.len() - end].iter().collect(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -170,5 +190,22 @@ mod tests {
         field.apply(Edit::Home);
         field.set_text("hi there");
         assert_eq!(field.caret(), 0);
+    }
+
+    #[test]
+    fn a_change_between_two_texts_is_one_replaced_stretch() {
+        assert_eq!(
+            text_diff("hello world", "hello brave world"),
+            (6, String::new(), "brave ".to_string())
+        );
+        assert_eq!(
+            text_diff("colour", "color"),
+            (4, "u".to_string(), String::new())
+        );
+        assert_eq!(
+            text_diff("cat", "cut"),
+            (1, "a".to_string(), "u".to_string())
+        );
+        assert_eq!(text_diff("same", "same"), (4, String::new(), String::new()));
     }
 }

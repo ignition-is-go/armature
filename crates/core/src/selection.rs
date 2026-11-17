@@ -64,6 +64,23 @@ pub fn toggle_all(mode: Mode, selected: &[String], order: &[&str]) -> Vec<String
     }
 }
 
+/// The chosen labels written out for a control that shows what is selected. Past
+/// `most`, the rest are counted: `Small, Medium and 2 more`.
+pub fn format_labels(labels: &[&str], most: usize) -> String {
+    let shown = &labels[..labels.len().min(most.max(1))];
+    let rest = labels.len() - shown.len();
+    match (shown, rest) {
+        ([], _) => String::new(),
+        (shown, 0) if shown.len() == 1 => shown[0].to_string(),
+        (shown, 0) => format!(
+            "{} and {}",
+            shown[..shown.len() - 1].join(", "),
+            shown[shown.len() - 1]
+        ),
+        (shown, rest) => format!("{} and {rest} more", shown.join(", ")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -149,6 +166,17 @@ mod tests {
         assert_eq!(
             toggle_all(Mode::Single, &strings(&["b"]), &ORDER),
             strings(&["b"])
+        );
+    }
+
+    #[test]
+    fn chosen_labels_are_listed_and_the_overflow_counted() {
+        assert_eq!(format_labels(&[], 2), "");
+        assert_eq!(format_labels(&["Small"], 2), "Small");
+        assert_eq!(format_labels(&["Small", "Large"], 2), "Small and Large");
+        assert_eq!(
+            format_labels(&["Small", "Medium", "Large", "Huge"], 2),
+            "Small, Medium and 2 more"
         );
     }
 }

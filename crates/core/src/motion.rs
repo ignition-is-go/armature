@@ -145,6 +145,17 @@ pub fn resize_message(rect: Rect) -> String {
     )
 }
 
+/// The cursor that shows which way an edge or corner can be dragged, by its
+/// conventional name: `ew-resize`, `ns-resize`, `nwse-resize` or `nesw-resize`.
+pub fn resize_cursor(handle: Handle) -> &'static str {
+    match (handle.horizontal, handle.vertical) {
+        (0, _) => "ns-resize",
+        (_, 0) => "ew-resize",
+        (h, v) if h == v => "nwse-resize",
+        _ => "nesw-resize",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -228,5 +239,19 @@ mod tests {
         };
         let grown = resized(BOX, Handle::BOTTOM_RIGHT, Point::new(500., 500.), capped);
         assert_eq!((grown.width, grown.height), (120., 90.));
+    }
+
+    #[test]
+    fn each_grip_has_the_cursor_for_the_way_it_drags() {
+        assert_eq!(resize_cursor(Handle::LEFT), "ew-resize");
+        assert_eq!(resize_cursor(Handle::TOP), "ns-resize");
+        assert_eq!(resize_cursor(Handle::BOTTOM_RIGHT), "nwse-resize");
+        assert_eq!(
+            resize_cursor(Handle {
+                horizontal: 1,
+                vertical: -1
+            }),
+            "nesw-resize"
+        );
     }
 }

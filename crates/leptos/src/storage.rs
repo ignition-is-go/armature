@@ -89,3 +89,42 @@ pub fn system_prefers_dark() -> bool {
     });
     query.is_some_and(|query| query.matches())
 }
+
+/// The browser's `sessionStorage`: kept for as long as the tab is open, and not
+/// shared between tabs.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SessionStorage;
+
+fn session() -> Option<web_sys::Storage> {
+    web_sys::window()?.session_storage().ok()?
+}
+
+impl Storage for SessionStorage {
+    fn get(&self, key: &str) -> Option<String> {
+        session()?.get_item(key).ok()?
+    }
+
+    fn set(&mut self, key: &str, value: &str) {
+        if let Some(store) = session() {
+            let _ = store.set_item(key, value);
+        }
+    }
+
+    fn remove(&mut self, key: &str) {
+        if let Some(store) = session() {
+            let _ = store.remove_item(key);
+        }
+    }
+}
+
+/// Whether the person has asked their system for less motion. Skip or shorten
+/// animations when they have.
+pub fn prefers_reduced_motion() -> bool {
+    let query = web_sys::window().and_then(|window| {
+        window
+            .match_media("(prefers-reduced-motion: reduce)")
+            .ok()
+            .flatten()
+    });
+    query.is_some_and(|query| query.matches())
+}

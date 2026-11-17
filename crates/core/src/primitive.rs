@@ -377,6 +377,8 @@ pub enum Role {
     /// Text that is read out at once.
     Alert,
     ScrollBar,
+    /// A dialog that interrupts with something that must be answered.
+    AlertDialog,
     /// A list of articles that loads more as it is read.
     Feed,
     Article,
