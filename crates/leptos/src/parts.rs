@@ -206,7 +206,12 @@ impl<P: Primitive + Send + Sync> Context<P> {
     }
 
     fn place(self, popup: &HtmlElement, placement: Placement<P::Part>) {
-        let Some(anchor) = self.element_of(placement.anchor, None) else {
+        // A popup that belongs to an item sits against that item's own anchor.
+        let item = popup.get_attribute("data-value");
+        let own = item
+            .as_deref()
+            .and_then(|item| self.element_of(placement.anchor, Some(item)));
+        let Some(anchor) = own.or_else(|| self.element_of(placement.anchor, None)) else {
             return;
         };
         let anchor = anchor.get_bounding_client_rect();

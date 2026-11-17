@@ -35,6 +35,7 @@ pub mod listbox;
 pub mod locale;
 pub mod menu;
 pub mod motion;
+pub mod navigation_menu;
 pub mod number;
 pub mod number_input;
 pub mod otp_input;

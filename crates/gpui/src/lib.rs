@@ -693,12 +693,14 @@ pub fn part<K: PartOf>(
     let placement = K::Primitive::popup_of(part);
     if let Some(placement) = placement {
         let state = state.clone();
+        let own = item.map(str::to_string);
         el = el.on_mouse_down_out(move |event: &MouseDownEvent, window, cx| {
             state.update(cx, |state, cx| {
                 // A press on the anchor is that part's own press, not an outside one.
                 let on_anchor = state
                     .bounds
-                    .get(&(placement.anchor, None))
+                    .get(&(placement.anchor, own.clone()))
+                    .or_else(|| state.bounds.get(&(placement.anchor, None)))
                     .is_some_and(|bounds| bounds.contains(&event.position));
                 // A press while a dialog is up belongs to the dialog, not to what is
                 // under it.
@@ -796,7 +798,12 @@ pub fn part<K: PartOf>(
     let layout = match placement {
         _ if semantics.hidden => Layout::Hidden,
         None => Layout::Inline,
-        Some(placement) => match machine.bounds.get(&(placement.anchor, None)) {
+        // A popup that belongs to an item sits against that item's own anchor.
+        Some(placement) => match machine
+            .bounds
+            .get(&(placement.anchor, item.map(str::to_string)))
+            .or_else(|| machine.bounds.get(&(placement.anchor, None)))
+        {
             Some(anchor) => floating(placement.side, placement.align, placement.gap, *anchor),
             None => Layout::Hidden,
         },
