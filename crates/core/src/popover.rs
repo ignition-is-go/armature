@@ -1,5 +1,5 @@
 use crate::agent::{ActError, Snapshot};
-use crate::change::Gate;
+use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::keys::Key;
 use crate::popup::{Align, Placement, Side};
 use crate::primitive::{
@@ -28,6 +28,7 @@ const ACTIONS: &[&str] = &["open", "close"];
 pub struct Popover {
     open: bool,
     focused: Option<Part>,
+    modal: bool,
 }
 
 impl Popover {
@@ -35,9 +36,39 @@ impl Popover {
         self.open
     }
 
-    fn dismiss(&mut self) -> Reaction<Part> {
-        self.open = false;
-        Reaction::focusing(Part::Trigger)
+    /// A popover that keeps the page behind it out of reach while it is open.
+    pub fn modal(mut self) -> Self {
+        self.modal = true;
+        self
+    }
+
+    /// Opens or closes, unless the owner refuses.
+    fn change(&mut self, open: bool, source: Source, reason: Reason, gate: Gate) -> bool {
+        if open == self.open {
+            return true;
+        }
+        let value = if open {
+            vec!["open".to_string()]
+        } else {
+            Vec::new()
+        };
+        let allowed = gate(&ValueChange {
+            value,
+            source,
+            reason,
+        });
+        if allowed {
+            self.open = open;
+        }
+        allowed
+    }
+
+    fn dismiss(&mut self, reason: Reason, gate: Gate) -> Reaction<Part> {
+        if self.change(false, Source::User, reason, gate) {
+            Reaction::focusing(Part::Trigger)
+        } else {
+            Reaction::handled()
+        }
     }
 }
 
@@ -103,6 +134,7 @@ impl Primitive for Popover {
             Part::Content => Semantics {
                 role: Some(Role::Dialog),
                 hidden,
+                modal: self.modal,
                 focusable: Focusable::Programmatic,
                 ..Default::default()
             },
@@ -123,7 +155,7 @@ impl Primitive for Popover {
         }
     }
 
-    fn send(&mut self, input: Input<Part>, _: Gate) -> Reaction<Part> {
+    fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
         match input {
             Input::Focus { part, .. } => {
                 self.focused = Some(part);
@@ -140,7 +172,7 @@ impl Primitive for Popover {
                         item: None,
                         mods,
                     },
-                    &mut |_| true,
+                    gate,
                 ),
                 _ => Reaction::default(),
             },
@@ -148,19 +180,22 @@ impl Primitive for Popover {
                 part: Part::Trigger,
                 ..
             } if !self.open => {
-                self.open = true;
-                Reaction::focusing(Part::Content)
+                if self.change(true, Source::User, Reason::Press, gate) {
+                    Reaction::focusing(Part::Content)
+                } else {
+                    Reaction::handled()
+                }
             }
             Input::Press {
                 part: Part::Trigger | Part::Close,
                 ..
-            } => self.dismiss(),
+            } => self.dismiss(Reason::Press, gate),
             Input::Key {
                 key: Key::Escape, ..
-            } if self.open => self.dismiss(),
+            } if self.open => self.dismiss(Reason::Keyboard, gate),
             // A press elsewhere, or focus leaving, closes it without pulling focus back.
             Input::PressOutside | Input::Blur { .. } | Input::WindowBlur => {
-                self.open = false;
+                self.change(false, Source::User, Reason::Press, gate);
                 Reaction::default()
             }
             _ => Reaction::default(),
@@ -168,24 +203,30 @@ impl Primitive for Popover {
     }
 
     fn value(&self) -> Vec<String> {
-        Vec::new()
+        if self.open {
+            vec!["open".to_string()]
+        } else {
+            Vec::new()
+        }
     }
 
-    fn set_value(&mut self, _: Vec<String>) {}
+    fn set_value(&mut self, value: Vec<String>) {
+        self.open = value.iter().any(|entry| entry == "open");
+    }
 
     fn snapshot(&self, label: &str) -> Snapshot {
         Snapshot {
             name: "popover",
             label: label.to_string(),
-            value: Vec::new(),
+            value: self.value(),
             expanded: Some(self.open),
             actions: ACTIONS,
             items: Vec::new(),
         }
     }
 
-    fn act(&mut self, action: &str, _: Option<&str>, _: Gate) -> Result<(), ActError> {
-        self.open = match action {
+    fn act(&mut self, action: &str, _: Option<&str>, gate: Gate) -> Result<(), ActError> {
+        let open = match action {
             "open" => true,
             "close" => false,
             other => {
@@ -195,7 +236,11 @@ impl Primitive for Popover {
                 });
             }
         };
-        Ok(())
+        if self.change(open, Source::Agent, Reason::Action, gate) {
+            Ok(())
+        } else {
+            Err(ActError::Refused)
+        }
     }
 }
 

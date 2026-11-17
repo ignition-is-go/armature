@@ -1275,3 +1275,99 @@ fn toast_behaviors() {
     several.act("dismiss_all", None, &mut |_| true).unwrap();
     assert_eq!(count(&several), 0);
 }
+
+use armature_core::popover::{self, Popover};
+
+// popover.test.ts
+#[test]
+fn popover_behaviors() {
+    use armature_core::geometry::{Point, Rect, Size};
+    use armature_core::popup::{arrow_along, bridges};
+    // "points at the anchor's center"
+    let arrow = Size {
+        width: 12.0,
+        height: 6.0,
+    };
+    assert_eq!(
+        arrow_along(
+            Rect::new(100.0, 0.0, 60.0, 30.0),
+            Rect::new(50.0, 40.0, 200.0, 100.0),
+            arrow,
+            false,
+            6.0
+        ),
+        (74.0, false)
+    );
+    // "stops short of the corners and says so"
+    assert_eq!(
+        arrow_along(
+            Rect::new(0.0, 0.0, 10.0, 30.0),
+            Rect::new(40.0, 40.0, 200.0, 100.0),
+            arrow,
+            false,
+            6.0
+        ),
+        (6.0, true)
+    );
+    // "runs along the vertical edge for side placements"
+    let tall = Size {
+        width: 6.0,
+        height: 12.0,
+    };
+    assert_eq!(
+        arrow_along(
+            Rect::new(0.0, 100.0, 30.0, 40.0),
+            Rect::new(40.0, 60.0, 200.0, 100.0),
+            tall,
+            true,
+            6.0
+        )
+        .0,
+        54.0
+    );
+    // hover bridge
+    let trigger = Rect::new(100.0, 0.0, 60.0, 30.0);
+    let below = Rect::new(50.0, 38.0, 200.0, 162.0);
+    assert!(
+        bridges(trigger, below, 4.0, Point::new(130.0, 34.0)),
+        "covers the gap"
+    );
+    assert!(
+        bridges(trigger, below, 4.0, Point::new(85.0, 25.0)),
+        "covers a path that leaves sideways toward the popup"
+    );
+    assert!(!bridges(trigger, below, 4.0, Point::new(40.0, 15.0)));
+    assert!(!bridges(trigger, below, 4.0, Point::new(130.0, -10.0)));
+    let above = Rect::new(50.0, -200.0, 200.0, 192.0);
+    assert!(bridges(trigger, above, 4.0, Point::new(130.0, -4.0)));
+    assert!(!bridges(trigger, above, 4.0, Point::new(130.0, 40.0)));
+    // "only modal popovers are marked modal"
+    assert!(
+        !Popover::default()
+            .semantics(popover::Part::Content, None)
+            .modal
+    );
+    assert!(
+        Popover::default()
+            .modal()
+            .semantics(popover::Part::Content, None)
+            .modal
+    );
+    // "a cancelled change keeps the popover closed"
+    let mut refused = Popover::default();
+    assert!(refused.act("open", None, &mut |_| false).is_err());
+    refused.send(
+        Input::Press {
+            part: popover::Part::Trigger,
+            item: None,
+            mods: Modifiers::default(),
+        },
+        &mut |_| false,
+    );
+    assert!(!refused.is_open());
+    // And an open one stays open when its close is refused.
+    let mut open = Popover::default();
+    open.act("open", None, &mut |_| true).unwrap();
+    open.send(Input::PressOutside, &mut |_| false);
+    assert!(open.is_open());
+}
