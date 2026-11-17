@@ -6,8 +6,12 @@ license.workspace = true
 description = "GPUI adapter for armature-core"
 
 [dependencies]
+accesskit = "0.24"
 armature-core.workspace = true
+futures = "0.3"
+serde_json = "1"
 gpui = { package = "gpui-unofficial", version = "1.28" }
 
 [dev-dependencies]
+serde_json = "1"
 gpui = { package = "gpui-unofficial", version = "1.28", features = ["test-support"] }

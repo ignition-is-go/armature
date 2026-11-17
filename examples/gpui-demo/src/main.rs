@@ -222,5 +222,12 @@ fn main() {
         )
         .unwrap();
         cx.activate(true);
+
+        let runtime_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into());
+        let socket = format!("{runtime_dir}/armature-gpui-demo.sock");
+        match armature_gpui::agent::serve(&socket, cx) {
+            Ok(()) => println!("agent bridge listening on {socket}"),
+            Err(error) => eprintln!("agent bridge unavailable: {error}"),
+        }
     });
 }

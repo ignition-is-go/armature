@@ -192,3 +192,34 @@ fn styling_a_part_cannot_reveal_a_hidden_panel(cx: &mut TestAppContext) {
     cx.simulate_click(in_apple, gpui::Modifiers::default());
     assert_eq!(fruit(cx), ["apple"]);
 }
+
+#[gpui::test]
+fn the_json_protocol_reads_and_operates_components(cx: &mut TestAppContext) {
+    let (demo, cx) = open(cx);
+    let ask = |cx: &mut VisualTestContext, request: &str| -> serde_json::Value {
+        let response = cx.update(|_, cx| agent::handle(request, cx));
+        serde_json::from_str(&response).unwrap()
+    };
+
+    let listing = ask(cx, r#"{"method":"snapshot"}"#);
+    let fruit = &listing["components"][1];
+    assert_eq!(fruit["label"], "Fruit");
+    assert_eq!(fruit["items"][1]["disabled"], true);
+    let reference = fruit["ref"].as_str().unwrap();
+
+    let select =
+        format!(r#"{{"method":"act","ref":"{reference}","action":"select","item":"apple"}}"#);
+    assert_eq!(ask(cx, &select)["value"][0], "apple");
+    demo.update(cx, |demo, cx| {
+        assert_eq!(demo.fruit.read(cx).value(), ["apple"])
+    });
+
+    assert_eq!(ask(cx, "not json")["ok"], false);
+    let unknown = ask(cx, r#"{"method":"click"}"#);
+    assert_eq!(
+        unknown["error"],
+        "unknown method; valid methods: snapshot, act"
+    );
+    let missing = ask(cx, r#"{"method":"act","ref":"e404","action":"select"}"#);
+    assert_eq!(missing["error"], "no component with ref \"e404\"");
+}

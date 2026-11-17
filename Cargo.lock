@@ -206,8 +206,11 @@ version = "0.0.1"
 name = "armature-gpui"
 version = "0.0.1"
 dependencies = [
+ "accesskit",
  "armature-core",
+ "futures",
  "gpui-unofficial",
+ "serde_json",
 ]
 
 [[package]]
@@ -217,6 +220,7 @@ dependencies = [
  "armature-core",
  "js-sys",
  "leptos",
+ "send_wrapper",
  "wasm-bindgen",
  "web-sys",
 ]
