@@ -47,8 +47,18 @@ impl Meter {
         Meter { value, min, max }
     }
 
+    /// The value as it reads: within the range, and the least value for something
+    /// that is not a number.
+    fn reading(&self) -> f64 {
+        if self.value.is_finite() {
+            self.value.clamp(self.min, self.max)
+        } else {
+            self.min
+        }
+    }
+
     pub fn percent(&self) -> f64 {
-        percent(self.value, self.min, self.max)
+        percent(self.reading(), self.min, self.max)
     }
 
     /// The reading as a percentage, such as `40%`.
@@ -87,7 +97,7 @@ impl Primitive for Meter {
             MeterPart::Root => Semantics {
                 role: Some(Role::Meter),
                 range: Some(ValueRange {
-                    now: self.value.clamp(self.min, self.max),
+                    now: self.reading(),
                     min: self.min,
                     max: self.max,
                 }),

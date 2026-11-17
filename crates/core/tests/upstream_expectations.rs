@@ -593,3 +593,77 @@ fn colour_notations() {
     assert_eq!(black.write_alpha(Notation::Hex, alpha), "#00000080");
     assert!(Rgb::read("#12").is_none());
 }
+
+use armature_core::gauge::{Meter, MeterPart};
+use armature_core::primitive::Primitive;
+use armature_core::selection::{all_toggled, keys_between, range_selection, toggled_keys};
+
+fn keys(list: &[&str]) -> Vec<String> {
+    list.iter().map(|key| key.to_string()).collect()
+}
+
+// listbox-range.test.ts
+#[test]
+fn listbox_ranges() {
+    let order = ["a", "b", "c", "d", "e", "f"];
+    assert_eq!(keys_between(&order, "b", "d"), ["b", "c", "d"]);
+    assert_eq!(keys_between(&order, "d", "b"), ["b", "c", "d"]);
+    assert_eq!(keys_between(&order, "c", "c"), ["c"]);
+    assert!(keys_between(&order, "x", "b").is_empty() && keys_between(&order, "b", "x").is_empty());
+    assert_eq!(
+        range_selection(&order, "b", &keys(&["a", "f"]), "d", false, |_| true),
+        ["b", "c", "d"]
+    );
+    assert_eq!(
+        range_selection(&order, "c", &keys(&["f", "a"]), "e", true, |_| true),
+        ["f", "a", "c", "d", "e"]
+    );
+    assert_eq!(
+        range_selection(&order, "b", &keys(&["f"]), "e", true, |_| true),
+        ["f", "b", "c", "d", "e"]
+    );
+    assert_eq!(
+        range_selection(&order, "b", &keys(&["f"]), "c", true, |_| true),
+        ["f", "b", "c"],
+        "a range can shrink"
+    );
+    assert_eq!(
+        range_selection(&order, "a", &[], "d", false, |key| key != "c"),
+        ["a", "b", "d"]
+    );
+    assert_eq!(
+        range_selection(&order, "a", &[], "c", false, |key| key != "a"),
+        ["b", "c"]
+    );
+    assert_eq!(toggled_keys(&keys(&["a", "c"]), "b"), ["a", "c", "b"]);
+    assert_eq!(toggled_keys(&keys(&["a", "c"]), "a"), ["c"]);
+    let selectable = ["a", "b", "d"];
+    let all = all_toggled(&keys(&["d"]), &selectable);
+    assert_eq!(all, ["d", "a", "b"]);
+    assert!(all_toggled(&all, &selectable).is_empty());
+    assert_eq!(
+        all_toggled(&keys(&["c", "a", "b", "d"]), &selectable),
+        ["c"]
+    );
+    assert_eq!(all_toggled(&keys(&["c"]), &["a"]), ["c", "a"]);
+    assert_eq!(all_toggled(&keys(&["c"]), &[]), ["c"]);
+}
+
+// meter.test.ts
+#[test]
+fn meter_readings() {
+    // "a value outside the bounds reads as the nearest bound"
+    let mut meter = Meter::new(150.0, 0.0, 100.0);
+    assert_eq!(
+        meter.semantics(MeterPart::Root, None).range.unwrap().now,
+        100.0
+    );
+    assert_eq!(meter.percent(), 100.0);
+    // "a value that isn't a number reads as the minimum"
+    meter.set_value(vec!["NaN".into()]);
+    assert_eq!(
+        meter.semantics(MeterPart::Root, None).range.unwrap().now,
+        0.0
+    );
+    assert_eq!(meter.percent(), 0.0);
+}

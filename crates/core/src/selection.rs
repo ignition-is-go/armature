@@ -81,6 +81,82 @@ pub fn format_labels(labels: &[&str], most: usize) -> String {
     }
 }
 
+/// The keys from one key to another in `order`, both included, whichever comes
+/// first. Empty if either is not in the list.
+pub fn keys_between(order: &[&str], from: &str, to: &str) -> Vec<String> {
+    let at = |key: &str| order.iter().position(|entry| *entry == key);
+    match (at(from), at(to)) {
+        (Some(a), Some(b)) => order[a.min(b)..=a.max(b)]
+            .iter()
+            .map(|key| key.to_string())
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// The selection after extending from an anchor to `to`. `base` is what was
+/// selected when the anchor was set: an additive range keeps it, first and in its
+/// own order, and extending again replaces only the range, so a range can shrink.
+/// Keys that cannot be chosen are skipped.
+pub fn range_selection(
+    order: &[&str],
+    anchor: &str,
+    base: &[String],
+    to: &str,
+    additive: bool,
+    selectable: impl Fn(&str) -> bool,
+) -> Vec<String> {
+    let range: Vec<String> = keys_between(order, anchor, to)
+        .into_iter()
+        .filter(|key| selectable(key))
+        .collect();
+    if !additive {
+        return range;
+    }
+    let mut next = base.to_vec();
+    next.extend(range.into_iter().filter(|key| !base.contains(key)));
+    next
+}
+
+/// The selection with a key added at the end, or taken out.
+pub fn toggled_keys(selected: &[String], key: &str) -> Vec<String> {
+    if selected.iter().any(|chosen| chosen == key) {
+        selected
+            .iter()
+            .filter(|chosen| *chosen != key)
+            .cloned()
+            .collect()
+    } else {
+        selected.iter().cloned().chain([key.to_string()]).collect()
+    }
+}
+
+/// Select-all as a toggle: every key that can be chosen is added, or, once they
+/// all are, taken out. Keys that cannot be chosen are left as they were.
+pub fn all_toggled(selected: &[String], selectable: &[&str]) -> Vec<String> {
+    if selectable.is_empty() {
+        return selected.to_vec();
+    }
+    if selectable
+        .iter()
+        .all(|key| selected.iter().any(|chosen| chosen == key))
+    {
+        return selected
+            .iter()
+            .filter(|chosen| !selectable.contains(&chosen.as_str()))
+            .cloned()
+            .collect();
+    }
+    let mut next = selected.to_vec();
+    next.extend(
+        selectable
+            .iter()
+            .filter(|key| !selected.iter().any(|chosen| chosen == *key))
+            .map(|key| key.to_string()),
+    );
+    next
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
