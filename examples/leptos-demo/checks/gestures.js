@@ -24,7 +24,10 @@ async () => {
       arrowPointsAtTrigger: Math.abs((arrow.left + arrow.width / 2) - (t.left + t.width / 2)) < 2,
     };
     document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));  await frame();
-    r.closedByOutsidePress = !shown(content);
+    // It stays on screen while its exit transition plays, then goes.
+    r.fadesOut = shown(content) && content.hasAttribute('data-ending-style');
+    await new Promise(r => setTimeout(r, 400));
+    r.closedByOutsidePress = !shown(content) && !content.hasAttribute('data-ending-style');
     return r;
   });
   await step('tooltip', async () => {

@@ -6,13 +6,17 @@ use armature_core::command::{self, Command};
 use armature_core::data_grid::{self, DataGrid};
 use armature_core::date::Date;
 use armature_core::dialog::{self, Dialog};
+use armature_core::editable::{self, Editable};
 use armature_core::geometry::Rect;
+use armature_core::hold_button::{self, HoldButton};
 use armature_core::keys::Dir;
 use armature_core::listbox::{self, Listbox};
 use armature_core::number::NumberRange;
 use armature_core::number_input::{self, NumberInput};
 use armature_core::otp_input::{self, OtpInput};
 use armature_core::popover::{self, Popover};
+use armature_core::preference::{ColorScheme, Preference};
+use armature_core::prompt::{self, Prompt};
 use armature_core::radio::{self, Radio};
 use armature_core::resizable::{self, Resizable};
 use armature_core::select::{self, Select};
@@ -27,11 +31,13 @@ use armature_core::toggle::{self, Toggle};
 use armature_core::token_input::{self, TokenInput};
 use armature_core::toolbar::{self, Toolbar};
 use armature_core::tooltip::{self, Tooltip};
+use armature_core::transfer_list::{self, TransferList};
 use armature_core::tree::tree_from_paths;
 use armature_core::tree_view::{self, TreeView};
 use armature_core::virtual_list::{self, VirtualList};
 use armature_leptos::{
-    Part, Root, Source, ValueChange, agent, use_primitive, use_visible_viewport,
+    CookieStorage, LocalStorage, Part, Root, Source, ValueChange, agent, system_prefers_dark,
+    use_primitive, use_shortcut, use_visible_viewport,
 };
 use leptos::prelude::*;
 
@@ -282,9 +288,119 @@ fn Panels() -> impl IntoView {
     }
 }
 
+/// A tree drawn from its own rows, so a node that is moved is drawn where it lands.
+#[component]
+fn OutlineRows() -> impl IntoView {
+    let tree = use_primitive::<TreeView>();
+    let level = move |key: &str| {
+        tree.with(|t| {
+            t.rows()
+                .iter()
+                .find(|row| row.key == key)
+                .map_or(1, |row| row.level)
+        })
+    };
+    view! {
+        <Part part=tree_view::Part::Root>
+            <For each=move || tree.with(|t| t.rows()) key=|row| row.key.clone() let:row>
+                {
+                    let key = row.key.clone();
+                    let name = row.key.rsplit('/').next().unwrap_or(&row.key).to_string();
+                    view! {
+                        <div class="outline-row" style:padding-left=move || format!("{}px", (level(&key) - 1) * 24)>
+                            <Part part=tree_view::Part::Node item=row.key.clone()>{name}</Part>
+                        </div>
+                    }
+                }
+            </For>
+        </Part>
+    }
+}
+
+/// Two lists drawn from the primitive, so an item is drawn in the list that holds it.
+#[component]
+fn TransferParts() -> impl IntoView {
+    let lists = use_primitive::<TransferList>();
+    let column = move |chosen: bool| {
+        view! {
+            <For each=move || lists.with(|l| l.list(chosen).to_vec()) key=|key| key.clone() let:key>
+                <Part part=transfer_list::Part::Option item=key.clone()>{key.clone()}</Part>
+            </For>
+        }
+    };
+    view! {
+        <div class="transfer">
+            <Part part=transfer_list::Part::Available label="Available">{column(false)}</Part>
+            <div class="transfer-buttons">
+                <Part part=transfer_list::Part::Add label="Add">"→"</Part>
+                <Part part=transfer_list::Part::Remove label="Remove">"←"</Part>
+            </div>
+            <Part part=transfer_list::Part::Chosen label="Chosen">{column(true)}</Part>
+        </div>
+    }
+}
+
+/// A colour scheme choice that is remembered, and applied before the page paints by
+/// the script in `index.html`.
+#[component]
+fn ThemeChoice() -> impl IntoView {
+    const KEY: &str = "armature-theme";
+    let stored = Preference::load(KEY, &ColorScheme::OPTIONS, "system", &LocalStorage);
+    let theme = RwSignal::new(vec![stored.value().to_string()]);
+    let on_theme = Callback::new(move |change: ValueChange| {
+        let Some(choice) = change.value.first() else {
+            return false;
+        };
+        let mut preference = Preference::load(KEY, &ColorScheme::OPTIONS, "system", &LocalStorage);
+        if !preference.choose(choice, &mut LocalStorage) {
+            return false;
+        }
+        // The cookie lets a server render the right scheme on the next visit.
+        armature_core::preference::Storage::set(&mut CookieStorage, KEY, choice);
+        let dark = system_prefers_dark();
+        let scheme = ColorScheme::parse(choice).unwrap_or(ColorScheme::System);
+        let shown = if scheme.is_dark(dark) {
+            "dark"
+        } else {
+            "light"
+        };
+        if let Some(root) = document().document_element() {
+            let _ = root.set_attribute("data-theme", shown);
+        }
+        theme.set(change.value);
+        true
+    });
+    view! {
+        <p id="theme-value">"Theme: " {move || theme.get().join("")}</p>
+        <Root machine=Radio::new(Dir::Ltr) label="Theme" on_value_change=on_theme value=theme>
+            <Part part=radio::Part::Root>
+                <Part part=radio::Part::Option item="light">"Light"</Part>
+                <Part part=radio::Part::Option item="dark">"Dark"</Part>
+                <Part part=radio::Part::Option item="system">"System"</Part>
+            </Part>
+        </Root>
+    }
+}
+
 #[component]
 fn App() -> impl IntoView {
     let (size, on_size) = follow();
+    let (title, on_title) = follow();
+    let (chosen, on_chosen) = follow();
+    let (moved, on_moved) = follow();
+    let sent = RwSignal::new(Vec::<String>::new());
+    let deleted = RwSignal::new(0);
+    use_shortcut("mod+k", || {
+        let field = document()
+            .query_selector("[aria-label=\"Message\"]")
+            .ok()
+            .flatten();
+        if let Some(field) = field.and_then(|field| {
+            leptos::wasm_bindgen::JsCast::dyn_into::<leptos::web_sys::HtmlElement>(field).ok()
+        }) {
+            let _ = field.focus();
+        }
+    });
     let (fruit, on_fruit) = follow();
     let (volume, on_volume) = follow();
     let (wifi, on_wifi) = follow();
@@ -557,6 +673,7 @@ fn App() -> impl IntoView {
             </Section>
 
             <Section title="Popover">
+                <div class="fade">
                 <Root machine=Popover::default() label="Share">
                     <Part part=popover::Part::Trigger>"Share"</Part>
                     <Part part=popover::Part::Content>
@@ -566,6 +683,7 @@ fn App() -> impl IntoView {
                         <Part part=popover::Part::Close label="Close">"×"</Part>
                     </Part>
                 </Root>
+                </div>
             </Section>
 
             <Section title="Tooltip">
@@ -657,6 +775,70 @@ fn App() -> impl IntoView {
                 >
                     <Part part=number_input::Part::Input />
                 </Root>
+            </Section>
+
+            <Section title="Editable">
+                <p id="title-value">"Title: " {move || title.get().join("")}</p>
+                <Root machine=Editable::new("Untitled") label="Title" on_value_change=on_title>
+                    <Part part=editable::Part::Preview>{move || title.get().first().cloned().unwrap_or_else(|| "Untitled".into())}</Part>
+                    <Part part=editable::Part::Input />
+                </Root>
+            </Section>
+
+            <Section title="Prompt">
+                <p id="prompt-value">"Sent: " {move || sent.get().join(" | ")}</p>
+                <Root
+                    machine=Prompt::default()
+                    label="Message"
+                    on_value_change=Callback::new(move |change: ValueChange| {
+                        sent.update(|sent| sent.extend(change.value));
+                        true
+                    })
+                >
+                    <Part part=prompt::Part::Input />
+                </Root>
+                <p class="hint">"Ctrl+K focuses this field."</p>
+            </Section>
+
+            <Section title="Hold to confirm">
+                <p id="hold-value">"Deleted: " {move || deleted.get()}</p>
+                <Root
+                    machine=HoldButton::new(300)
+                    label="Delete"
+                    on_value_change=Callback::new(move |_: ValueChange| {
+                        deleted.update(|count| *count += 1);
+                        true
+                    })
+                >
+                    <Part part=hold_button::Part::Root>"Hold to delete"</Part>
+                </Root>
+            </Section>
+
+            <Section title="Transfer list">
+                <p id="transfer-value">"Chosen: " {move || chosen.get().join(", ")}</p>
+                <Root machine=TransferList::new(&["read", "write", "share", "delete"]) label="Permissions" on_value_change=on_chosen>
+                    <TransferParts />
+                </Root>
+            </Section>
+
+            <Section title="Outline">
+                <p id="outline-value">"Moved: " {move || moved.get().join("")}</p>
+                <Root machine=TreeView::new(tree_from_paths(&["src/main.rs", "src/ui/button.rs", "docs/intro.md", "README.md"]), Dir::Ltr) label="Outline" on_value_change=on_moved>
+                    <OutlineRows />
+                </Root>
+            </Section>
+
+            <Section title="Findable">
+                <Root machine=Accordion::new(accordion::Options { findable: true, ..Default::default() }) label="Support">
+                    <Part part=accordion::Part::Trigger item="billing">"Billing"</Part>
+                    <Part part=accordion::Part::Panel item="billing">"Invoices are sent on the first."</Part>
+                    <Part part=accordion::Part::Trigger item="privacy">"Privacy"</Part>
+                    <Part part=accordion::Part::Panel item="privacy">"We keep nothing you did not send."</Part>
+                </Root>
+            </Section>
+
+            <Section title="Theme">
+                <ThemeChoice />
             </Section>
         </main>
     }

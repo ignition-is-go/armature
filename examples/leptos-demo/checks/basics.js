@@ -32,8 +32,9 @@ async () => {
     return `${on} -> ${text('wifi-value')}`;
   });
   await step('accordion', async () => {
-    const triggers = [...document.querySelectorAll('[role=button][aria-expanded]')];
-    const regions = [...document.querySelectorAll('[role=region]')];
+    const faq = document.getElementById('faq-value').parentElement;
+    const triggers = [...faq.querySelectorAll('[role=button][aria-expanded]')];
+    const regions = [...faq.querySelectorAll('[role=region]')];
     const shown = () => regions.map(r => getComputedStyle(r).display).join(',');
     const start = shown();
     triggers[0].click(); await frame(); triggers[1].click(); await frame();
@@ -42,15 +43,16 @@ async () => {
     return { start, after, arrowMovesFocus: document.activeElement === triggers[0] };
   });
   await step('rating', async () => {
-    const stars = [...document.querySelectorAll('[role=radio]')];
+    const stars = [...document.getElementById('rating-value').parentElement.querySelectorAll('[role=radio]')];
     stars[2].click(); await frame();
     const click = `${text('rating-value')} filled=${stars.filter(s => s.hasAttribute('data-active')).length} checked=${stars.map(s => s.getAttribute('aria-checked')).join(',')}`;
     key(stars[2], 'ArrowRight'); await frame();
     return { click, arrow: `${text('rating-value')} focus=${document.activeElement.dataset.value}` };
   });
   await step('tree', async () => {
-    const node = (k) => document.querySelector(`[role=treeitem][data-value="${k}"]`);
-    const shown = () => [...document.querySelectorAll('[role=treeitem]')].filter(n => getComputedStyle(n).display !== 'none').map(n => n.dataset.value).join(',');
+    const files = document.getElementById('file-value').parentElement;
+    const node = (k) => files.querySelector(`[role=treeitem][data-value="${k}"]`);
+    const shown = () => [...files.querySelectorAll('[role=treeitem]')].filter(n => getComputedStyle(n).display !== 'none').map(n => n.dataset.value).join(',');
     const start = shown();
     key(node('src'), 'ArrowRight'); await frame();
     key(node('src'), 'ArrowRight'); await frame();
@@ -83,7 +85,7 @@ async () => {
   await step('sortable', async () => {
     const item = (k) => document.querySelector(`[role=listitem][data-value="${k}"]`);
     const order = () => [...document.querySelectorAll('[role=listitem]')].map(n => n.dataset.value).join(',');
-    const live = () => document.getElementById('armature-live-polite')?.textContent;
+    const live = () => document.getElementById('armature-live-assertive')?.textContent;
     const m = item('milk').getBoundingClientRect(), b = item('bread').getBoundingClientRect();
     ptr(item('milk'), 'pointerdown', m.left + 10, m.top + 5);
     ptr(window, 'pointermove', m.left + 10, m.top + 12); await frame();

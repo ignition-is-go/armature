@@ -7,6 +7,7 @@ use armature_core::change::{Source, ValueChange};
 use armature_core::geometry::Point;
 use armature_core::keys::{Key, Modifiers, Orientation};
 use armature_core::popup::{self, Placement, Rect, Side, Size};
+use armature_core::presence::Presence;
 use armature_core::primitive::{
     Effect as Ask, FocusTarget, Focusable, Input, Item, PartOf, Pointer, PointerPhase, Primitive,
     Reaction, Role,
@@ -23,6 +24,8 @@ use crate::agent;
 pub type ChangeGate = Callback<ValueChange, bool>;
 
 thread_local! {
+    /// The popups and dialogs open on the page, in the order they opened.
+    static LAYERS: std::cell::RefCell<armature_core::layers::LayerStack> = std::cell::RefCell::new(Default::default());
     static NEXT_INSTANCE: Cell<u32> = const { Cell::new(1) };
 }
 
@@ -315,7 +318,7 @@ fn orientation_name(orientation: Option<Orientation>) -> Option<&'static str> {
     })
 }
 
-fn key_from_dom(key: &str) -> Option<Key> {
+pub(crate) fn key_from_dom(key: &str) -> Option<Key> {
     Some(match key {
         "ArrowUp" => Key::ArrowUp,
         "ArrowDown" => Key::ArrowDown,
@@ -476,11 +479,38 @@ where
                 .and_then(|t| t.dyn_into::<web_sys::Element>().ok());
             let pressed_inside =
                 target.is_some_and(|el| matches!(el.closest(&inside), Ok(Some(_))));
-            if !pressed_inside {
+            // A press while a dialog is up belongs to the dialog, not to what is under it.
+            let inert = LAYERS.with_borrow(|layers| layers.is_inert(&instance.to_string()));
+            if !pressed_inside && !inert {
                 ctx.dispatch(Input::PressOutside);
             }
         });
         on_cleanup(move || listener.remove());
+    }
+
+    // Anything that opens joins the stack of layers while it is open.
+    {
+        let id = instance.to_string();
+        let layer_id = id.clone();
+        Effect::new(move |was: Option<Option<bool>>| {
+            let state = machine.with(|m| {
+                let open = m.snapshot("").expanded == Some(true);
+                let modal = parts.iter().any(|part| {
+                    let semantics = m.semantics(*part, None);
+                    semantics.modal && !semantics.hidden
+                });
+                (open || modal).then_some(modal)
+            });
+            if was != Some(state) {
+                LAYERS.with_borrow_mut(|layers| match state {
+                    Some(true) => layers.open(armature_core::layers::Layer::dialog(&id)),
+                    Some(false) => layers.open(armature_core::layers::Layer::popup(&id)),
+                    None => drop(layers.close(&id)),
+                });
+            }
+            state
+        });
+        on_cleanup(move || LAYERS.with_borrow_mut(|layers| drop(layers.close(&layer_id))));
     }
 
     // A captured gesture is followed on the window, so it continues when the pointer
@@ -565,6 +595,63 @@ where
     let takes_text = matches!(role, Some(Role::TextBox | Role::SpinButton));
 
     let element = NodeRef::<leptos::html::Div>::new();
+    // A part that closes stays rendered until its exit animation, if it has one, ends.
+    let presence = RwSignal::new(if semantics.get_untracked().hidden {
+        Presence::Absent
+    } else {
+        Presence::Present
+    });
+    Effect::new(move |_| {
+        let open = !semantics.get().hidden;
+        let mut next = presence.get_untracked();
+        if !next.set(open) {
+            return;
+        }
+        presence.set(next);
+        let Some(node) = element.get_untracked() else {
+            presence.update(Presence::animation_ended);
+            return;
+        };
+        let mark = if open {
+            "data-starting-style"
+        } else {
+            "data-ending-style"
+        };
+        let _ = node.set_attribute(mark, "");
+        let settle = move || {
+            let _ = node.remove_attribute(mark);
+            // Something newer may have happened while the animation ran.
+            let expected = if open {
+                Presence::Entering
+            } else {
+                Presence::Exiting
+            };
+            if presence.try_get_untracked() == Some(expected) {
+                presence.update(Presence::animation_ended);
+            }
+        };
+        if open {
+            // One frame in the starting style gives a transition something to start from.
+            request_animation_frame(settle);
+            return;
+        }
+        let wait = element
+            .get_untracked()
+            .and_then(|node| running_animations(&node));
+        match wait {
+            Some(finished) => {
+                let done = Closure::once_into_js(settle);
+                let then = js_sys::Reflect::get(&finished, &"then".into()).ok();
+                if let Some(then) = then
+                    .as_ref()
+                    .and_then(|then| then.dyn_ref::<js_sys::Function>())
+                {
+                    let _ = then.call2(&finished, &done, &done);
+                }
+            }
+            None => settle(),
+        }
+    });
     let placement = K::Primitive::popup_of(part);
     if let Some(placement) = placement {
         Effect::new(move |_| {
@@ -847,6 +934,8 @@ where
                 aria-valuemax=move || range().map(|r| r.max.to_string())
                 aria-disabled=move || semantics.get().disabled.then_some("true")
                 autocomplete="off"
+                hidden=move || semantics.get().hidden
+                style:display=move || semantics.get().hidden.then_some("none")
                 prop:value=text
                 id=own_id
                 data-armature=instance
@@ -868,12 +957,12 @@ where
             role=move || semantics.get().role.map(aria_role)
             aria-label=label_text
             hidden=move || {
-                let state = semantics.get();
-                state.hidden.then_some(if state.findable { "until-found" } else { "" })
+                let findable = semantics.get().findable;
+                (!presence.get().is_rendered()).then_some(if findable { "until-found" } else { "" })
             }
             style:display=move || {
-                let state = semantics.get();
-                (state.hidden && !state.findable).then_some("none")
+                let findable = semantics.get().findable;
+                (!presence.get().is_rendered() && !findable).then_some("none")
             }
             style:position=placement.map(|_| "fixed")
             style:touch-action=tracks_pointer.then_some("none")
@@ -900,4 +989,24 @@ where
         </div>
     }
     .into_any()
+}
+
+/// A promise that settles when every animation and transition running on `node` has
+/// ended, or `None` when nothing is running.
+fn running_animations(node: &web_sys::Element) -> Option<js_sys::Promise> {
+    let get = js_sys::Reflect::get(node, &"getAnimations".into()).ok()?;
+    let running: js_sys::Array = get
+        .dyn_ref::<js_sys::Function>()?
+        .call0(node)
+        .ok()?
+        .dyn_into()
+        .ok()?;
+    if running.length() == 0 {
+        return None;
+    }
+    let finished: js_sys::Array = running
+        .iter()
+        .filter_map(|animation| js_sys::Reflect::get(&animation, &"finished".into()).ok())
+        .collect();
+    Some(js_sys::Promise::all_settled(&finished))
 }

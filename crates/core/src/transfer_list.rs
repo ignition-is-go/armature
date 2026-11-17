@@ -36,6 +36,18 @@ pub struct TransferList {
 }
 
 impl TransferList {
+    /// Starts with every key in the available list. The lists own their items, so
+    /// what is rendered only supplies labels.
+    pub fn new(available: &[&str]) -> Self {
+        TransferList {
+            lists: [
+                available.iter().map(|key| key.to_string()).collect(),
+                Vec::new(),
+            ],
+            ..Default::default()
+        }
+    }
+
     /// The keys in the available list (`false`) or the chosen one (`true`), in order.
     pub fn list(&self, chosen: bool) -> &[String] {
         &self.lists[chosen as usize]
@@ -144,19 +156,11 @@ impl Primitive for TransferList {
     }
 
     fn upsert_item(&mut self, item: Item) {
-        if self.side_of(&item.key).is_none() {
-            self.lists[0].push(item.key.clone());
-        }
         self.labels.retain(|(key, _)| *key != item.key);
         self.labels.push((item.key, item.label));
     }
 
-    fn remove_item(&mut self, key: &str) {
-        self.lists
-            .iter_mut()
-            .for_each(|list| list.retain(|k| k != key));
-        self.selected.retain(|k| k != key);
-    }
+    fn remove_item(&mut self, _: &str) {}
 
     /// Each list owns its order once items start moving, so the rendered text only
     /// fills in labels.
@@ -383,15 +387,7 @@ mod tests {
     use crate::primitive::Effect;
 
     fn lists() -> TransferList {
-        let mut lists = TransferList::default();
-        for key in ["read", "write", "share", "delete"] {
-            lists.upsert_item(Item {
-                key: key.into(),
-                label: key.into(),
-                disabled: false,
-            });
-        }
-        lists
+        TransferList::new(&["read", "write", "share", "delete"])
     }
 
     fn press(
@@ -517,6 +513,6 @@ mod tests {
                 disabled: false,
             })
             .collect();
-        crate::testing::assert_conforms(TransferList::default, &items);
+        crate::testing::assert_conforms(|| TransferList::new(&["read", "write", "share"]), &items);
     }
 }

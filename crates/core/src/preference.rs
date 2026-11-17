@@ -252,4 +252,19 @@ mod tests {
         assert!(!hostile.contains("</script>"));
         assert!(hostile.contains(r#""a\"\u003c/script>""#));
     }
+
+    #[test]
+    fn the_web_demo_carries_the_generated_script() {
+        let script = preferences_script(&[StoredAttribute {
+            key: "armature-theme",
+            attribute: "data-theme",
+            fallback: "system",
+            options: &ColorScheme::OPTIONS,
+        }]);
+        let page = include_str!("../../../examples/leptos-demo/index.html");
+        assert!(
+            page.contains(&script),
+            "index.html should contain:\n{script}"
+        );
+    }
 }

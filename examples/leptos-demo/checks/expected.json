@@ -33,8 +33,8 @@
     },
     "sortable": {
       "dragging": "true",
-      "drag": "Order: eggs, bread, milk, jam | dom=eggs,bread,milk,jam,a,b,c | said=\"milk dropped at position 3 of 4.\"",
-      "keyboard": "dom=eggs,bread,jam,milk,a,b,c | said=\"jam dropped at position 3 of 4.\""
+      "drag": "Order: eggs, bread, milk, jam | dom=eggs,bread,milk,jam,a,b,c | said=\"Dropped milk at position 3 of 4.\"",
+      "keyboard": "dom=eggs,bread,jam,milk,a,b,c | said=\"Dropped jam at position 3 of 4.\""
     }
   },
   "inputs": {
@@ -82,6 +82,7 @@
       "labelledBy": "Share this page",
       "describedBy": "Anyone with the link can view.",
       "arrowPointsAtTrigger": true,
+      "fadesOut": true,
       "closedByOutsidePress": true
     },
     "tooltip": {
@@ -109,9 +110,9 @@
       "fullSwipe": "Ran: archive"
     },
     "virtual": {
-      "rendered": 9,
+      "rendered": 10,
       "scrollHeight": 240008,
-      "afterScroll": "12 rows, first=4997",
+      "afterScroll": "14 rows, first=4996",
       "keyboard": "Row: 5005 focus=5005 scrollTop=120016",
       "agentScroll": "scrollTop=215948 row9000Rendered=true"
     },
@@ -203,5 +204,49 @@
     "webmcpQuery": "cherry",
     "webmcpAct": true,
     "tools": "snapshot() query(text) act(steps)"
+  },
+  "parity": {
+    "editable": {
+      "start": "preview=true input=false name=Title",
+      "f2": "focus=Input field=\"Untitled\" preview=false",
+      "escape": "Title:  focus=Preview",
+      "enter": "Title: Roadmap focus=Preview input=false",
+      "blurSaves": "Title: Plan input=false"
+    },
+    "prompt": {
+      "sent": "Sent: build | test field=\"\"",
+      "history": "test > build > dep",
+      "shortcutFocuses": true
+    },
+    "hold": {
+      "early": "Deleted: 0",
+      "held": "Deleted: 1",
+      "keyboard": "Deleted: 2"
+    },
+    "transfer": {
+      "start": "read,write,share,delete |  add=true tab=null",
+      "added": "Chosen: write, share | read,delete | write,share | focus=delete | said=\"2 items moved to chosen.\"",
+      "removed": "Chosen: write | read,delete,share | write",
+      "agent": "[\"write\",\"delete\"]"
+    },
+    "outline": {
+      "start": "src@1 docs@1 README.md@1",
+      "movedUp": "src@1 README.md@1 docs@1 | Moved: README.md>#1 | focus=README.md",
+      "nested": "src@1 src/main.rs@2 src/ui@2 README.md@2 docs@1 | Moved: README.md>src#2",
+      "dragged": "docs@1 src@1 src/main.rs@2 src/ui@2 README.md@2 | Moved: docs>#0"
+    },
+    "findable": {
+      "closed": "until-found/block until-found/block",
+      "found": "open=privacy hidden=null"
+    },
+    "theme": {
+      "beforePaint": true,
+      "chosen": "Theme: dark attr=dark stored=dark cookie=true",
+      "scriptApplies": "dark"
+    },
+    "layers": {
+      "staysOpenUnderADialog": true,
+      "closesOnceTheDialogIsGone": true
+    }
   }
 }

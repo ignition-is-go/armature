@@ -77,3 +77,15 @@ impl Storage for CookieStorage {
         ));
     }
 }
+
+/// Whether the operating system asks for a dark colour scheme, which is what a
+/// stored choice of `system` resolves to.
+pub fn system_prefers_dark() -> bool {
+    let query = web_sys::window().and_then(|window| {
+        window
+            .match_media("(prefers-color-scheme: dark)")
+            .ok()
+            .flatten()
+    });
+    query.is_some_and(|query| query.matches())
+}
