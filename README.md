@@ -11,7 +11,7 @@ Status: experimental. The API will change.
 
 | Path | Holds |
 | --- | --- |
-| `crates/core` | `armature-core`: about fifty behavior modules, the `Primitive` contract, 26 primitives, the agent registry, a conformance harness. No dependencies. |
+| `crates/core` | `armature-core`: about fifty behavior modules, the `Primitive` contract, 31 primitives, the agent registry, a conformance harness. No dependencies. |
 | `crates/leptos` | `armature-leptos`: one generic adapter for Leptos. |
 | `crates/gpui` | `armature-gpui`: one generic adapter for GPUI. |
 | `examples/leptos-demo` | Every primitive in a browser. Run `trunk serve` there. |
@@ -21,8 +21,8 @@ Status: experimental. The API will change.
 ## How it fits together
 
 A primitive is a state machine with named parts. It takes neutral inputs (keys,
-presses, pointer gestures with measured boxes, hover, scrolling, typed and pasted text,
-timer ticks) and answers with what the adapter must do (move focus, announce, wake
+presses, pointer gestures with measured boxes, hover, scrolling, focus leaving, a
+find-in-page match, typed and pasted text, timer ticks) and answers with what the adapter must do (move focus, announce, wake
 later, capture the pointer, scroll, copy)
 and with the semantics of each part (role, state, visibility, focusability). An adapter
 turns those into its framework's elements, events and accessibility tree. No adapter

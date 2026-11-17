@@ -12,8 +12,8 @@ Primitives ship unstyled. You supply the look and the children.
 | Crate | Holds |
 | --- | --- |
 | `armature-core` | Behaviors, the `Primitive` contract, the primitives, the agent registry, the conformance harness |
-| `armature-leptos` | `Root` and `Part` components, `use_primitive`, `LocalStorage`, `window.armature` agent bridge |
-| `armature-gpui` | `Machine` entity and `part()` element, agent bridge and Unix-socket transport |
+| `armature-leptos` | `Root` and `Part` components, `use_primitive`, `use_shortcut`, `LocalStorage`, `CookieStorage`, `window.armature` agent bridge |
+| `armature-gpui` | `Machine` entity, `part()` and `live_region()` elements, agent bridge and Unix-socket transport |
 
 ## Read first
 

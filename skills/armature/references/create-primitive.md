@@ -19,8 +19,11 @@ gestures at once.
    - `semantics(part, item)` returns role, selected, checked, expanded, level, range,
      hidden, modal, disabled, focusable and active. A focusable part receives presses
      and keys. Make exactly one item of a composite control a `TabStop`.
-   - `send(input, gate)` handles `Key`, `Press`, `Focus`, `PressOutside`, `Tick`,
-     `Text`, `Hover`, `Scrolled` and `Paste`. Return `handled: true` only when the platform default must be suppressed.
+   - `send(input, gate)` handles `Key`, `Press`, `Focus`, `Blur`, `Found`,
+     `PressOutside`, `Tick`, `Text`, `Hover`, `Scrolled` and `Paste`. `Blur` arrives
+     when focus leaves the primitive, not when it moves between its parts. `Found`
+     arrives when find-in-page matches inside a hidden part whose semantics set
+     `findable`. Return `handled: true` only when the platform default must be suppressed.
      Return a focus target when focus must move, and effects for anything else.
    - `tracks_pointer(part)` and `pointer(pointer, measure, gate)` handle drags. Return
      `Effect::CapturePointer` on the press to keep receiving moves. Ask `measure` for

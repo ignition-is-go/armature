@@ -18,7 +18,7 @@ Each lives in `armature_core::<module>` and exports a `Part` enum.
 | Number input | `number_input` | `Input`, `Increment`, `Decrement` | The number. |
 | One-time code | `otp_input` | `Input` | The digits. Draw cells from `cells()`. |
 | Token input | `token_input` | `Root`, `Input`, `Token` | The tokens. |
-| Tree | `tree_view` | `Root`, `Node` | The selected node. Render every node. |
+| Tree | `tree_view` | `Root`, `Node` | The selected node. Draw nodes from `rows()`. Dragging a node, or Alt with an arrow, moves it. The move is offered to the gate as `key>parent#index` with `Reason::Edit`. `landing()` says where a dragged node would drop. |
 | Sortable list | `sortable` | `Root`, `Item` | The keys in order. |
 | Calendar | `calendar` | `Grid`, `Day`, `PreviousMonth`, `NextMonth` | The day as `YYYY-MM-DD`. Draw days from `weeks()`. |
 | Resizable panels | `resizable` | `Root`, `Handle` | The first panel's share, in percent. |
@@ -31,7 +31,12 @@ Each lives in `armature_core::<module>` and exports a `Part` enum.
 | Virtual list | `virtual_list` | `Viewport`, `Row` | The selected row's index. Draw rows from `rows()`. |
 | Timeline | `timeline` | `Track`, `Span`, `SpanEnd` | Each span as `key:start-end`. |
 | Data grid | `data_grid` | `Root`, `Cell` | The selected cells as `row,column`. Edits arrive with `Reason::Edit`. |
-| Canvas | `canvas` | `Surface`, `Node`, `Resize`, `PortOut`, `PortIn` | Each node as `key:x,y,width,height`. |
+| Canvas | `canvas` | `Surface`, `Node`, `Resize`, `PortOut`, `PortIn` | Each node as `key:x,y,width,height`. Alt with an arrow selects the nearest node that way. |
+| Editable text | `editable` | `Preview`, `Input` | The text. Enter, F2, a press or typing starts editing. Enter, Tab or leaving saves. Escape cancels. |
+| Prompt | `prompt` | `Input` | None. Enter offers the entry to the gate and clears the field. ArrowUp and ArrowDown recall earlier entries. |
+| Hold button | `hold_button` | `Root` | None. Offers `confirmed` to the gate once held. Draw progress from `progress(now_ms)`. |
+| Transfer list | `transfer_list` | `Available`, `Chosen`, `Option`, `Add`, `Remove` | The chosen keys. Build it with `TransferList::new(keys)` and draw each list from `list(chosen)`. |
+| Wheel picker | `picker` | `Viewport`, `Option` | The option in the middle. Pad the content so the first and last options can reach the middle. |
 
 A part marked as an item part (`Primitive::is_item`) is rendered once per item and takes
 that item's key. Some other parts also take a key: a tab's panel, an accordion's panel,
@@ -78,7 +83,18 @@ view! {
 - Copy and paste reach a primitive that handles them through the clipboard.
 - `use_visible_viewport()` follows the part of the window an on-screen keyboard leaves
   showing, and `keyboard_lift` says how far to lift a field clear of it.
-- `LocalStorage` implements `armature_core::preference::Storage`.
+- A part that closes stays rendered until its CSS transitions and animations end. It
+  carries `data-ending-style` while it leaves and `data-starting-style` for its first
+  frame, so `[data-starting-style], [data-ending-style] { opacity: 0 }` with a
+  `transition` fades it both ways.
+- While a modal part is shown, a press outside it does not reach popups beneath it.
+- An accordion built with `findable: true` hides its panels with
+  `hidden="until-found"`, so find-in-page searches them and opens the one it matches.
+- `use_shortcut("mod+k", action)` runs an action from anywhere on the page.
+- `LocalStorage` and `CookieStorage` keep a `Preference` between visits.
+  `armature_core::preference::preferences_script` writes the script for the page head
+  that applies stored choices before the first paint. `system_prefers_dark()` resolves
+  a stored `system` colour scheme.
 - Call `armature_leptos::agent::install()` once at startup to expose the agent bridge.
 
 ## GPUI
@@ -112,8 +128,11 @@ div()
   edit at the caret.
 - For parts whose items appear over time, such as calendar days or tokens, call
   `machine.track(part, keys, cx)` before rendering them.
-- Subscribe to the `Machine` for `Announcement` events and deliver them to assistive
-  technology yourself. GPUI has no live regions.
+- Render `live_region(&machine, cx)` once in the view that owns a machine that
+  announces, such as a sortable list. It carries the latest announcement to a screen
+  reader. The `Machine` also emits `Announcement` events if you want them yourself.
+- GPUI's own key bindings and actions are the way to bind shortcuts. The adapter adds
+  none.
 - Tab traversal is the application's job. Bind `tab` and `shift-tab` to actions that
   call `window.focus_next(cx)` and `window.focus_prev(cx)`, as `examples/gpui-demo`
   does. While a modal part is shown, Tab cycles among that primitive's own parts. Other
