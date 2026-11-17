@@ -239,6 +239,25 @@ pub fn format_range(first: Date, last: Date) -> String {
     }
 }
 
+/// A date in the short form a region writes it: month first in the United States,
+/// year first in East Asia and Scandinavia, day first elsewhere.
+pub fn format_short(date: Date, locale: &str) -> String {
+    let tag = locale.to_lowercase();
+    let (language, region) = (
+        tag.split(['-', '_']).next().unwrap_or_default(),
+        tag.rsplit(['-', '_']).next().unwrap_or_default(),
+    );
+    let Date { year, month, day } = date;
+    match (language, region) {
+        (_, "us") => format!("{month}/{day}/{year}"),
+        ("ja" | "zh" | "ko" | "sv" | "hu" | "lt", _) => format!("{year}-{month:02}-{day:02}"),
+        ("de" | "ru" | "pl" | "cs" | "fi" | "nb" | "da" | "tr" | "uk", _) => {
+            format!("{day:02}.{month:02}.{year}")
+        }
+        _ => format!("{day:02}/{month:02}/{year}"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -353,5 +372,14 @@ mod tests {
             ),
             "30 December 2026 to 2 January 2027"
         );
+    }
+
+    #[test]
+    fn a_short_date_follows_the_region() {
+        let date = Date::new(2026, 3, 9).unwrap();
+        assert_eq!(format_short(date, "en-US"), "3/9/2026");
+        assert_eq!(format_short(date, "en-GB"), "09/03/2026");
+        assert_eq!(format_short(date, "de-DE"), "09.03.2026");
+        assert_eq!(format_short(date, "ja-JP"), "2026-03-09");
     }
 }

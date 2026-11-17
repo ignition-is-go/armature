@@ -131,6 +131,9 @@ pub struct Machine<P: Primitive> {
     return_to: Option<FocusHandle>,
     /// Whether files are being dragged over a part that takes drops.
     dragged_over: bool,
+    /// Whether the keyboard, and not a pointer, was the last thing used on this
+    /// primitive.
+    by_keyboard: bool,
     /// Whether a tick the primitive asked for through `wake_after` is on its way.
     waking: bool,
     /// Watches for the window being switched away from.
@@ -228,6 +231,7 @@ impl<P: Primitive> Machine<P> {
             blur_watch: HashMap::new(),
             away_watch: None,
             waking: false,
+            by_keyboard: false,
             hotkey_watch: None,
             return_to: None,
             dragged_over: false,
@@ -333,6 +337,16 @@ impl<P: Primitive> Machine<P> {
     }
 
     /// Everything announced so far, oldest first.
+    /// Whether the person is driving this primitive from the keyboard or with a
+    /// pointer, for showing focus boldly for the keyboard alone.
+    pub fn modality(&self) -> armature_core::preference::Modality {
+        if self.by_keyboard {
+            armature_core::preference::Modality::Keyboard
+        } else {
+            armature_core::preference::Modality::Pointer
+        }
+    }
+
     /// Changes a setting the owner controls while the primitive runs, such as a
     /// combobox's `status`. Returns whether it is a setting the primitive has.
     pub fn set(&mut self, name: &str, value: &str, cx: &mut Context<Self>) -> bool {
@@ -427,6 +441,7 @@ impl<P: Primitive> Machine<P> {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
+        self.by_keyboard = true;
         let mods = modifiers(keystroke.modifiers);
         if mods.ctrl && keystroke.key == "v" {
             let pasted = cx
@@ -554,6 +569,7 @@ impl<P: Primitive> Machine<P> {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.by_keyboard = false;
         let pointer = Pointer {
             phase,
             part,
@@ -857,8 +873,8 @@ pub fn part<K: PartOf>(
                     delta: lines,
                     mods: modifiers(event.modifiers),
                 };
-                state.dispatch(input, window, cx);
-                true
+                // What is under it scrolls as usual unless the primitive made use of it.
+                state.dispatch(input, window, cx)
             });
             if taken {
                 cx.stop_propagation();
@@ -1150,7 +1166,10 @@ pub fn part<K: PartOf>(
                     item: item.clone(),
                     mods: modifiers(event.modifiers()),
                 };
-                state.update(cx, |state, cx| state.dispatch(input, window, cx));
+                state.update(cx, |state, cx| {
+                    state.by_keyboard = false;
+                    state.dispatch(input, window, cx)
+                });
             }
         });
     PartElement {

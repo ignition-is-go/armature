@@ -128,3 +128,19 @@ pub fn prefers_reduced_motion() -> bool {
     });
     query.is_some_and(|query| query.matches())
 }
+
+/// Whether the person last used the keyboard or a pointer. The page's root element
+/// carries the same as `data-armature-modality`, so a style sheet can show focus
+/// boldly for the keyboard alone.
+pub fn modality() -> armature_core::preference::Modality {
+    let root = web_sys::window()
+        .and_then(|window| window.document())
+        .and_then(|document| document.document_element());
+    match root
+        .and_then(|root| root.get_attribute("data-armature-modality"))
+        .as_deref()
+    {
+        Some("keyboard") => armature_core::preference::Modality::Keyboard,
+        _ => armature_core::preference::Modality::Pointer,
+    }
+}

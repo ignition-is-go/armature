@@ -593,6 +593,10 @@ fn a_menu_drills_into_a_submenu_and_back_without_losing_focus(cx: &mut TestAppCo
     cx.simulate_keystrokes("down down right");
     cx.run_until_parked();
     assert!(focused(cx, "email"), "inside the submenu");
+    assert_eq!(
+        menu.read_with(cx, |m, _| m.modality()),
+        armature_core::preference::Modality::Keyboard
+    );
     assert!(menu.read_with(cx, |m, _| m.primitive().is_open()));
     cx.simulate_keystrokes("escape");
     cx.run_until_parked();

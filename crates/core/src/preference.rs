@@ -128,6 +128,15 @@ impl PointerKind {
     }
 }
 
+/// How the person is driving the interface at the moment. Focus is shown boldly
+/// for the keyboard, and quietly or not at all for a pointer.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Modality {
+    #[default]
+    Pointer,
+    Keyboard,
+}
+
 /// A stored choice to apply to the page as it loads.
 #[derive(Clone, Copy, Debug)]
 pub struct StoredAttribute<'a> {

@@ -199,6 +199,8 @@ pub fn Audit() -> impl IntoView {
     let (city, on_city) = follow();
     let (line, on_line) = follow();
     let (zoomed, on_zoomed) = follow();
+    let searches = RwSignal::new(Vec::<String>::new());
+    let answers = RwSignal::new(Vec::<(String, String)>::new());
     let step = RwSignal::new(vec![("current".to_string(), "packed".to_string())]);
     // The children of a folder arrive when it is first opened.
     let loaded = RwSignal::new(Vec::<(String, String)>::new());
@@ -303,6 +305,32 @@ pub fn Audit() -> impl IntoView {
         <Section title="Completion and more">
             <p id="city-value">"City: " {move || city.get().join(", ")}</p>
             <Root machine=Combobox::new(combobox::Options { load_more: true, ..Default::default() }) label="City" on_value_change=on_city><CityField /></Root>
+        </Section>
+
+        <Section title="Remote search">
+            <p id="remote-search-value">"Asked: " {move || searches.get().join(" ")}</p>
+            <Root
+                machine=Combobox::new(combobox::Options { remote: true, ..Default::default() })
+                label="Remote search"
+                settings=answers
+                on_value_change=Callback::new(move |change: ValueChange| {
+                    // Each search is numbered. Only the first is answered here, late, to
+                    // show that an answer to a search since replaced is ignored.
+                    if let Some(asked) = change.value.first().and_then(|entry| entry.strip_prefix("load:")) {
+                        searches.update(|list| list.push(asked.to_string()));
+                        if asked.starts_with("1:") {
+                            answers.set(vec![("loaded".to_string(), "1".to_string())]);
+                        }
+                    }
+                    true
+                })
+            >
+                <Part part=combobox::Part::Input />
+                <Part part=combobox::Part::List>
+                    <Part part=combobox::Part::Option item="lisbon">"Lisbon"</Part>
+                    <Part part=combobox::Part::Status>"Searching…"</Part>
+                </Part>
+            </Root>
         </Section>
 
         <Section title="Command arguments">

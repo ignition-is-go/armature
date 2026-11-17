@@ -12,6 +12,7 @@ use armature_core::primitive::{
     Effect as Ask, FocusTarget, Focusable, Input, Item, PartOf, Pointer, PointerPhase, Primitive,
     Reaction, Role,
 };
+use armature_core::safe_area::{Axis, SafeArea};
 use leptos::prelude::*;
 use send_wrapper::SendWrapper;
 use wasm_bindgen::closure::Closure;
@@ -24,6 +25,7 @@ use crate::agent;
 pub type ChangeGate = Callback<ValueChange, bool>;
 
 thread_local! {
+        static WATCHING_MODALITY: Cell<bool> = const { Cell::new(false) };
     /// Where focus was before a component's hotkey took it, by component.
     static RETURN_TO: std::cell::RefCell<std::collections::HashMap<u32, HtmlElement>> = std::cell::RefCell::new(Default::default());
     /// The popups and dialogs open on the page, in the order they opened.
@@ -612,6 +614,24 @@ where
         });
     }
 
+    // Whether the keyboard or a pointer is in use is noted on the page, once for
+    // every component, so focus can be styled for each.
+    if !WATCHING_MODALITY.replace(true) {
+        let note = |how: &'static str| {
+            move || {
+                if let Some(root) = document().document_element() {
+                    let _ = root.set_attribute("data-armature-modality", how);
+                }
+            }
+        };
+        let (keys, pointer) = (note("keyboard"), note("pointer"));
+        // These last as long as the page does.
+        std::mem::forget(window_event_listener(leptos::ev::keydown, move |_| keys()));
+        std::mem::forget(window_event_listener(leptos::ev::pointerdown, move |_| {
+            pointer()
+        }));
+    }
+
     // A primitive whose value was set from outside may have a timer to start.
     {
         let waking = StoredValue::new(false);
@@ -956,15 +976,17 @@ where
                         if !ctx.machine.with_untracked(|m| m.wheels(part)) {
                             return;
                         }
-                        ev.prevent_default();
                         let mods =
                             modifiers(ev.shift_key(), ev.ctrl_key() || ev.meta_key(), ev.alt_key());
-                        ctx.dispatch(Input::Wheel {
+                        // The page scrolls as usual unless the primitive made use of it.
+                        if ctx.dispatch(Input::Wheel {
                             part,
                             item: item.clone(),
                             delta: -ev.delta_y() / 100.0,
                             mods,
-                        });
+                        }) {
+                            ev.prevent_default();
+                        }
                     });
                 let _ = element
                     .add_event_listener_with_callback("wheel", turned.as_ref().unchecked_ref());
@@ -1070,14 +1092,101 @@ where
         let item = item.clone();
         move |inside: bool, ev: leptos::ev::PointerEvent| {
             // Touch has no hover, so a tap never counts as one.
-            if hovers && ev.pointer_type() != "touch" {
-                let now_ms = js_sys::Date::now() as u64;
-                ctx.dispatch(Input::Hover {
-                    part,
-                    item: item.clone(),
-                    inside,
-                    now_ms,
-                });
+            if !hovers || ev.pointer_type() == "touch" {
+                return;
+            }
+            let leave = {
+                let item = item.clone();
+                move || {
+                    let now_ms = js_sys::Date::now() as u64;
+                    ctx.dispatch(Input::Hover {
+                        part,
+                        item: item.clone(),
+                        inside,
+                        now_ms,
+                    });
+                }
+            };
+            // Leaving for a popup this component has open is not leaving yet: the
+            // pointer may cross the gap, and cut the corner, on its way there.
+            let popup = (!inside)
+                .then(|| {
+                    K::Primitive::parts()
+                        .iter()
+                        .copied()
+                        .filter(|other| *other != part)
+                        .find_map(|other| {
+                            K::Primitive::popup_of(other)
+                                .filter(|_| K::Primitive::hovers(other))?;
+                            let found = ctx
+                                .element_of(other, item.as_deref())
+                                .or_else(|| ctx.element_of(other, None))?;
+                            let rect = found.get_bounding_client_rect();
+                            (rect.width() > 0.0)
+                                .then(|| Rect::new(rect.x(), rect.y(), rect.width(), rect.height()))
+                        })
+                })
+                .flatten();
+            let Some(popup) = popup else {
+                leave();
+                return;
+            };
+            let from = Point::new(ev.client_x() as f64, ev.client_y() as f64);
+            let axis = if from.y < popup.y || from.y > popup.bottom() {
+                Axis::Y
+            } else {
+                Axis::X
+            };
+            let area = Rc::new(std::cell::RefCell::new(SafeArea::start(
+                from,
+                popup,
+                axis,
+                js_sys::Date::now() as u64,
+            )));
+            let last = Rc::new(Cell::new(from));
+            type Held = Rc<std::cell::RefCell<Option<(WindowListenerHandle, IntervalHandle)>>>;
+            let held: Held = Rc::default();
+            // Ends the wait, telling the primitive the pointer left unless it arrived.
+            let finish = {
+                let held = held.clone();
+                move |arrived: bool| {
+                    let Some((moves, ticks)) = held.borrow_mut().take() else {
+                        return;
+                    };
+                    moves.remove();
+                    ticks.clear();
+                    if !arrived {
+                        leave();
+                    }
+                }
+            };
+            let moves = window_event_listener(leptos::ev::pointermove, {
+                let (area, last, finish) = (area.clone(), last.clone(), finish.clone());
+                move |ev| {
+                    let at = Point::new(ev.client_x() as f64, ev.client_y() as f64);
+                    last.set(at);
+                    if popup.contains(at) {
+                        finish(true);
+                    } else if !area.borrow_mut().contains(at, js_sys::Date::now() as u64) {
+                        finish(false);
+                    }
+                }
+            });
+            // A pointer that stops short of the popup has left after all.
+            let ticks = set_interval_with_handle(
+                move || {
+                    if !area
+                        .borrow_mut()
+                        .contains(last.get(), js_sys::Date::now() as u64)
+                    {
+                        finish(false);
+                    }
+                },
+                Duration::from_millis(100),
+            );
+            match ticks {
+                Ok(ticks) => *held.borrow_mut() = Some((moves, ticks)),
+                Err(_) => moves.remove(),
             }
         }
     };

@@ -57,6 +57,11 @@ pub struct Sheet {
     on_trigger: bool,
     /// The edge of the screen it slides in from.
     side: Edge,
+    /// Whether the content inside is scrolled to its start, so that scrolling
+    /// further moves the sheet in place of the content.
+    content_at_start: bool,
+    /// Whether the wheel has moved the sheet and it has yet to settle.
+    wheeled: bool,
     /// Where scrolling has the sheet, and when it settles if nothing more moves it.
     scrolled: Option<(f64, u64)>,
 }
@@ -79,6 +84,8 @@ impl Sheet {
             speed: VelocityTracker::default(),
             on_trigger: false,
             side: Edge::Bottom,
+            content_at_start: true,
+            wheeled: false,
             scrolled: None,
         }
     }
@@ -191,6 +198,26 @@ impl Primitive for Sheet {
         part == Part::Scroller
     }
 
+    /// With the content at its start, the wheel moves the sheet: scrolling back
+    /// past the start pulls it down, and scrolling on grows it before the content
+    /// moves. The owner reports the content's scroll with
+    /// `set("content_offset", offset)`.
+    fn wheels(&self, part: Part) -> bool {
+        part == Part::Content && self.is_open() && self.content_at_start
+    }
+
+    fn set(&mut self, name: &str, value: &str) -> bool {
+        match (name, value.parse::<f64>()) {
+            ("content_offset", Ok(offset)) => self.content_at_start = offset <= 0.0,
+            _ => return false,
+        }
+        true
+    }
+
+    fn wake_after(&self) -> Option<u64> {
+        self.wheeled.then_some(REST_MS)
+    }
+
     fn wanted_scroll(&self) -> Option<f64> {
         Some(self.at.map_or(0.0, |at| self.detents[at]))
     }
@@ -255,6 +282,25 @@ impl Primitive for Sheet {
                 self.on_trigger = part == Part::Trigger;
                 Reaction::default()
             }
+            (
+                Input::Wheel {
+                    part: Part::Content,
+                    delta,
+                    ..
+                },
+                Some(at),
+            ) if self.content_at_start => {
+                let tallest = self.detents.last().copied().unwrap_or(0.0);
+                let now = self.height();
+                // At its tallest, scrolling on belongs to the content.
+                if delta < 0.0 && now >= tallest {
+                    return Reaction::default();
+                }
+                let _ = at;
+                self.scrolled = Some(((now - delta * 40.0).clamp(0.0, tallest), 0));
+                self.wheeled = true;
+                Reaction::handled()
+            }
             // Scrolling carries the sheet. Each movement puts the settling off again.
             (Input::Scrolled { offset, now_ms, .. }, Some(at)) => {
                 let moved = self
@@ -268,6 +314,7 @@ impl Primitive for Sheet {
                 Reaction::default().with(Effect::Wake { at_ms })
             }
             (Input::Tick { now_ms }, Some(_)) => {
+                self.wheeled = false;
                 let Some((offset, _)) = self.scrolled.filter(|(_, at_ms)| now_ms >= *at_ms) else {
                     return Reaction::default();
                 };
@@ -666,6 +713,48 @@ mod tests {
         assert!(
             !key(&mut drawer, Key::ArrowUp).handled,
             "up and down are not its arrows"
+        );
+    }
+
+    #[test]
+    fn with_its_content_at_the_start_the_wheel_moves_the_sheet_before_the_content() {
+        let mut sheet = Sheet::default();
+        sheet.act("open", None, &mut |_| true).unwrap();
+        let wheel = |sheet: &mut Sheet, delta| {
+            sheet.send(
+                Input::Wheel {
+                    part: Part::Content,
+                    item: None,
+                    delta,
+                    mods: Modifiers::default(),
+                },
+                &mut |_| true,
+            )
+        };
+        assert!(
+            wheel(&mut sheet, -4.0).handled,
+            "scrolling on grows the sheet first"
+        );
+        assert_eq!(sheet.height(), 360.0);
+        assert_eq!(sheet.wake_after(), Some(120));
+        sheet.send(Input::Tick { now_ms: 500 }, &mut |_| true);
+        assert_eq!(sheet.value(), ["1"], "it settled on the taller height");
+        assert!(
+            !wheel(&mut sheet, -1.0).handled,
+            "at its tallest, the content scrolls"
+        );
+        sheet.set("content_offset", "120");
+        assert!(
+            !sheet.wheels(Part::Content),
+            "mid-content, the wheel is the content's"
+        );
+        sheet.set("content_offset", "0");
+        wheel(&mut sheet, 6.0);
+        sheet.send(Input::Tick { now_ms: 900 }, &mut |_| true);
+        assert_eq!(
+            sheet.value(),
+            ["0"],
+            "scrolling back past the start pulls it down"
         );
     }
 }

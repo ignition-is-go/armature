@@ -90,7 +90,7 @@
       "hiddenAtFirst": true,
       "stillHiddenAt200ms": true,
       "shownAfterDelay": true,
-      "hiddenOnLeave": true,
+      "hiddenOnLeave": false,
       "touchNeverHovers": true,
       "shownOnFocus": true,
       "hiddenOnEscape": true
@@ -368,7 +368,15 @@
       "fixed": "error=\"\"",
       "sent": "Sent: name=Ada, team=Engines",
       "reset": "Not sent"
-    }
+    },
+    "safeTriangle": {
+      "opened": true,
+      "staysOpenWhileCrossing": true,
+      "closesWhenThePointerTurnsAway": true
+    },
+    "modality": "pointer > keyboard",
+    "remoteSearch": "Asked: 1:l 2:li stillSearching=true",
+    "sheetWheel": "height 120 > 300 wheelTaken=true"
   },
   "audit": {
     "eventList": "current=packed tabStop=shipped focus=shipped",

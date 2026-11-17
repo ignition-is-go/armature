@@ -277,6 +277,100 @@ impl Rgb {
     }
 }
 
+/// A colour in Display P3, the wider range of colour newer screens show. Each part
+/// runs from 0 to 1.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct P3 {
+    pub r: f64,
+    pub g: f64,
+    pub b: f64,
+}
+
+fn to_linear(part: f64) -> f64 {
+    if part <= 0.04045 {
+        part / 12.92
+    } else {
+        ((part + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+fn from_linear(part: f64) -> f64 {
+    if part <= 0.0031308 {
+        part * 12.92
+    } else {
+        1.055 * part.powf(1.0 / 2.4) - 0.055
+    }
+}
+
+impl P3 {
+    /// The same colour as an ordinary one, however far outside the ordinary range.
+    fn in_srgb(self) -> [f64; 3] {
+        let (r, g, b) = (to_linear(self.r), to_linear(self.g), to_linear(self.b));
+        [
+            1.2249401 * r - 0.2249404 * g,
+            -0.0420569 * r + 1.0420571 * g,
+            -0.0196376 * r - 0.0786361 * g + 1.0982735 * b,
+        ]
+    }
+
+    pub fn from_rgb(color: Rgb) -> P3 {
+        let (r, g, b) = (
+            to_linear(color.r as f64 / 255.0),
+            to_linear(color.g as f64 / 255.0),
+            to_linear(color.b as f64 / 255.0),
+        );
+        P3 {
+            r: from_linear(0.8224621 * r + 0.1775380 * g),
+            g: from_linear(0.0331941 * r + 0.9668058 * g),
+            b: from_linear(0.0170827 * r + 0.0723974 * g + 0.9105199 * b),
+        }
+    }
+
+    /// Whether an ordinary screen can show this colour as it is.
+    pub fn is_in_srgb(self) -> bool {
+        self.in_srgb()
+            .iter()
+            .all(|part| (-0.0005..=1.0005).contains(part))
+    }
+
+    /// The nearest colour an ordinary screen can show.
+    pub fn to_rgb(self) -> Rgb {
+        let [r, g, b] = self
+            .in_srgb()
+            .map(|part| (from_linear(part.clamp(0.0, 1.0)) * 255.0).round() as u8);
+        Rgb::new(r, g, b)
+    }
+
+    /// Reads `color(display-p3 1 0.5 0)`.
+    pub fn read(text: &str) -> Option<P3> {
+        let body = text
+            .trim()
+            .strip_prefix("color(")?
+            .strip_suffix(')')?
+            .trim()
+            .strip_prefix("display-p3")?;
+        let parts: Vec<f64> = body
+            .split_whitespace()
+            .filter_map(|part| part.parse().ok())
+            .collect();
+        (parts.len() >= 3).then(|| P3 {
+            r: parts[0],
+            g: parts[1],
+            b: parts[2],
+        })
+    }
+
+    pub fn write(self) -> String {
+        let round = |part: f64| (part * 10_000.0).round() / 10_000.0;
+        format!(
+            "color(display-p3 {} {} {})",
+            round(self.r),
+            round(self.g),
+            round(self.b)
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -372,5 +466,25 @@ mod tests {
             Rgb::new(0, 200, 0).distance(black) > Rgb::new(0, 0, 200).distance(black),
             "green counts for more than blue"
         );
+    }
+
+    #[test]
+    fn a_wide_colour_knows_whether_an_ordinary_screen_can_show_it() {
+        let vivid = P3::read("color(display-p3 1 0 0)").unwrap();
+        assert!(!vivid.is_in_srgb(), "redder than an ordinary screen goes");
+        assert_eq!(
+            vivid.to_rgb(),
+            Rgb::new(255, 0, 0),
+            "brought back to the nearest it can show"
+        );
+        let grey = P3::from_rgb(Rgb::new(128, 128, 128));
+        assert!(grey.is_in_srgb());
+        assert_eq!(grey.to_rgb(), Rgb::new(128, 128, 128));
+        assert_eq!(
+            P3::from_rgb(Rgb::new(59, 111, 224)).to_rgb(),
+            Rgb::new(59, 111, 224),
+            "there and back"
+        );
+        assert_eq!(vivid.write(), "color(display-p3 1 0 0)");
     }
 }

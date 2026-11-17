@@ -50,6 +50,11 @@ pub struct Options {
     /// Whether reaching the last option asks the owner for more, by offering
     /// `more:<text>` to the gate.
     pub load_more: bool,
+    /// Whether the options come from elsewhere as the person types. Each change
+    /// of text then offers `load:<request>:<text>` to the gate, and the owner
+    /// answers with `set("loaded", request)` or `set("failed", request)`. An
+    /// answer to a request that has since been replaced is ignored.
+    pub remote: bool,
 }
 
 const ACTIONS: &[&str] = &["select", "remove", "clear", "type", "open", "close"];
@@ -69,6 +74,7 @@ pub struct Combobox {
     loading: Loading,
     /// Whether the highlight has just reached the last option.
     at_end: bool,
+    requests: crate::async_options::Requests,
 }
 
 impl Combobox {
@@ -280,6 +286,15 @@ impl Primitive for Combobox {
     }
 
     fn set(&mut self, name: &str, value: &str) -> bool {
+        if let ("loaded" | "failed", Ok(request)) = (name, value.parse::<u64>()) {
+            let newest = self.requests.finish(request, name == "loaded") || name == "failed";
+            self.loading = match self.requests.status() {
+                crate::async_options::Status::Idle => Loading::Idle,
+                crate::async_options::Status::Loading => Loading::Loading,
+                crate::async_options::Status::Error => Loading::Error,
+            };
+            return newest;
+        }
         if name != "status" {
             return false;
         }
@@ -392,6 +407,19 @@ impl Primitive for Combobox {
             } => {
                 self.text = value;
                 self.open = true;
+                if self.opts.remote {
+                    match self.requests.begin(&self.text) {
+                        Some(request) => {
+                            self.loading = Loading::Loading;
+                            gate(&ValueChange {
+                                value: vec![format!("load:{request}:{}", self.text)],
+                                source: Source::User,
+                                reason: Reason::Action,
+                            });
+                        }
+                        None => self.loading = Loading::Idle,
+                    }
+                }
                 let results = self.results();
                 let first = results
                     .iter()
@@ -890,5 +918,40 @@ mod tests {
             ["more:an"],
             "banana is the only match, so the end is reached at once"
         );
+    }
+
+    #[test]
+    fn a_slow_answer_to_an_old_search_is_ignored() {
+        let mut combobox = fruit(Options {
+            remote: true,
+            ..Default::default()
+        });
+        let asked = std::cell::RefCell::new(Vec::new());
+        let search = |combobox: &mut Combobox, text: &str| {
+            combobox.send(
+                Input::Text {
+                    part: Part::Input,
+                    item: None,
+                    value: text.into(),
+                },
+                &mut |change| {
+                    asked.borrow_mut().extend(change.value.iter().cloned());
+                    true
+                },
+            );
+        };
+        search(&mut combobox, "a");
+        search(&mut combobox, "ap");
+        assert_eq!(*asked.borrow(), ["load:1:a", "load:2:ap"]);
+        assert!(
+            !combobox.set("loaded", "1"),
+            "the answer to the first search is stale"
+        );
+        assert_eq!(combobox.loading(), Loading::Loading);
+        assert!(combobox.set("loaded", "2"));
+        assert_eq!(combobox.loading(), Loading::Idle);
+        search(&mut combobox, "apx");
+        combobox.set("failed", "3");
+        assert_eq!(combobox.loading(), Loading::Error);
     }
 }

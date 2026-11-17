@@ -186,6 +186,43 @@ pub fn format_file_size(bytes: u64) -> String {
     }
 }
 
+/// The marks a language groups thousands and sets off decimals with.
+fn separators(locale: &str) -> (&'static str, &'static str) {
+    let tag = locale.to_lowercase();
+    let language = tag.split(['-', '_']).next().unwrap_or_default();
+    match (language, tag.as_str()) {
+        (_, "de-ch" | "fr-ch" | "it-ch") => ("\u{2019}", "."),
+        ("de" | "es" | "it" | "nl" | "pt" | "tr" | "id" | "da" | "el", _) => (".", ","),
+        ("fr" | "ru" | "pl" | "sv" | "nb" | "fi" | "cs" | "uk", _) => ("\u{a0}", ","),
+        _ => (",", "."),
+    }
+}
+
+/// A number written the way a language writes it: `1,234.5` in English, `1.234,5`
+/// in German, with a space in French.
+pub fn format_localized(value: f64, decimals: usize, locale: &str) -> String {
+    let (group, point) = separators(locale);
+    format_grouped(value, decimals)
+        .chars()
+        .map(|ch| match ch {
+            ',' => group.to_string(),
+            '.' => point.to_string(),
+            other => other.to_string(),
+        })
+        .collect()
+}
+
+/// Reads a number written the way a language writes it.
+pub fn parse_localized(text: &str, locale: &str) -> Option<f64> {
+    let (group, point) = separators(locale);
+    let plain: String = text
+        .trim()
+        .replace(group, "")
+        .replace(' ', "")
+        .replace(point, ".");
+    plain.parse().ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -248,5 +285,15 @@ mod tests {
         assert_eq!(format_file_size(512), "512 B");
         assert_eq!(format_file_size(1536), "1.5 KB");
         assert_eq!(format_file_size(34 * 1024 * 1024), "34 MB");
+    }
+
+    #[test]
+    fn a_number_is_written_and_read_the_way_a_language_does() {
+        assert_eq!(format_localized(1234.5, 1, "en-US"), "1,234.5");
+        assert_eq!(format_localized(1234.5, 1, "de-DE"), "1.234,5");
+        assert_eq!(format_localized(1234.5, 1, "fr-FR"), "1\u{a0}234,5");
+        assert_eq!(parse_localized("1.234,5", "de"), Some(1234.5));
+        assert_eq!(parse_localized("1 234,5", "fr"), Some(1234.5));
+        assert_eq!(parse_localized("1,234.5", "en"), Some(1234.5));
     }
 }

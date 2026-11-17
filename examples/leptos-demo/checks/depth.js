@@ -73,5 +73,52 @@ async () => {
     return r;
   });
 
+  await step('safeTriangle', async () => {
+    const box = within('nav-value');
+    const trigger = box.querySelector('[data-armature-part="Trigger"]');
+    const panel = box.querySelector('[data-armature-part="Panel"]');
+    const hover = (el, type, x, y) => el.dispatchEvent(new PointerEvent(type, { bubbles: false, clientX: x, clientY: y, pointerType: 'mouse' }));
+    const move = (x, y) => window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: x, clientY: y, pointerType: 'mouse' }));
+    const t = trigger.getBoundingClientRect();
+    hover(trigger, 'pointerenter', t.left + 5, t.top + 5); await wait(120);
+    const p = panel.getBoundingClientRect();
+    const opened = shown(panel);
+    // Leave the trigger at its bottom edge and cross the gap towards the panel,
+    // taking longer than the close delay.
+    hover(trigger, 'pointerleave', t.left + 5, t.bottom);
+    for (let i = 1; i <= 3; i++) { move(t.left + 5 + i * 4, t.bottom + (p.top - t.bottom) * i / 4); await wait(60); }
+    const crossing = shown(panel);
+    // Turn back instead of arriving.
+    move(t.left + 5, t.top - 60); await wait(160);
+    return { opened, staysOpenWhileCrossing: crossing, closesWhenThePointerTurnsAway: !shown(panel) };
+  });
+
+  await step('modality', async () => {
+    const root = document.documentElement;
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); await frame();
+    const pointer = root.getAttribute('data-armature-modality');
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true })); await frame();
+    return `${pointer} > ${root.getAttribute('data-armature-modality')}`;
+  });
+
+  await step('remoteSearch', async () => {
+    const box = within('remote-search-value');
+    const input = box.querySelector('input');
+    const status = box.querySelector('[data-armature-part="Status"]');
+    await type(input, 'l'); await type(input, 'li');
+    return `${text('remote-search-value')} stillSearching=${shown(status)}`;
+  });
+
+  await step('sheetWheel', async () => {
+    const trigger = [...document.querySelectorAll('[data-armature-part="Trigger"]')].find(t => document.getElementById(t.getAttribute('aria-controls') || '')?.querySelector('[data-armature-part="Handle"]'));
+    const content = document.getElementById(trigger.getAttribute('aria-controls'));
+    const handle = content.querySelector('[data-armature-part="Handle"]');
+    trigger.click(); await frame();
+    const before = handle.getAttribute('aria-valuenow');
+    const event = new WheelEvent('wheel', { deltaY: 400, bubbles: true, cancelable: true });
+    content.dispatchEvent(event); await wait(400);
+    return `height ${before} > ${handle.getAttribute('aria-valuenow')} wheelTaken=${event.defaultPrevented}`;
+  });
+
   return out;
 }
