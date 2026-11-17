@@ -2,8 +2,8 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Duration;
 
-use armature_core::agent::{ActError, Target};
-use armature_core::change::ValueChange;
+use armature_core::agent::{Access, ActError, Target};
+use armature_core::change::{Source, ValueChange};
 use armature_core::geometry::Point;
 use armature_core::keys::{Key, Modifiers, Orientation};
 use armature_core::popup::{self, Placement, Rect, Side, Size};
@@ -33,6 +33,8 @@ struct Context<P: Primitive> {
     gate: Option<ChangeGate>,
     /// The part a pointer gesture is being sent to until the pointer is released.
     captured: StoredValue<Option<(P::Part, Option<String>)>>,
+    /// Whether the value must be kept out of anything an agent can read.
+    secret: bool,
 }
 
 impl<P: Primitive> Clone for Context<P> {
@@ -83,16 +85,10 @@ impl<P: Primitive + Send + Sync> Context<P> {
         self.run(|machine, gate| machine.pointer(pointer, &measure, gate))
     }
 
-    /// Runs one step of the primitive and carries out what it asks for.
-    fn run(
-        self,
-        step: impl FnOnce(&mut P, &mut dyn FnMut(&ValueChange) -> bool) -> Reaction<P::Part>,
-    ) -> bool {
-        // The gate runs user code, so the primitive is copied out instead of borrowed.
-        let Some(mut machine) = self.machine.try_get_untracked() else {
-            return false;
-        };
-        let rendered = self.rendered();
+    /// The primitive with its items in rendered order and their labels filled in from
+    /// the rendered text.
+    fn synced(self, rendered: &[Rendered]) -> Option<P> {
+        let mut machine = self.machine.try_get_untracked()?;
         let order: Vec<(String, String)> = rendered
             .iter()
             .filter(|r| r.registers)
@@ -104,8 +100,30 @@ impl<P: Primitive + Send + Sync> Context<P> {
             })
             .collect();
         machine.set_order(&order);
+        Some(machine)
+    }
+
+    /// Runs one step of the primitive and carries out what it asks for.
+    fn run(
+        self,
+        step: impl FnOnce(&mut P, &mut dyn FnMut(&ValueChange) -> bool) -> Reaction<P::Part>,
+    ) -> bool {
+        // The gate runs user code, so the primitive is copied out instead of borrowed.
+        let rendered = self.rendered();
+        let Some(mut machine) = self.synced(&rendered) else {
+            return false;
+        };
+        let before = machine.value();
         let reaction = step(&mut machine, &mut |change| allows(self.gate, change));
+        let after = machine.value();
         self.machine.set(machine);
+        agent::record(
+            self.label.get_value(),
+            before,
+            after,
+            Source::User,
+            self.secret,
+        );
 
         if let Some(target) = &reaction.focus {
             self.focus(&rendered, target);
@@ -323,6 +341,16 @@ pub fn Root<P>(
     /// A value the owner controls. The component follows it whenever it changes.
     #[prop(optional, into)]
     value: Option<Signal<Vec<String>>>,
+    /// Keeps the component from agents altogether.
+    #[prop(optional)]
+    agent_hidden: bool,
+    /// Lets agents see the component but not its value.
+    #[prop(optional)]
+    agent_secret: bool,
+    /// Makes agent actions on the component need a person's approval. The text says
+    /// what is being approved.
+    #[prop(optional, into)]
+    agent_confirm: Option<String>,
     children: Children,
 ) -> impl IntoView
 where
@@ -337,6 +365,7 @@ where
         label,
         gate: on_value_change,
         captured: StoredValue::new(None),
+        secret: agent_secret,
     };
     provide_context(ctx);
 
@@ -350,14 +379,30 @@ where
     }
 
     let registration = agent::register(Target {
-        snapshot: Rc::new(move |_| machine.try_with_untracked(|m| m.snapshot(&label.get_value()))),
+        snapshot: Rc::new(move |_| Some(ctx.synced(&ctx.rendered())?.snapshot(&label.get_value()))),
         act: Rc::new(move |_, action, item| {
-            let mut next = machine.try_get_untracked().ok_or(ActError::Refused)?;
+            let mut next = ctx.synced(&ctx.rendered()).ok_or(ActError::Refused)?;
+            let before = next.value();
             next.act(action, item, &mut |change| allows(on_value_change, change))?;
             let value = next.value();
             machine.set(next);
+            agent::record(
+                label.get_value(),
+                before,
+                value.clone(),
+                Source::Agent,
+                agent_secret,
+            );
             Ok(value)
         }),
+        set: Rc::new(move |_, value| {
+            machine.try_update(|m| m.set_value(value));
+        }),
+        access: Access {
+            hidden: agent_hidden,
+            secret: agent_secret,
+            confirm: agent_confirm,
+        },
     });
     on_cleanup(move || agent::unregister(registration));
 

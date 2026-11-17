@@ -233,11 +233,32 @@ fn App() -> impl IntoView {
                     </Part>
                 </Root>
             </Section>
+
+            <Section title="Agent rules">
+                <Root machine=Toggle::default() label="Delete account" agent_confirm="Delete the account">
+                    <Part part=toggle::Part::Root>
+                        <span class="knob"></span>
+                    </Part>
+                </Root>
+                <Root machine=Toggle::default() label="Admin mode" agent_hidden=true>
+                    <Part part=toggle::Part::Root>
+                        <span class="knob"></span>
+                    </Part>
+                </Root>
+                <Root
+                    machine=NumberInput::new(NumberRange::new(0.0, 9999.0, 1.0), 1234.0)
+                    label="PIN"
+                    agent_secret=true
+                >
+                    <Part part=number_input::Part::Input />
+                </Root>
+            </Section>
         </main>
     }
 }
 
 fn main() {
     agent::install();
+    agent::register_tools();
     mount_to_body(App);
 }
