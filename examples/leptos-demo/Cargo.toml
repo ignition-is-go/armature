@@ -1,0 +1,10 @@
+[package]
+name = "leptos-demo"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+armature-core.workspace = true
+armature-leptos.workspace = true
+leptos = { workspace = true, features = ["csr"] }

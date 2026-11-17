@@ -1,0 +1,11 @@
+[package]
+name = "gpui-demo"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+armature-core.workspace = true
+armature-gpui = { path = "../../crates/gpui" }
+gpui = { package = "gpui-unofficial", version = "1.28" }
+gpui_platform = { package = "gpui-platform-gpui-unofficial", version = "1.28" }

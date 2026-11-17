@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>armature demo</title>
+    <link data-trunk rel="rust" />
+    <style>
+      body { font: 15px/1.4 system-ui, sans-serif; margin: 2rem; }
+      [role="listbox"] { width: 16rem; border: 1px solid #bbb; border-radius: 6px; padding: 4px; }
+      [role="option"] { padding: 6px 8px; border-radius: 4px; cursor: default; outline: none; }
+      [role="option"][data-active] { background: #e8eefc; }
+      [role="option"]:focus-visible { box-shadow: 0 0 0 2px #3b6fe0; }
+      [role="option"][aria-selected="true"] { font-weight: 600; }
+      [role="option"][aria-selected="true"]::after { content: " ✓"; }
+      [role="option"][aria-disabled="true"] { color: #999; }
+      [role="tablist"] { display: flex; gap: 4px; border-bottom: 1px solid #bbb; width: 24rem; }
+      [role="tab"] { padding: 6px 12px; cursor: default; outline: none; border-bottom: 2px solid transparent; }
+      [role="tab"][aria-selected="true"] { border-bottom-color: #3b6fe0; font-weight: 600; }
+      [role="tab"]:focus-visible { box-shadow: 0 0 0 2px #3b6fe0; }
+      [role="tab"][aria-disabled="true"] { color: #999; }
+      [role="combobox"] { display: inline-block; width: 12rem; padding: 6px 8px; border: 1px solid #bbb; border-radius: 6px; cursor: default; }
+      [role="combobox"]:focus-visible { outline: 2px solid #3b6fe0; }
+      [role="combobox"] + [role="listbox"] { background: white; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15); width: 12rem; }
+      [role="tabpanel"] { display: flex; flex-direction: column; }
+    </style>
+  </head>
+  <body></body>
+</html>
