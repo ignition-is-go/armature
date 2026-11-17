@@ -927,6 +927,7 @@ fn shortcuts() {
 
 // trigger-match.test.ts
 #[test]
+#[allow(clippy::cloned_ref_to_slice_refs)]
 fn trigger_matching() {
     use armature_core::trigger_match::{
         Boundary, Dismissed, Spaces, TriggerRule, find_trigger_match, is_at_boundary,
@@ -1115,7 +1116,7 @@ fn trigger_matching() {
             let end = start + (random() * 4.0) as usize;
             range = map_dismissed(&current, start, end, (random() * 4.0) as usize);
             if let Some(range) = &range {
-                assert!(range.end >= range.start + 1);
+                assert!(range.end > range.start);
             }
         }
     }
