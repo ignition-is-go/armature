@@ -237,6 +237,9 @@ impl Primitive for Sortable {
     }
 
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
+        if crate::roving::is_platform_arrow(&input) {
+            return Reaction::default();
+        }
         match input {
             Input::Key { key, .. } => self.on_key(key, gate),
             Input::Focus {

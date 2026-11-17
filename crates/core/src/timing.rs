@@ -8,6 +8,16 @@ pub struct Hold {
     fires_at: Option<u64>,
 }
 
+/// How far a pressed pointer may drift before the press stops being a hold.
+pub const HOLD_TOLERANCE: f64 = 10.0;
+
+impl Default for Hold {
+    /// Half a second, as a long-press conventionally is.
+    fn default() -> Self {
+        Hold::new(500)
+    }
+}
+
 impl Hold {
     pub fn new(delay_ms: u64) -> Self {
         Hold {
@@ -37,6 +47,14 @@ impl Hold {
     /// The press ended early.
     pub fn release(&mut self) {
         self.fires_at = None;
+    }
+
+    /// The pointer moved `distance` from where it went down. Drifting too far before
+    /// the hold fires cancels it; afterwards movement is free.
+    pub fn moved(&mut self, distance: f64) {
+        if distance > HOLD_TOLERANCE {
+            self.fires_at = None;
+        }
     }
 }
 
@@ -106,6 +124,18 @@ mod tests {
         assert!(!hold.tick(1499));
         assert!(hold.tick(1500));
         assert!(!hold.tick(2000));
+    }
+
+    #[test]
+    fn drifting_before_it_fires_cancels_a_hold() {
+        let mut hold = Hold::default();
+        assert_eq!(hold.start(0), 500);
+        hold.moved(4.0);
+        assert!(hold.tick(500), "a small drift is tolerated");
+        let mut hold = Hold::default();
+        hold.start(0);
+        hold.moved(11.0);
+        assert!(!hold.tick(500));
     }
 
     #[test]

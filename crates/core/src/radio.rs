@@ -123,6 +123,9 @@ impl Primitive for Radio {
     }
 
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
+        if crate::roving::is_platform_arrow(&input) {
+            return Reaction::default();
+        }
         match input {
             Input::Key { key, .. } => {
                 let forward = if self.dir == Dir::Rtl {

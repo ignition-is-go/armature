@@ -1,5 +1,27 @@
 const RESET_MS: u64 = 500;
 
+/// A letter without its case or accent, so "Éditer" is found by typing "e".
+fn fold(ch: char) -> char {
+    let lower = ch.to_lowercase().next().unwrap_or(ch);
+    match lower {
+        'à'..='å' | 'ā' | 'ă' | 'ą' => 'a',
+        'ç' | 'ć' | 'č' => 'c',
+        'è'..='ë' | 'ē' | 'ė' | 'ę' | 'ě' => 'e',
+        'ì'..='ï' | 'ī' | 'į' | 'ı' => 'i',
+        'ñ' | 'ń' | 'ň' => 'n',
+        'ò'..='ö' | 'ø' | 'ō' | 'ő' => 'o',
+        'ù'..='ü' | 'ū' | 'ů' | 'ű' => 'u',
+        'ý' | 'ÿ' => 'y',
+        'š' | 'ś' => 's',
+        'ž' | 'ź' | 'ż' => 'z',
+        other => other,
+    }
+}
+
+fn folded(text: &str) -> String {
+    text.trim().chars().map(fold).collect()
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Typeahead {
     buffer: String,
@@ -20,7 +42,7 @@ impl Typeahead {
             self.buffer.clear();
         }
         self.last_ms = now_ms;
-        self.buffer.extend(ch.to_lowercase());
+        self.buffer.push(fold(ch));
 
         let first = self.buffer.chars().next()?;
         let repeated = self.buffer.chars().all(|c| c == first);
@@ -35,7 +57,7 @@ impl Typeahead {
         let n = items.len();
         (0..n).map(|offset| (start + offset) % n).find(|i| {
             let (label, enabled) = items[*i];
-            enabled && label.to_lowercase().starts_with(&needle)
+            enabled && folded(label).starts_with(&needle)
         })
     }
 }
@@ -71,6 +93,14 @@ mod tests {
         let mut t = Typeahead::default();
         t.push('b', 0, &ITEMS, None);
         assert_eq!(t.push('c', 1000, &ITEMS, Some(1)), Some(3));
+    }
+
+    #[test]
+    fn accents_and_case_do_not_get_in_the_way() {
+        let items = [("Open", true), ("  Éditer", true), ("Ødegaard", true)];
+        assert_eq!(Typeahead::default().push('e', 0, &items, None), Some(1));
+        assert_eq!(Typeahead::default().push('É', 0, &items, None), Some(1));
+        assert_eq!(Typeahead::default().push('o', 0, &items, Some(0)), Some(2));
     }
 
     #[test]

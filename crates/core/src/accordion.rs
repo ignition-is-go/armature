@@ -146,6 +146,9 @@ impl Primitive for Accordion {
     }
 
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
+        if crate::roving::is_platform_arrow(&input) {
+            return Reaction::default();
+        }
         match input {
             Input::Press {
                 part: Part::Trigger,

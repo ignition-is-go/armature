@@ -113,6 +113,9 @@ impl Primitive for Toolbar {
     }
 
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
+        if crate::roving::is_platform_arrow(&input) {
+            return Reaction::default();
+        }
         match input {
             Input::Focus {
                 item: Some(key), ..

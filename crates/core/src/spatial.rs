@@ -12,27 +12,40 @@ pub enum Direction {
 }
 
 /// The item nearest to `from` in a direction. Only items that lie that way are
-/// considered, and one that is straight ahead beats a closer one off to the side.
+/// considered. One within 45 degrees of straight ahead always beats one outside that
+/// cone; otherwise distance decides, with sideways distance counted double. On a tie
+/// the earlier item wins.
 pub fn nearest_in_direction<K: Clone>(
     items: &[(K, Rect)],
     from: Rect,
     direction: Direction,
 ) -> Option<K> {
     let origin = from.center();
-    items
-        .iter()
-        .filter_map(|(key, rect)| {
-            let center = rect.center();
-            let (ahead, aside) = match direction {
-                Direction::Up => (origin.y - center.y, center.x - origin.x),
-                Direction::Down => (center.y - origin.y, center.x - origin.x),
-                Direction::Left => (origin.x - center.x, center.y - origin.y),
-                Direction::Right => (center.x - origin.x, center.y - origin.y),
-            };
-            (ahead > 0.0).then(|| (ahead + 2.0 * aside.abs(), key))
-        })
-        .min_by(|a, b| a.0.total_cmp(&b.0))
-        .map(|(_, key)| key.clone())
+    let mut best: Option<(bool, f64, &K)> = None;
+    for (key, rect) in items {
+        let center = rect.center();
+        let (ahead, aside) = match direction {
+            Direction::Up => (origin.y - center.y, center.x - origin.x),
+            Direction::Down => (center.y - origin.y, center.x - origin.x),
+            Direction::Left => (origin.x - center.x, center.y - origin.y),
+            Direction::Right => (center.x - origin.x, center.y - origin.y),
+        };
+        if ahead <= 0.0 {
+            continue;
+        }
+        let in_cone = aside.abs() <= ahead;
+        let score = ahead + 2.0 * aside.abs();
+        let better = match best {
+            None => true,
+            Some((best_cone, best_score, _)) => {
+                (in_cone && !best_cone) || (in_cone == best_cone && score < best_score)
+            }
+        };
+        if better {
+            best = Some((in_cone, score, key));
+        }
+    }
+    best.map(|(_, _, key)| key.clone())
 }
 
 #[cfg(test)]
@@ -83,6 +96,28 @@ mod tests {
         assert_eq!(
             nearest_in_direction(&tiles(), tile(0., 0.), Direction::Up),
             None
+        );
+    }
+
+    #[test]
+    fn an_item_inside_the_cone_beats_a_nearer_one_outside_it() {
+        // "wide" scores lower (20 + 2*30 = 80) but sits outside 45 degrees.
+        let items = vec![
+            ("wide", Rect::new(30., 20., 50., 50.)),
+            ("ahead", Rect::new(10., 100., 50., 50.)),
+        ];
+        assert_eq!(
+            nearest_in_direction(&items, tile(0., 0.), Direction::Down),
+            Some("ahead")
+        );
+    }
+
+    #[test]
+    fn the_earlier_item_wins_a_tie() {
+        let items = vec![("first", tile(-60., 100.)), ("second", tile(60., 100.))];
+        assert_eq!(
+            nearest_in_direction(&items, tile(0., 0.), Direction::Down),
+            Some("first")
         );
     }
 }

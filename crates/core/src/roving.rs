@@ -1,4 +1,4 @@
-use crate::keys::{Dir, Key, Orientation};
+use crate::keys::{Dir, Key, Modifiers, Orientation};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Nav {
@@ -6,6 +6,23 @@ pub enum Nav {
     Prev,
     First,
     Last,
+}
+
+/// Whether the held modifiers leave arrow keys to the platform: Ctrl, Cmd and Alt with
+/// an arrow belong to the browser or the operating system.
+pub fn leaves_arrows_alone(mods: Modifiers) -> bool {
+    mods.ctrl || mods.alt
+}
+
+/// Whether a key press is an arrow that a list-like control should not act on.
+pub fn is_platform_arrow<Part>(input: &crate::primitive::Input<Part>) -> bool {
+    let arrow = |key: &Key| {
+        matches!(
+            key,
+            Key::ArrowUp | Key::ArrowDown | Key::ArrowLeft | Key::ArrowRight
+        )
+    };
+    matches!(input, crate::primitive::Input::Key { key, mods, .. } if arrow(key) && leaves_arrows_alone(*mods))
 }
 
 pub fn nav_for_key(key: Key, orientation: Orientation, dir: Dir) -> Option<Nav> {
@@ -82,5 +99,29 @@ mod tests {
         assert_eq!(nav(Key::ArrowRight, Dir::Ltr), Some(Nav::Next));
         assert_eq!(nav(Key::ArrowRight, Dir::Rtl), Some(Nav::Prev));
         assert_eq!(nav(Key::ArrowDown, Dir::Ltr), None);
+    }
+
+    #[test]
+    fn arrows_with_ctrl_or_alt_belong_to_the_platform() {
+        use crate::primitive::Input;
+        let key = |key, mods| Input::<()>::Key {
+            key,
+            mods,
+            now_ms: 0,
+        };
+        let ctrl = Modifiers {
+            ctrl: true,
+            ..Default::default()
+        };
+        let shift = Modifiers {
+            shift: true,
+            ..Default::default()
+        };
+        assert!(is_platform_arrow(&key(Key::ArrowDown, ctrl)));
+        assert!(
+            !is_platform_arrow(&key(Key::ArrowDown, shift)),
+            "Shift extends a selection"
+        );
+        assert!(!is_platform_arrow(&key(Key::Home, ctrl)));
     }
 }

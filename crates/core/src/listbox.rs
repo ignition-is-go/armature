@@ -202,6 +202,9 @@ impl Primitive for Listbox {
     }
 
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
+        if crate::roving::is_platform_arrow(&input) {
+            return Reaction::default();
+        }
         match input {
             Input::Key { key, mods, now_ms } => self.on_key(key, mods, now_ms, gate),
             Input::Focus {

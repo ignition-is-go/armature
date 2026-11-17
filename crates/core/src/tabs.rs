@@ -149,6 +149,9 @@ impl Primitive for Tabs {
     }
 
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
+        if crate::roving::is_platform_arrow(&input) {
+            return Reaction::default();
+        }
         match input {
             Input::Key { key, .. } => {
                 if let Some(nav) = roving::nav_for_key(key, self.opts.orientation, self.opts.dir) {

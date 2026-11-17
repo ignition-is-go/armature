@@ -253,6 +253,9 @@ impl Primitive for TreeView {
     }
 
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
+        if crate::roving::is_platform_arrow(&input) {
+            return Reaction::default();
+        }
         match input {
             Input::Key { key, mods, now_ms } => self.on_key(key, now_ms, mods.ctrl, gate),
             Input::Focus {
