@@ -16,7 +16,15 @@ pub enum Part {
     Content,
     /// The grip at the sheet's top edge. Dragging it resizes the sheet.
     Handle,
+    /// Optional. A scrolling box whose scroll position is the sheet's height, so the
+    /// platform's own scrolling, with its momentum and touch handling, moves the
+    /// sheet. Fill the screen with it and give it content one screen taller than the
+    /// tallest height. The sheet settles on a height once scrolling rests.
+    Scroller,
 }
+
+/// How long scrolling must pause before a scrolled sheet settles.
+const REST_MS: u64 = 120;
 
 const ACTIONS: &[&str] = &["open", "close", "snap"];
 
@@ -37,6 +45,8 @@ pub struct Sheet {
     speed: VelocityTracker,
     /// Whether the trigger holds focus, so Enter and Space can press it.
     on_trigger: bool,
+    /// Where scrolling has the sheet, and when it settles if nothing more moves it.
+    scrolled: Option<(f64, u64)>,
 }
 
 impl Default for Sheet {
@@ -56,6 +66,7 @@ impl Sheet {
             height: 0.0,
             speed: VelocityTracker::default(),
             on_trigger: false,
+            scrolled: None,
         }
     }
 
@@ -65,6 +76,9 @@ impl Sheet {
 
     /// How tall to draw the sheet now: its resting height, or wherever a drag has it.
     pub fn height(&self) -> f64 {
+        if let (Some((offset, _)), Some(_)) = (self.scrolled, self.at) {
+            return offset;
+        }
         match (self.grabbed, self.at) {
             (Some(_), _) => self.height,
             (None, Some(at)) => self.detents[at],
@@ -122,7 +136,13 @@ impl Primitive for Sheet {
     type Part = Part;
 
     fn parts() -> &'static [Part] {
-        &[Part::Trigger, Part::Backdrop, Part::Content, Part::Handle]
+        &[
+            Part::Trigger,
+            Part::Backdrop,
+            Part::Content,
+            Part::Handle,
+            Part::Scroller,
+        ]
     }
 
     fn is_item(_: Part) -> bool {
@@ -131,6 +151,14 @@ impl Primitive for Sheet {
 
     fn tracks_pointer(part: Part) -> bool {
         matches!(part, Part::Backdrop | Part::Handle)
+    }
+
+    fn scrolls(part: Part) -> bool {
+        part == Part::Scroller
+    }
+
+    fn wanted_scroll(&self) -> Option<f64> {
+        Some(self.at.map_or(0.0, |at| self.detents[at]))
     }
 
     fn relations(part: Part) -> Relations<Part> {
@@ -156,7 +184,7 @@ impl Primitive for Sheet {
                 focusable: Focusable::TabStop,
                 ..Default::default()
             },
-            Part::Backdrop => Semantics {
+            Part::Backdrop | Part::Scroller => Semantics {
                 hidden,
                 ..Default::default()
             },
@@ -192,6 +220,33 @@ impl Primitive for Sheet {
             (Input::Focus { part, .. }, _) => {
                 self.on_trigger = part == Part::Trigger;
                 Reaction::default()
+            }
+            // Scrolling carries the sheet. Each movement puts the settling off again.
+            (Input::Scrolled { offset, now_ms, .. }, Some(at)) => {
+                let moved = self
+                    .scrolled
+                    .map_or(offset != self.detents[at], |(was, _)| was != offset);
+                if !moved {
+                    return Reaction::default();
+                }
+                let at_ms = now_ms + REST_MS;
+                self.scrolled = Some((offset, at_ms));
+                Reaction::default().with(Effect::Wake { at_ms })
+            }
+            (Input::Tick { now_ms }, Some(_)) => {
+                let Some((offset, _)) = self.scrolled.filter(|(_, at_ms)| now_ms >= *at_ms) else {
+                    return Reaction::default();
+                };
+                self.scrolled = None;
+                let landing = self.landing(offset, 0.0);
+                let settled = self.settle(landing, Source::User, Reason::Drag, gate);
+                let rest = Effect::ScrollTo {
+                    offset: self.at.map_or(0.0, |at| self.detents[at]) as u32,
+                };
+                if settled && landing.is_none() {
+                    return Reaction::focusing(Part::Trigger).with(rest);
+                }
+                Reaction::default().with(rest)
             }
             // The trigger is a button, so Enter and Space press it.
             (
@@ -484,5 +539,48 @@ mod tests {
     #[test]
     fn it_conforms() {
         crate::testing::assert_conforms(Sheet::default, &[]);
+    }
+
+    #[test]
+    fn scrolling_carries_the_sheet_and_it_settles_on_the_nearest_height_at_rest() {
+        let mut sheet = Sheet::default();
+        sheet.act("open", None, &mut |_| true).unwrap();
+        assert_eq!(sheet.wanted_scroll(), Some(200.0));
+        let scroll = |sheet: &mut Sheet, offset: f64, now_ms: u64| {
+            sheet.send(
+                Input::Scrolled {
+                    part: Part::Scroller,
+                    offset,
+                    viewport: 800.0,
+                    now_ms,
+                },
+                &mut |_| true,
+            )
+        };
+        assert!(
+            scroll(&mut sheet, 200.0, 0).effects.is_empty(),
+            "already there"
+        );
+        assert_eq!(
+            scroll(&mut sheet, 300.0, 0).effects,
+            [Effect::Wake { at_ms: 120 }]
+        );
+        scroll(&mut sheet, 390.0, 60);
+        assert_eq!(sheet.height(), 390.0, "the sheet is where scrolling has it");
+        assert!(
+            sheet
+                .send(Input::Tick { now_ms: 120 }, &mut |_| true)
+                .effects
+                .is_empty(),
+            "still moving"
+        );
+        let rested = sheet.send(Input::Tick { now_ms: 180 }, &mut |_| true);
+        assert_eq!(rested.effects, [Effect::ScrollTo { offset: 480 }]);
+        assert_eq!(sheet.value(), ["1"]);
+
+        scroll(&mut sheet, 40.0, 500);
+        let closed = sheet.send(Input::Tick { now_ms: 620 }, &mut |_| true);
+        assert!(!sheet.is_open(), "scrolled well below the lowest height");
+        assert_eq!(closed.focus.unwrap().part, Part::Trigger);
     }
 }
