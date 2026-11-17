@@ -16,6 +16,14 @@ A primitive is one file in `crates/core/src`. It needs no adapter change. Use
    - `typeahead::Typeahead` for jump-to-match typing.
    - `selection::propose` for single, toggle and range selection.
    - `popup::Placement` to declare where a popup part floats.
+   - `grid::step` and `grid::CellRange` for two-dimensional focus and rectangular
+     selection, with `cells_to_text` and `text_to_cells` for copy and paste.
+   - `tree::Tree` for parents, children, visible rows and checked states that roll up.
+   - `text_match` to filter by typed text and mark the matched runs.
+   - `undo::UndoStack`, `input_history::InputHistory` and `preview::Preview` for state
+     that steps back, recalls earlier entries, or is tried before it is committed.
+   - `gesture` and `spans` for flick, spring and rubber-band arithmetic and for laying
+     out ranges on a track.
    - Another primitive as a field, as `Select` holds a `Listbox`.
 4. **Implement `Primitive`.**
    - `parts()` lists every part. `is_item` marks the parts rendered once per item.
