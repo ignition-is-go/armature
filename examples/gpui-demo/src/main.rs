@@ -4,12 +4,15 @@ use armature_core::canvas::{self, Canvas, Node};
 use armature_core::color_picker::{self, ColorPicker};
 use armature_core::command::{self, Command};
 use armature_core::date::Date;
+use armature_core::editable::{self, Editable};
 use armature_core::geometry::Rect;
+use armature_core::hold_button::{self, HoldButton};
 use armature_core::keys::Dir;
 use armature_core::listbox::{self, Listbox};
 use armature_core::number::NumberRange;
 use armature_core::number_input::{self, NumberInput};
 use armature_core::primitive::{Item, PartOf, Primitive};
+use armature_core::prompt::{self, Prompt};
 use armature_core::radio::{self, Radio};
 use armature_core::resizable::{self, Resizable};
 use armature_core::select::{self, Select};
@@ -19,10 +22,11 @@ use armature_core::sortable::{self, Sortable};
 use armature_core::tabs::{self, Tabs};
 use armature_core::toggle::{self, Toggle};
 use armature_core::toolbar::{self, Toolbar};
+use armature_core::transfer_list::{self, TransferList};
 use armature_core::tree::tree_from_paths;
 use armature_core::tree_view::{self, TreeView};
 use armature_core::virtual_list::{self, VirtualList};
-use armature_gpui::{Machine, PartElement, Source, part};
+use armature_gpui::{Machine, PartElement, Source, live_region, part};
 use gpui::prelude::*;
 use gpui::{
     App, Bounds, Context, Div, Entity, KeyBinding, Window, WindowBounds, WindowOptions, actions,
@@ -79,6 +83,11 @@ struct Demo {
     colour: Entity<Machine<ColorPicker>>,
     rows: Entity<Machine<VirtualList>>,
     board: Entity<Machine<Canvas>>,
+    title: Entity<Machine<Editable>>,
+    message: Entity<Machine<Prompt>>,
+    sent: Entity<Vec<String>>,
+    delete: Entity<Machine<HoldButton>>,
+    permissions: Entity<Machine<TransferList>>,
 }
 
 impl Demo {
@@ -89,6 +98,8 @@ impl Demo {
         };
         let pressed = cx.new(|_| String::new());
         cx.observe(&pressed, |_, _, cx| cx.notify()).detach();
+        let sent = cx.new(|_| Vec::<String>::new());
+        cx.observe(&sent, |_, _, cx| cx.notify()).detach();
         let all = |keys: &[&str]| items(&keys.iter().map(|key| (*key, false)).collect::<Vec<_>>());
         let tree = tree_from_paths(&[
             "src/main.rs",
@@ -189,6 +200,36 @@ impl Demo {
                     .to_vec();
                 Machine::new(Canvas::new(nodes), "Board", [], cx)
             }),
+            title: cx.new(|cx| Machine::new(Editable::new("Untitled"), "Title", [], cx)),
+            message: cx.new(|cx| {
+                let sent = sent.clone();
+                Machine::new(Prompt::default(), "Message", [], cx).on_value_change(
+                    move |change, cx| {
+                        sent.update(cx, |sent, cx| {
+                            sent.extend(change.value.iter().cloned());
+                            cx.notify();
+                        });
+                        true
+                    },
+                )
+            }),
+            delete: cx.new(|cx| {
+                let sent = sent.clone();
+                Machine::new(HoldButton::default(), "Delete", [], cx).on_value_change(
+                    move |_, cx| {
+                        sent.update(cx, |sent, cx| {
+                            sent.clear();
+                            cx.notify();
+                        });
+                        true
+                    },
+                )
+            }),
+            permissions: cx.new(|cx| {
+                let keys = ["Read", "Write", "Share", "Delete"];
+                Machine::new(TransferList::new(&keys), "Permissions", all(&keys), cx)
+            }),
+            sent,
             pressed,
             groceries: cx.new(|cx| {
                 Machine::new(
@@ -432,7 +473,8 @@ impl Demo {
                 .child("★")
         };
 
-        let node = |path: &'static str| {
+        let tree_rows = self.files.read(cx).primitive().rows();
+        let node = |path: &str| {
             let semantics = self
                 .files
                 .read(cx)
@@ -506,9 +548,12 @@ impl Demo {
                         .children(["1", "2", "3", "4"].map(star)),
                 ),
             )
-            .child(section("TREE").child(
-                part(&self.files, tree_view::Part::Root, None, cx).children(FILES.map(node)),
-            ))
+            .child(
+                section("TREE").child(
+                    part(&self.files, tree_view::Part::Root, None, cx)
+                        .children(tree_rows.iter().map(|row| node(&row.key))),
+                ),
+            )
             .child(
                 section("COMMAND")
                     .child(
@@ -812,6 +857,107 @@ impl Demo {
     }
 }
 
+impl Demo {
+    fn editing(&self, cx: &App) -> Div {
+        let title = self.title.read(cx);
+        let draft = title.text(editable::Part::Input, None).unwrap_or_default();
+        let saved = title.value().join("");
+        let typed = self
+            .message
+            .read(cx)
+            .text(prompt::Part::Input, None)
+            .unwrap_or_default();
+        let holding = self
+            .delete
+            .read(cx)
+            .semantics(hold_button::Part::Root, None)
+            .active;
+        let lists = self.permissions.read(cx).primitive();
+        let column = |kind, chosen: bool| {
+            boxed(part(&self.permissions, kind, None, cx))
+                .w(px(96.))
+                .min_h(px(110.))
+                .p_1()
+                .children(
+                    lists
+                        .list(chosen)
+                        .iter()
+                        .map(|key| row(&self.permissions, transfer_list::Part::Option, key, cx)),
+                )
+        };
+        let mover = |kind, sign: &'static str| {
+            let off = self.permissions.read(cx).semantics(kind, None).disabled;
+            boxed(part(&self.permissions, kind, None, cx))
+                .px_2()
+                .when(off, |el| el.text_color(rgb(MUTED)))
+                .child(sign)
+        };
+        div()
+            .flex()
+            .flex_col()
+            .gap_4()
+            .child(
+                section("EDITABLE")
+                    .child(format!("Title: {saved}"))
+                    .child(
+                        boxed(part(&self.title, editable::Part::Preview, None, cx))
+                            .w(px(200.))
+                            .px_2()
+                            .child(saved.clone()),
+                    )
+                    .child(
+                        boxed(part(&self.title, editable::Part::Input, None, cx))
+                            .w(px(200.))
+                            .px_2()
+                            .child(draft),
+                    ),
+            )
+            .child(
+                section("PROMPT")
+                    .child(format!("Sent: {}", self.sent.read(cx).join(" | ")))
+                    .child(
+                        boxed(part(&self.message, prompt::Part::Input, None, cx))
+                            .w(px(200.))
+                            .h(px(26.))
+                            .px_2()
+                            .child(typed),
+                    ),
+            )
+            .child(
+                section("HOLD TO CONFIRM").child(
+                    boxed(part(&self.delete, hold_button::Part::Root, None, cx))
+                        .px_2()
+                        .py_1()
+                        .when(holding, |el| el.bg(rgb(WASH)))
+                        .child("Hold to clear sent"),
+                ),
+            )
+            .child(
+                section("TRANSFER LIST")
+                    .child(format!(
+                        "Chosen: {}",
+                        self.permissions.read(cx).value().join(", ")
+                    ))
+                    .child(
+                        div()
+                            .flex()
+                            .gap_2()
+                            .items_center()
+                            .child(column(transfer_list::Part::Available, false))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .gap_1()
+                                    .child(mover(transfer_list::Part::Add, "→"))
+                                    .child(mover(transfer_list::Part::Remove, "←")),
+                            )
+                            .child(column(transfer_list::Part::Chosen, true)),
+                    ),
+            )
+    }
+}
+
 impl Render for Demo {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let days: Vec<String> = self
@@ -845,6 +991,8 @@ impl Render for Demo {
             .text_color(rgb(INK))
             .p_6()
             .flex()
+            .flex_wrap()
+            .items_start()
             .gap_8()
             .on_action(|_: &FocusNext, window, cx| window.focus_next(cx))
             .on_action(|_: &FocusPrev, window, cx| window.focus_prev(cx))
@@ -852,6 +1000,9 @@ impl Render for Demo {
             .child(self.newer(cx))
             .child(self.latest(cx))
             .child(self.advanced(cx))
+            .child(self.editing(cx))
+            .child(live_region(&self.groceries, cx))
+            .child(live_region(&self.permissions, cx))
     }
 }
 
@@ -861,7 +1012,7 @@ fn main() {
             KeyBinding::new("tab", FocusNext, None),
             KeyBinding::new("shift-tab", FocusPrev, None),
         ]);
-        let bounds = Bounds::centered(None, size(px(1200.), px(900.)), cx);
+        let bounds = Bounds::centered(None, size(px(1480.), px(900.)), cx);
         cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
