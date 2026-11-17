@@ -144,5 +144,7 @@ async () => {
     return { before, after: `${text('zoom-value')} selectionLooksLarger=${parseFloat(crop.style.width) > 75}` };
   });
 
+  await step('locale', async () => document.getElementById('locale-value').textContent.replace(/\s+/g, ' ').trim());
+
   return out;
 }

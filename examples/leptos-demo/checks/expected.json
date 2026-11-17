@@ -433,7 +433,8 @@
     "cropZoom": {
       "before": "Zoom: 1.00 width=75%",
       "after": "Zoom: 1.46 selectionLooksLarger=true"
-    }
+    },
+    "locale": "1.234,5 | mars | martes | 17 November 2026"
   },
   "accessibility": {
     "dialog \"Share this page\"": {

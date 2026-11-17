@@ -17,6 +17,7 @@ use armature_core::primitive::{
     Effect, FileInfo, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive,
     Reaction, Role, Semantics,
 };
+use armature_core::safe_area::{Axis, SafeArea};
 use armature_core::shortcut::Shortcut;
 use armature_core::text_edit::{Edit, TextEdit};
 use gpui::prelude::*;
@@ -46,6 +47,20 @@ fn described(paths: &[std::path::PathBuf]) -> Vec<FileInfo> {
             path: Some(path.to_string_lossy().into_owned()),
         })
         .collect()
+}
+
+fn core_point(point: Point<Pixels>) -> CorePoint {
+    CorePoint::new(f32::from(point.x) as f64, f32::from(point.y) as f64)
+}
+
+fn core_rect(bounds: Bounds<Pixels>) -> Rect {
+    let number = |pixels: Pixels| f32::from(pixels) as f64;
+    Rect {
+        x: number(bounds.origin.x),
+        y: number(bounds.origin.y),
+        width: number(bounds.size.width),
+        height: number(bounds.size.height),
+    }
 }
 
 /// The popups and dialogs open in the application, in the order they opened.
@@ -131,6 +146,9 @@ pub struct Machine<P: Primitive> {
     return_to: Option<FocusHandle>,
     /// Whether files are being dragged over a part that takes drops.
     dragged_over: bool,
+    /// The pointer's path from a part towards this primitive's open popup, the
+    /// popup's box, and the part whose hover-leave is being held back meanwhile.
+    crossing: Option<(SafeArea, Rect, PartKey<P>)>,
     /// Whether the keyboard, and not a pointer, was the last thing used on this
     /// primitive.
     by_keyboard: bool,
@@ -232,6 +250,7 @@ impl<P: Primitive> Machine<P> {
             away_watch: None,
             waking: false,
             by_keyboard: false,
+            crossing: None,
             hotkey_watch: None,
             return_to: None,
             dragged_over: false,
@@ -337,6 +356,27 @@ impl<P: Primitive> Machine<P> {
     }
 
     /// Everything announced so far, oldest first.
+    /// Ends the wait while the pointer crossed to the popup. Unless it arrived, the
+    /// primitive now hears that the pointer left.
+    fn end_crossing(&mut self, arrived: bool, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((_, _, (part, item))) = self.crossing.take() else {
+            return;
+        };
+        if !arrived {
+            let now_ms = self.now_ms();
+            self.dispatch(
+                Input::Hover {
+                    part,
+                    item,
+                    inside: false,
+                    now_ms,
+                },
+                window,
+                cx,
+            );
+        }
+    }
+
     /// Whether the person is driving this primitive from the keyboard or with a
     /// pointer, for showing focus boldly for the keyboard alone.
     pub fn modality(&self) -> armature_core::preference::Modality {
@@ -836,6 +876,49 @@ pub fn part<K: PartOf>(
             let (state, (part, item)) = &hovered;
             state.update(cx, |state, cx| {
                 let now_ms = state.now_ms();
+                state.crossing = None;
+                // Leaving for a popup this primitive has open is not leaving yet: the
+                // pointer may cross the gap, and cut the corner, on its way there.
+                let popup = (!*inside)
+                    .then(|| {
+                        K::Primitive::parts()
+                            .iter()
+                            .copied()
+                            .filter(|other| other != part)
+                            .find_map(|other| {
+                                K::Primitive::popup_of(other)
+                                    .filter(|_| K::Primitive::hovers(other))?;
+                                let own = state.bounds.get(&(other, item.clone()));
+                                let bounds = own.or_else(|| state.bounds.get(&(other, None)))?;
+                                let shown = !state.machine.semantics(other, item.as_deref()).hidden;
+                                shown.then(|| core_rect(*bounds))
+                            })
+                    })
+                    .flatten();
+                if let Some(popup) = popup {
+                    let from = core_point(window.mouse_position());
+                    let axis = if from.y < popup.y || from.y > popup.bottom() {
+                        Axis::Y
+                    } else {
+                        Axis::X
+                    };
+                    state.crossing = Some((
+                        SafeArea::start(from, popup, axis, now_ms),
+                        popup,
+                        (*part, item.clone()),
+                    ));
+                    // A pointer that stops short of the popup has left after all.
+                    cx.spawn_in(window, async move |this, cx| {
+                        cx.background_executor()
+                            .timer(Duration::from_millis(400))
+                            .await;
+                        let _ = this.update_in(cx, |state, window, cx| {
+                            state.end_crossing(false, window, cx)
+                        });
+                    })
+                    .detach();
+                    return;
+                }
                 let input = Input::Hover {
                     part: *part,
                     item: item.clone(),
@@ -845,6 +928,30 @@ pub fn part<K: PartOf>(
                 state.dispatch(input, window, cx);
             });
         });
+        // While the pointer crosses towards the popup, its path is followed.
+        let crossing = state.clone();
+        let follow = move |_: Bounds<Pixels>, _: (), window: &mut Window, _: &mut App| {
+            let crossing = crossing.clone();
+            window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
+                if phase != DispatchPhase::Bubble {
+                    return;
+                }
+                crossing.update(cx, |state, cx| {
+                    let now_ms = state.now_ms();
+                    let at = core_point(event.position);
+                    let verdict = state
+                        .crossing
+                        .as_mut()
+                        .map(|(area, popup, _)| (popup.contains(at), area.contains(at, now_ms)));
+                    match verdict {
+                        Some((true, _)) => state.end_crossing(true, window, cx),
+                        Some((false, false)) => state.end_crossing(false, window, cx),
+                        _ => {}
+                    }
+                });
+            });
+        };
+        el = el.child(canvas(|_, _, _| (), follow).absolute());
     }
     let scrolls = K::Primitive::scrolls(part);
     if scrolls {

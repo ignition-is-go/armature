@@ -3,6 +3,7 @@
 
 pub mod agent;
 mod files;
+pub mod locale;
 mod parts;
 mod shortcut;
 mod storage;

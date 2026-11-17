@@ -307,6 +307,18 @@ pub fn Audit() -> impl IntoView {
             <Root machine=Combobox::new(combobox::Options { load_more: true, ..Default::default() }) label="City" on_value_change=on_city><CityField /></Root>
         </Section>
 
+        <Section title="Locale">
+            <p id="locale-value">
+                {armature_leptos::locale::format_number(1234.5, "de-DE")}
+                " | "
+                {armature_leptos::locale::month_name(3, "fr-FR")}
+                " | "
+                {armature_leptos::locale::weekday_name(2, "es-ES")}
+                " | "
+                {armature_leptos::locale::format_date(Date::new(2026, 11, 17).expect("a real date"), "en-GB")}
+            </p>
+        </Section>
+
         <Section title="Remote search">
             <p id="remote-search-value">"Asked: " {move || searches.get().join(" ")}</p>
             <Root

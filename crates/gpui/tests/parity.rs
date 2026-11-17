@@ -10,6 +10,7 @@ use armature_core::editable::{self, Editable};
 use armature_core::file_input::{self, FileInput};
 use armature_core::keys::Dir;
 use armature_core::menu::{self, Entry, Kind as EntryKind, Menu};
+use armature_core::navigation_menu::{self, NavigationMenu};
 use armature_core::number::NumberRange;
 use armature_core::number_input::{self, NumberInput};
 use armature_core::picker::{self, Picker};
@@ -820,4 +821,48 @@ fn files_dragged_over_a_dropzone_light_it_up_and_dropping_takes_them(cx: &mut Te
     cx.run_until_parked();
     assert_eq!(files.read_with(cx, |m, _| m.value()), ["report.pdf"]);
     assert!(!over(cx));
+}
+
+#[gpui::test]
+fn a_panel_stays_open_while_the_pointer_crosses_the_gap_to_it(cx: &mut TestAppContext) {
+    let nav = NavigationMenu::new(Default::default(), &[("products", true)]);
+    let (nav, cx) = open(
+        cx,
+        nav,
+        |nav: &Entity<Machine<NavigationMenu>>, cx: &mut App| {
+            div()
+                .size_full()
+                .child(
+                    part(nav, navigation_menu::Part::Trigger, Some("products"), cx)
+                        .w(px(80.))
+                        .h(px(ROW)),
+                )
+                .child(
+                    part(nav, navigation_menu::Part::Panel, Some("products"), cx)
+                        .w(px(120.))
+                        .h(px(60.)),
+                )
+        },
+    );
+    let open_now =
+        |cx: &mut VisualTestContext| nav.read_with(cx, |m, _| m.primitive().open_panel().is_some());
+    let move_to = |cx: &mut VisualTestContext, x: f32, y: f32, wait_ms: u64| {
+        cx.simulate_mouse_move(point(px(x), px(y)), None, Modifiers::default());
+        cx.executor().advance_clock(Duration::from_millis(wait_ms));
+        cx.run_until_parked();
+    };
+    move_to(cx, 300., 300., 10);
+    move_to(cx, 10., 10., 100);
+    assert!(open_now(cx), "resting on the trigger opens its panel");
+
+    // The panel sits a little below the trigger. Crossing that gap takes longer
+    // than the close delay.
+    move_to(cx, 12., 21., 60);
+    move_to(cx, 14., 22., 60);
+    assert!(open_now(cx), "still on its way to the panel");
+    move_to(cx, 16., 40., 100);
+    assert!(open_now(cx), "arrived");
+
+    move_to(cx, 300., 300., 200);
+    assert!(!open_now(cx), "gone elsewhere");
 }
