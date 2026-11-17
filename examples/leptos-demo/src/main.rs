@@ -1,3 +1,4 @@
+mod audit;
 mod more;
 
 use armature_core::accordion::{self, Accordion};
@@ -858,6 +859,7 @@ fn App() -> impl IntoView {
                 <ThemeChoice />
             </Section>
             <more::More />
+            <audit::Audit />
         </main>
     }
 }

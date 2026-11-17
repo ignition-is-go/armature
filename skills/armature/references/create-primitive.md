@@ -38,6 +38,8 @@ gestures at once.
    - `set(name, value)` takes a setting the owner changes while the primitive runs.
    - `hotkey()` names a key that reaches the primitive from anywhere, as
      `Input::Hotkey`. Return `Effect::RestoreFocus` to send focus back.
+   - `wheels(part)` takes the wheel for a part, as `Input::Wheel`, in place of
+     scrolling the page.
    - `context(part)` asks for `Input::ContextMenu` on a part, and `popup_point()`
      places the popup at a point in place of its anchor.
    - `scroll_axis()` says which way the scrolling part scrolls.

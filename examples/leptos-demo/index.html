@@ -55,6 +55,16 @@
       [data-armature-part="Handle"][data-value="se"] { bottom: -6px; right: -6px; } [data-armature-part="Handle"][data-value="sw"] { bottom: -6px; left: -6px; }
       [data-armature-part="Dropzone"] { display: block !important; padding: 16px !important; border-style: dashed !important; text-align: center; }
       [data-armature-part="Dropzone"][data-active] { background: #e8eefc; }
+      [aria-label="Price"] ~ * { } .panes { display: flex; align-items: stretch; width: 16rem; height: 3rem; border: 1px solid #bbb; border-radius: 6px; }
+      .panes > div { padding: 4px; overflow: hidden; }
+      .panes [role="separator"] { width: 6px; flex: none; background: #ccd; cursor: col-resize; outline: none; }
+      .panes [role="separator"]:focus-visible { background: #3b6fe0; }
+      .stars { display: flex; font-size: 22px; cursor: default; }
+      .star { position: relative; display: inline-block; color: #bbb; }
+      .star-fill { position: absolute; left: 0; top: 0; overflow: hidden; color: #e0a23b; white-space: nowrap; }
+      .months { display: flex; gap: 16px; } .blank { display: inline-block; width: 28px; }
+      [role="gridcell"][aria-selected="true"] { background: #e8eefc; }
+      [role="listitem"][aria-current="true"] { font-weight: 600; }
       .context-area { display: inline-block; margin: 6px 0; padding: 10px; border: 1px dashed #bbb; border-radius: 6px; color: #667; }
       .problem { color: #b3261e; font-size: 13px; margin: 0; min-height: 1em; }
       .scroll-wide { position: relative; width: 12rem; margin-top: 8px; }

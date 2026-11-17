@@ -11,7 +11,7 @@ Status: experimental. The API will change.
 
 | Path | Holds |
 | --- | --- |
-| `crates/core` | `armature-core`: about fifty behavior modules, the `Primitive` contract, 59 primitives covering every component in UI SDK's core, the agent registry, a conformance harness. No dependencies. |
+| `crates/core` | `armature-core`: about fifty behavior modules, the `Primitive` contract, 60 primitives covering every component in UI SDK's core, the agent registry, a conformance harness. No dependencies. |
 | `crates/leptos` | `armature-leptos`: one generic adapter for Leptos. |
 | `crates/gpui` | `armature-gpui`: one generic adapter for GPUI. |
 | `examples/leptos-demo` | Every primitive in a browser. Run `trunk serve` there. |

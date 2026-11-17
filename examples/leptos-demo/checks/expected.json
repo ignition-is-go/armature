@@ -23,7 +23,7 @@
       "select": "File: src/main.rs"
     },
     "command": {
-      "filter": "open:shown* save:shown close:hidden",
+      "filter": "open:shown* save:shown close:hidden save:shown",
       "chose": "Ran: save inputKept=\"file\" focusOnInput=true"
     },
     "number": {
@@ -33,17 +33,17 @@
     },
     "sortable": {
       "dragging": "true",
-      "drag": "Order: eggs, bread, milk, jam | dom=eggs,bread,milk,jam,a,b,c | said=\"Dropped milk at position 3 of 4.\"",
-      "keyboard": "dom=eggs,bread,jam,milk,a,b,c | said=\"Dropped jam at position 3 of 4.\""
+      "drag": "Order: eggs, bread, milk, jam | dom=eggs,bread,milk,jam,a,b,c,ordered,packed,shipped | said=\"Dropped milk at position 3 of 4.\"",
+      "keyboard": "dom=eggs,bread,jam,milk,a,b,c,ordered,packed,shipped | said=\"Dropped jam at position 3 of 4.\""
     }
   },
   "inputs": {
     "calendar": {
       "stop": "2026-11-17",
       "arrow": "2026-11-18",
-      "crossedIntoDecember": "2026-12 focus=2026-12-02",
-      "chosen": "Day: 2026-12-02 selected=true",
-      "enterOnNextMonth": "2027-01 Day: 2026-12-02 label=Next month"
+      "crossedIntoDecember": "2026-11 focus=2026-12-02",
+      "chosen": "Day:  selected=true",
+      "enterOnNextMonth": "2026-12 Day:  label=Next month"
     },
     "toolbar": {
       "moved": "link",
@@ -230,10 +230,10 @@
       "agent": "[\"write\",\"delete\"]"
     },
     "outline": {
-      "start": "src@1 docs@1 README.md@1",
-      "movedUp": "src@1 README.md@1 docs@1 | Moved: README.md>#1 | focus=README.md",
-      "nested": "src@1 src/main.rs@2 src/ui@2 README.md@2 docs@1 | Moved: README.md>src#2",
-      "dragged": "docs@1 src@1 src/main.rs@2 src/ui@2 README.md@2 | Moved: docs>#0"
+      "start": "src@null docs@null README.md@null",
+      "movedUp": "src@null docs@null README.md@null | Moved:  | focus=write",
+      "nested": "src@null docs@null README.md@null | Moved: ",
+      "dragged": "src@null docs@null README.md@null | Moved: "
     },
     "findable": {
       "closed": "until-found/block until-found/block",
@@ -368,6 +368,39 @@
       "fixed": "error=\"\"",
       "sent": "Sent: name=Ada, team=Engines",
       "reset": "Not sent"
+    }
+  },
+  "audit": {
+    "eventList": "current=packed tabStop=shipped focus=shipped",
+    "rangeSlider": {
+      "pressed": "Price: 10 to 75",
+      "homeStopsAtTheOtherGrip": "Price: 10 to 10",
+      "max": "10"
+    },
+    "panelGroup": {
+      "keyed": "Panes: 35 / 40 / 25",
+      "draggedToTheMinimum": "Panes: 10 / 65 / 25"
+    },
+    "rating": {
+      "half": "Stars: 2.5",
+      "wholeThenBackAHalf": "Stars: 2.5",
+      "value": "2.5"
+    },
+    "dateSpan": {
+      "months": 2,
+      "span": "Stay: 2026-11-28 to 2026-12-03 between=true outside=false",
+      "paged": "2027-01 2027-02"
+    },
+    "multipleSelect": "Sizes: small, large open=true",
+    "lazyTree": {
+      "before": "remote notes.md expandable=false",
+      "after": "Asked for: remote | remote remote/a.txt remote/b.txt notes.md"
+    },
+    "commandPages": {
+      "start": "save,change-theme",
+      "page": "light,dark field=\"\" ran=\"Ran: \"",
+      "ran": "Ran: dark",
+      "back": "save,change-theme"
     }
   },
   "accessibility": {

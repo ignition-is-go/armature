@@ -15,10 +15,10 @@ Each lives in `armature_core::<module>` and exports a `Part` enum.
 | Switch | `toggle` | `Root` | `["on"]` or empty. |
 | Toolbar | `toolbar` | `Root`, `Button` | None. A press is offered to the gate. |
 | Slider | `slider` | `Track`, `Thumb` | The number. |
-| Number input | `number_input` | `Input`, `Increment`, `Decrement` | The number. |
+| Number input | `number_input` | `Input`, `Increment`, `Decrement`, `Scrub` | The number. The wheel steps it while focused, and `Scrub` is dragged sideways. |
 | One-time code | `otp_input` | `Input` | The digits. Draw cells from `cells()`. |
 | Token input | `token_input` | `Root`, `Input`, `Token` | The tokens. |
-| Tree | `tree_view` | `Root`, `Node` | The selected node. Draw nodes from `rows()`. Dragging a node, or Alt with an arrow, moves it. The move is offered to the gate as `key>parent#index` with `Reason::Edit`. `landing()` says where a dragged node would drop. |
+| Tree | `tree_view` | `Root`, `Node` | The selected node. `.multiple()` selects several, `.checkable(..)` makes checkboxes, and `.lazy(keys)` loads children when a node is first opened. Draw nodes from `rows()`. Dragging a node, or Alt with an arrow, moves it. The move is offered to the gate as `key>parent#index` with `Reason::Edit`. `landing()` says where a dragged node would drop. |
 | Sortable list | `sortable` | `Root`, `Item` | The keys in order. |
 | Calendar | `calendar` | `Grid`, `Day`, `PreviousMonth`, `NextMonth` | The day as `YYYY-MM-DD`. Draw days from `weeks()`. `Options::mode` chooses several days or a span, and `unavailable` rules days out. |
 | Resizable panels | `resizable` | `Root`, `Handle` | The first panel's share, in percent. |
@@ -53,7 +53,7 @@ Each lives in `armature_core::<module>` and exports a `Part` enum.
 | Hover card | `tooltip` (`Tooltip::hover_card()`) | `Trigger`, `Content` | None. |
 | Trigger menu (mentions, commands) | `trigger_menu` | `Input`, `List`, `Option`, `Empty` | The text. Key each option with its trigger character, such as `@ada`. |
 | Toasts | `toast` (`Toaster`) | `Region`, `Toast`, `Title`, `Description`, `Action`, `Close` | The toasts, each from `Toast::encode`. You add to the value. The toaster offers the list without a toast when it goes. Draw from `visible()`. |
-| Date input | `date_input` | `Root`, `Segment` | `YYYY-MM-DD`, with `THH:MM` for a time. Key segments `year`, `month`, `day`, `hour`, `minute`. |
+| Date input | `date_input` | `Root`, `Segment` | `YYYY-MM-DD`, with `THH:MM` for a time. `.twelve_hour()` adds a `period` segment, `.with_seconds()` a `second` one, and `.between(..)` sets limits. Key segments `year`, `month`, `day`, `hour`, `minute`. |
 | Date picker | `date_picker` | `Segment`, `Trigger`, `Content`, `Grid`, `Day`, `PreviousMonth`, `NextMonth` | `YYYY-MM-DD`. Draw days from `calendar().weeks()`. |
 | Carousel | `carousel` | `Root`, `Viewport`, `Slide`, `Previous`, `Next`, `Indicator`, `Play` | The slide on show. Move the strip by `position()`. |
 | Scroll area | `scroll_area` | `Root`, `Viewport`, `Scrollbar`, `Thumb` | None. Place the grip with `thumb(track_length)`. `ScrollArea::horizontal()` scrolls sideways. |
@@ -62,6 +62,7 @@ Each lives in `armature_core::<module>` and exports a `Part` enum.
 | Event list (timeline, feed) | `event_list` | `Root`, `Event` | None. `set("current", key)` marks the step in progress, and `status(key)` says done, current or upcoming. With `feed`, PageUp and PageDown move between articles. |
 | Range slider | `range_slider` | `Track`, `Thumb` | Each grip's number, lowest first. Key grips `0`, `1`. Place them with `fractions()`. |
 | Panel group | `panel_group` | `Root`, `Panel`, `Handle` | Each panel's share in percent. Key panels and the divider after each `0`, `1`. |
+| Rating | `rating` | `Root`, `Star` | The number of stars, in halves if allowed. Fill each star by `fill(star)`. |
 | Waterfall | `waterfall` | `Root`, `Row`, `Bar`, `Axis` | The selected span. Draw from `rows()`, `bar(key)` and `ticks(most)`. |
 
 A part marked as an item part (`Primitive::is_item`) is rendered once per item and takes
