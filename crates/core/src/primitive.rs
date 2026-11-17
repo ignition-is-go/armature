@@ -358,6 +358,9 @@ pub enum Role {
     /// Text that is read out at once.
     Alert,
     ScrollBar,
+    /// A list of articles that loads more as it is read.
+    Feed,
+    Article,
 }
 
 /// A number within limits, as a slider or stepper reports it.
@@ -397,6 +400,8 @@ pub struct Semantics {
     pub invalid: bool,
     /// Its text must not be shown as typed.
     pub obscured: bool,
+    /// Its content is still changing, so assistive technology should wait.
+    pub busy: bool,
     /// Depth in a tree, starting at 1.
     pub level: Option<u32>,
     pub range: Option<ValueRange>,

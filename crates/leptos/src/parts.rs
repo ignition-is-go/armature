@@ -438,6 +438,8 @@ fn aria_role(role: Role) -> &'static str {
         Role::Status => "status",
         Role::Alert => "alert",
         Role::ScrollBar => "scrollbar",
+        Role::Feed => "feed",
+        Role::Article => "article",
     }
 }
 
@@ -1136,6 +1138,7 @@ where
             ("aria-pressed", flag(state.pressed)),
             ("aria-current", state.current.then(|| "true".to_string())),
             ("aria-invalid", state.invalid.then(|| "true".to_string())),
+            ("aria-busy", state.busy.then(|| "true".to_string())),
             ("aria-multiselectable", flag(state.multiselectable)),
             ("aria-disabled", state.disabled.then(|| "true".to_string())),
             ("aria-level", state.level.map(|level| level.to_string())),
