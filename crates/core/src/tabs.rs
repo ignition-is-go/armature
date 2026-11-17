@@ -11,6 +11,11 @@ use crate::roving;
 pub struct Options {
     pub orientation: Orientation,
     pub dir: Dir,
+    /// Whether the arrows only move focus, leaving Enter or Space to show the tab.
+    /// Otherwise a tab shows as soon as focus reaches it.
+    pub manual: bool,
+    /// Whether the arrows come round from the last tab to the first.
+    pub wrap: bool,
 }
 
 impl Default for Options {
@@ -18,6 +23,8 @@ impl Default for Options {
         Options {
             orientation: Orientation::Horizontal,
             dir: Dir::Ltr,
+            manual: false,
+            wrap: true,
         }
     }
 }
@@ -156,10 +163,12 @@ impl Primitive for Tabs {
             Input::Key { key, .. } => {
                 if let Some(nav) = roving::nav_for_key(key, self.opts.orientation, self.opts.dir) {
                     let from = self.focused.as_deref().or(self.current());
-                    let focus = self.items.step(from, nav, true);
+                    let focus = self.items.step(from, nav, self.opts.wrap);
                     if let Some(key) = &focus {
                         self.focused = Some(key.clone());
-                        self.select(key, Source::User, Reason::Keyboard, gate);
+                        if !self.opts.manual {
+                            self.select(key, Source::User, Reason::Keyboard, gate);
+                        }
                     }
                     return Reaction::item(Part::Tab, true, focus);
                 }
@@ -340,5 +349,40 @@ mod tests {
             tabs.act("select", Some("billing"), &mut |_| true),
             Err(ActError::Disabled("billing".into()))
         );
+    }
+
+    #[test]
+    fn with_manual_activation_the_arrows_only_move_focus() {
+        let mut tabs = Tabs::new(Options {
+            manual: true,
+            wrap: false,
+            ..Default::default()
+        });
+        for key in ["one", "two"] {
+            tabs.upsert_item(Item {
+                key: key.into(),
+                label: key.into(),
+                disabled: false,
+            });
+        }
+        let key = |tabs: &mut Tabs, key| {
+            tabs.send(
+                Input::Key {
+                    key,
+                    mods: Modifiers::default(),
+                    now_ms: 0,
+                },
+                &mut |_| true,
+            )
+        };
+        assert_eq!(key(&mut tabs, Key::ArrowRight).focus_item(), Some("two"));
+        assert_eq!(tabs.value(), ["one"], "focus moved, the tab did not");
+        assert_eq!(
+            key(&mut tabs, Key::ArrowRight).focus_item(),
+            None,
+            "no coming round"
+        );
+        key(&mut tabs, Key::Enter);
+        assert_eq!(tabs.value(), ["two"]);
     }
 }

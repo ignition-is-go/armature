@@ -22,9 +22,25 @@ const ACTIONS: &[&str] = &["open", "close", "select"];
 pub struct Select {
     list: Listbox,
     open: bool,
+    /// Whether several options can be chosen. The popup then stays open.
+    multiple: bool,
 }
 
 impl Select {
+    /// A select that takes several options. Choosing one leaves the popup open for
+    /// the next, and Escape or a press elsewhere closes it.
+    pub fn multiple() -> Self {
+        let opts = listbox::Options {
+            mode: crate::selection::Mode::Multiple,
+            ..Default::default()
+        };
+        Select {
+            list: Listbox::new(opts),
+            open: false,
+            multiple: true,
+        }
+    }
+
     pub fn is_open(&self) -> bool {
         self.open
     }
@@ -74,7 +90,11 @@ impl Select {
                     now_ms,
                 };
                 self.list.send(choose, gate);
-                self.dismiss()
+                if self.multiple {
+                    Reaction::handled()
+                } else {
+                    self.dismiss()
+                }
             }
             _ => {
                 let moved = self.list.send(Input::Key { key, mods, now_ms }, gate);
@@ -174,13 +194,21 @@ impl Primitive for Select {
                 item,
                 ..
             } if self.open => {
+                // A plain press on one of several adds or removes it, as a checkbox would.
                 let press = Input::Press {
                     part: listbox::Part::Option,
                     item,
-                    mods: Modifiers::default(),
+                    mods: Modifiers {
+                        ctrl: self.multiple,
+                        ..Modifiers::default()
+                    },
                 };
                 if self.list.send(press, gate).handled {
-                    self.dismiss()
+                    if self.multiple {
+                        Reaction::handled()
+                    } else {
+                        self.dismiss()
+                    }
                 } else {
                     Reaction::default()
                 }
@@ -412,5 +440,24 @@ mod tests {
             select.act("select", Some("small"), &mut |_| false),
             Err(ActError::Refused)
         );
+    }
+
+    #[test]
+    fn several_options_can_be_chosen_and_the_popup_stays_open() {
+        let mut select = Select::multiple();
+        for (key, label) in [("s", "Small"), ("m", "Medium"), ("l", "Large")] {
+            select.upsert_item(Item {
+                key: key.into(),
+                label: label.into(),
+                disabled: false,
+            });
+        }
+        press(&mut select, Part::Trigger, None);
+        press(&mut select, Part::Option, Some("s"));
+        press(&mut select, Part::Option, Some("l"));
+        assert_eq!(select.value(), ["s", "l"]);
+        assert!(select.is_open());
+        press(&mut select, Part::Option, Some("s"));
+        assert_eq!(select.value(), ["l"]);
     }
 }
