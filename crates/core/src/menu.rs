@@ -33,6 +33,8 @@ pub struct Entry {
     pub disabled: bool,
     /// A key that runs the entry from anywhere, with the menu open or closed.
     pub shortcut: Option<crate::shortcut::Shortcut>,
+    /// Whether choosing it destroys something, so it can be drawn as a warning.
+    pub destructive: bool,
 }
 
 impl Entry {
@@ -44,6 +46,7 @@ impl Entry {
             parent: None,
             disabled: false,
             shortcut: None,
+            destructive: false,
         }
     }
 
@@ -59,6 +62,11 @@ impl Entry {
 
     pub fn disabled(mut self) -> Self {
         self.disabled = true;
+        self
+    }
+
+    pub fn destructive(mut self) -> Self {
+        self.destructive = true;
         self
     }
 
@@ -100,6 +108,8 @@ pub struct Menu {
     typeahead: Typeahead,
     /// Where the pointer was when the menu was called up as a context menu.
     point: Option<crate::geometry::Point>,
+    disabled: bool,
+    close_on_select: bool,
 }
 
 impl Menu {
@@ -108,6 +118,23 @@ impl Menu {
             entries,
             ..Default::default()
         }
+    }
+
+    /// A menu whose trigger is disabled, so no one can open it by hand.
+    pub fn disabled(mut self) -> Self {
+        self.disabled = true;
+        self
+    }
+
+    /// Closes the menu when a checkbox or radio entry is chosen too.
+    pub fn closing_on_select(mut self) -> Self {
+        self.close_on_select = true;
+        self
+    }
+
+    /// Whether choosing the entry destroys something.
+    pub fn is_destructive(&self, key: &str) -> bool {
+        self.entry(key).is_some_and(|entry| entry.destructive)
     }
 
     pub fn is_open(&self) -> bool {
@@ -227,6 +254,10 @@ impl Menu {
                     return Err(ActError::Refused);
                 }
                 (self.checked, self.chosen) = (checked, chosen);
+                if self.close_on_select {
+                    self.close();
+                    return Ok(Reaction::focusing(Part::Trigger));
+                }
                 Ok(Reaction::handled())
             }
         }
@@ -320,6 +351,7 @@ impl Primitive for Menu {
             (Part::Trigger, _) => Semantics {
                 role: Some(Role::Button),
                 expanded: Some(self.open),
+                disabled: self.disabled,
                 focusable: Focusable::TabStop,
                 ..Default::default()
             },
@@ -361,6 +393,16 @@ impl Primitive for Menu {
     }
 
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
+        // A disabled trigger never opens the menu.
+        if self.disabled
+            && !self.open
+            && matches!(
+                input,
+                Input::Press { .. } | Input::Key { .. } | Input::ContextMenu { .. }
+            )
+        {
+            return Reaction::default();
+        }
         match (input, self.open) {
             // An entry's own key runs it, whether or not the menu is open.
             (Input::Hotkey { shortcut }, _) => {

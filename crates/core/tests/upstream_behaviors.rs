@@ -1100,3 +1100,64 @@ fn combobox_behaviors() {
         (vec!["astro".to_string()], "Astro".to_string())
     );
 }
+
+use armature_core::menu::{self, Entry, Kind, Menu};
+
+// menu-headless.test.ts
+#[test]
+fn menu_behaviors() {
+    use menu::Part;
+    let entries = || {
+        vec![
+            Entry::action("rename", "Rename"),
+            Entry::action("delete", "Delete").destructive(),
+            Entry::action("more", "More").of(Kind::Submenu).disabled(),
+            Entry::action("inner", "Inner").inside("more"),
+            Entry::action("left", "Left").of(Kind::Radio("align".into())),
+            Entry::action("right", "Right").of(Kind::Radio("align".into())),
+        ]
+    };
+    let press = |menu: &mut Menu, part: Part, item: Option<&str>, allow: bool| {
+        menu.send(
+            Input::Press {
+                part,
+                item: item.map(str::to_string),
+                mods: Modifiers::default(),
+            },
+            &mut |_| allow,
+        );
+    };
+    // "opening, closing, toggling and running actions" and "pressing parts runs through the same paths"
+    let mut menu = Menu::new(entries());
+    menu.act("open", None, &mut |_| true).unwrap();
+    assert!(menu.is_open());
+    menu.act("close", None, &mut |_| true).unwrap();
+    press(&mut menu, Part::Trigger, None, true);
+    assert!(menu.is_open());
+    // "destructive items say so"
+    assert!(menu.is_destructive("delete") && !menu.is_destructive("rename"));
+    // "onSelect ... can cancel, which keeps the menu open"
+    press(&mut menu, Part::Item, Some("rename"), false);
+    assert!(menu.is_open());
+    // "a disabled submenu trigger never opens its submenu"
+    press(&mut menu, Part::Item, Some("more"), true);
+    assert!(menu.path().is_empty());
+    // "choosing the selected radio item keeps a menu open by default"
+    press(&mut menu, Part::Item, Some("left"), true);
+    press(&mut menu, Part::Item, Some("left"), true);
+    assert!(menu.is_open() && menu.is_on("left"));
+    // "choosing the selected radio item still closes a menu that closes on select"
+    let mut closing = Menu::new(entries()).closing_on_select();
+    press(&mut closing, Part::Trigger, None, true);
+    press(&mut closing, Part::Item, Some("left"), true);
+    assert!(!closing.is_open());
+    press(&mut closing, Part::Trigger, None, true);
+    press(&mut closing, Part::Item, Some("left"), true);
+    assert!(!closing.is_open() && closing.is_on("left"));
+    // "a disabled root trigger is a disabled button that never opens the menu"
+    let mut disabled = Menu::new(entries()).disabled();
+    press(&mut disabled, Part::Trigger, None, true);
+    key(&mut disabled, Key::ArrowDown);
+    assert!(!disabled.is_open());
+    assert!(disabled.semantics(Part::Trigger, None).disabled);
+}
