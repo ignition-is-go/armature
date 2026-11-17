@@ -7,6 +7,7 @@ use crate::primitive::{
     Focusable, Input, Item, PartOf, Primitive, Reaction, Relations, Role, Semantics,
 };
 use crate::roving::{self, Nav};
+use crate::trigger_match::{TriggerRule, find_trigger_match};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Part {
@@ -83,17 +84,19 @@ impl TriggerMenu {
     }
 
     /// The suggestion being asked for: where it starts, its character, and what has
-    /// been typed after it. It must start a word and run to the end of the text.
+    /// been typed after it. The character must start a word, or follow an opening
+    /// bracket or quote, and the query runs to the end of the text. A full-width
+    /// character an input method committed counts as its plain form.
     pub fn query(&self) -> Option<(usize, char, &str)> {
-        let start = self.text.rfind(|ch: char| self.triggers.contains(&ch))?;
-        let trigger = self.text[start..].chars().next()?;
-        let typed = &self.text[start + trigger.len_utf8()..];
-        let starts_word = self.text[..start]
-            .chars()
-            .next_back()
-            .is_none_or(char::is_whitespace);
-        (starts_word && !typed.contains(char::is_whitespace) && self.dismissed != Some(start))
-            .then_some((start, trigger, typed))
+        let rules: Vec<TriggerRule> = self
+            .triggers
+            .iter()
+            .map(|trigger| TriggerRule::new(&trigger.to_string()))
+            .collect();
+        let found = find_trigger_match(&self.text, 0, &rules)?;
+        let (start, written) = self.text.char_indices().nth(found.start)?;
+        let typed = &self.text[start + written.len_utf8()..];
+        (self.dismissed != Some(start)).then_some((start, self.triggers[found.rule], typed))
     }
 
     pub fn is_open(&self) -> bool {

@@ -924,3 +924,199 @@ fn shortcuts() {
     // "a shortcut of a closed popup never runs"
     assert!(!shortcut_allowed(None, None));
 }
+
+// trigger-match.test.ts
+#[test]
+fn trigger_matching() {
+    use armature_core::trigger_match::{
+        Boundary, Dismissed, Spaces, TriggerRule, find_trigger_match, is_at_boundary,
+        is_valid_query, look_behind, map_dismissed, normalize_trigger_text,
+    };
+    let mention = || TriggerRule::new("@");
+    let found = |text: &str, rules: &[TriggerRule], offset: usize| {
+        find_trigger_match(text, offset, rules)
+            .map(|m| format!("{}{}@{}", m.trigger, m.query, m.start))
+    };
+    let matched = |text: &str| found(text, &[mention()], 0);
+    for (text, expected) in [
+        ("@", "@@0"),
+        ("@al", "@al@0"),
+        ("hi @al", "@al@3"),
+        ("hi @José", "@José@3"),
+        ("hi @山田", "@山田@3"),
+        ("@mañana", "@mañana@0"),
+        ("(@al", "@al@1"),
+        ("[@al", "@al@1"),
+        ("\"@al", "@al@1"),
+        ("\u{FFFC}@al", "@al@1"),
+        ("line\n@al", "@al@5"),
+        ("a.b-c_d @x.y-z_w", "@x.y-z_w@8"),
+    ] {
+        assert_eq!(matched(text).as_deref(), Some(expected), "{text:?}");
+    }
+    for text in ["mail@al", "@ al", "@al ", "@al\n", "@a!b", "hello", ""] {
+        assert_eq!(matched(text), None, "{text:?}");
+    }
+    // "the nearest trigger before the caret wins"
+    assert_eq!(matched("@ann @bo").as_deref(), Some("@bo@5"));
+    // "a full-width trigger an input method committed matches"
+    assert_eq!(matched("＠al").as_deref(), Some("@al@0"));
+    assert_eq!(
+        found("x ／m", &[TriggerRule::new("/")], 0).as_deref(),
+        Some("/m@2")
+    );
+    // "boundary start matches only at offset 0, so a leading space escapes it"
+    let command = TriggerRule {
+        boundary: Boundary::Start,
+        ..TriggerRule::new("/")
+    };
+    assert_eq!(
+        found("/mod", &[command.clone()], 0).as_deref(),
+        Some("/mod@0")
+    );
+    assert_eq!(found(" /mod", &[command.clone()], 0), None);
+    assert_eq!(found("a /mod", &[command], 0), None);
+    // "boundary line matches at the start of any line"
+    let line = TriggerRule {
+        boundary: Boundary::Line,
+        ..TriggerRule::new("/")
+    };
+    assert_eq!(
+        found("one\n/x", &[line.clone()], 0).as_deref(),
+        Some("/x@4")
+    );
+    assert_eq!(found("one /x", &[line], 0), None);
+    // "boundary anywhere matches mid-word"
+    assert_eq!(
+        found(
+            "mail@al",
+            &[TriggerRule {
+                boundary: Boundary::Anywhere,
+                ..mention()
+            }],
+            0
+        )
+        .as_deref(),
+        Some("@al@4")
+    );
+    // "spaces allow phrases, and a number caps the words"
+    let phrases = TriggerRule {
+        spaces: Spaces::Any,
+        ..mention()
+    };
+    assert_eq!(
+        found("@next wed", &[phrases.clone()], 0).as_deref(),
+        Some("@next wed@0")
+    );
+    assert_eq!(
+        found("@next ", &[phrases.clone()], 0).as_deref(),
+        Some("@next @0")
+    );
+    assert_eq!(found("@a  b", &[phrases], 0), None);
+    let two = TriggerRule {
+        spaces: Spaces::Words(2),
+        ..mention()
+    };
+    assert_eq!(found("@a b", &[two.clone()], 0).as_deref(), Some("@a b@0"));
+    assert_eq!(
+        found("@a b ", &[two.clone()], 0).as_deref(),
+        Some("@a b @0")
+    );
+    assert_eq!(found("@a b c", &[two], 0), None);
+    // "a multi-character trigger matches"
+    assert_eq!(
+        found("see [[Page", &[TriggerRule::new("[[")], 0).as_deref(),
+        Some("[[Page@4")
+    );
+    // "triggers with regex characters are matched literally"
+    assert_eq!(
+        found("x ]a", &[TriggerRule::new("]")], 0).as_deref(),
+        Some("]a@2")
+    );
+    let lower = TriggerRule {
+        accepts: Some(|ch| ch.is_ascii_lowercase()),
+        ..TriggerRule::new("-")
+    };
+    assert_eq!(found("x -a", &[lower], 0).as_deref(), Some("-a@2"));
+    assert_eq!(
+        found("x .*a", &[TriggerRule::new(".*")], 0).as_deref(),
+        Some(".*a@2")
+    );
+    // "maxLength ends a long query"
+    let short = TriggerRule {
+        max_length: 3,
+        ..mention()
+    };
+    assert_eq!(found("@abcd", &[short.clone()], 0), None);
+    assert_eq!(found("@abc", &[short], 0).as_deref(), Some("@abc@0"));
+    // "the offset says where the text starts, and an unknown character before it is no boundary"
+    assert_eq!(found(" @al", &[mention()], 10).as_deref(), Some("@al@11"));
+    assert_eq!(found("@al", &[mention()], 10), None);
+    // "a token reads as U+FFFC and ends a query"
+    assert_eq!(matched("@al\u{FFFC}b"), None);
+    // "reports which rule matched"
+    assert_eq!(
+        find_trigger_match("hi /x", 0, &[mention(), TriggerRule::new("/")])
+            .unwrap()
+            .rule,
+        1
+    );
+    // "isValidQuery and isAtBoundary"
+    assert!(is_valid_query("", &mention()));
+    let chars = |text: &str| text.chars().collect::<Vec<_>>();
+    assert!(is_at_boundary(&chars("a @"), 2, 0, Boundary::Word));
+    assert!(!is_at_boundary(&chars("a@"), 1, 0, Boundary::Word));
+    assert_eq!(
+        look_behind(&[
+            mention(),
+            TriggerRule {
+                max_length: 80,
+                ..TriggerRule::new("[[")
+            }
+        ]),
+        83
+    );
+    assert_eq!(normalize_trigger_text("＠＃／"), "@#/");
+    // mapDismissed
+    let dismissed = Dismissed {
+        trigger: "@".into(),
+        start: 3,
+        end: 6,
+    };
+    let at = |start, end| {
+        Some(Dismissed {
+            trigger: "@".into(),
+            start,
+            end,
+        })
+    };
+    assert_eq!(map_dismissed(&dismissed, 0, 0, 2), at(5, 8));
+    assert_eq!(map_dismissed(&dismissed, 0, 2, 0), at(1, 4));
+    assert_eq!(map_dismissed(&dismissed, 6, 6, 3), at(3, 9));
+    assert_eq!(map_dismissed(&dismissed, 5, 6, 0), at(3, 5));
+    assert_eq!(map_dismissed(&dismissed, 3, 4, 0), None);
+    assert_eq!(map_dismissed(&dismissed, 2, 4, 1), None);
+    assert_eq!(map_dismissed(&dismissed, 10, 12, 5), at(3, 6));
+    // "random edits never leave a range that ends before its trigger"
+    let mut seed: u64 = 7;
+    let mut random = || {
+        seed = (seed * 1_103_515_245 + 12_345) % (1 << 31);
+        seed as f64 / (1u64 << 31) as f64
+    };
+    for _ in 0..2000 {
+        let mut range = Some(Dismissed {
+            trigger: "@".into(),
+            start: 5,
+            end: 9,
+        });
+        for _ in 0..10 {
+            let Some(current) = range.clone() else { break };
+            let start = (random() * 20.0) as usize;
+            let end = start + (random() * 4.0) as usize;
+            range = map_dismissed(&current, start, end, (random() * 4.0) as usize);
+            if let Some(range) = &range {
+                assert!(range.end >= range.start + 1);
+            }
+        }
+    }
+}
