@@ -16,11 +16,13 @@ gestures at once.
 3. **Compose behaviors. Do not rewrite them.** The table below lists them.
 4. **Implement `Primitive`.**
    - `parts()` lists every part. `is_item` marks the parts rendered once per item.
-   - `semantics(part, item)` returns role, selected, checked, expanded, level, range,
-     hidden, modal, disabled, focusable and active. A focusable part receives presses
+   - `semantics(part, item)` returns role, selected, checked, mixed, pressed,
+     current, invalid, obscured, expanded, level, range, hidden, findable, modal,
+     disabled, focusable and active. A focusable part receives presses
      and keys. Make exactly one item of a composite control a `TabStop`.
-   - `send(input, gate)` handles `Key`, `Press`, `Focus`, `Blur`, `Found`,
-     `PressOutside`, `Tick`, `Text`, `Hover`, `Scrolled` and `Paste`. `Blur` arrives
+   - `send(input, gate)` handles `Key`, `Press`, `Focus`, `Blur`, `Found`, `Loaded`,
+     `Files`, `DragOver`, `PressOutside`, `WindowBlur`, `Tick`, `Text`, `Hover`,
+     `Scrolled` and `Paste`. `Blur` arrives
      when focus leaves the primitive, not when it moves between its parts. `Found`
      arrives when find-in-page matches inside a hidden part whose semantics set
      `findable`. Return `handled: true` only when the platform default must be suppressed.
@@ -31,6 +33,13 @@ gestures at once.
    - `hovers(part)` asks for `Hover` inputs. `scrolls(part)` asks for `Scrolled`
      inputs and makes the adapter carry out `Effect::ScrollTo`. Return the offset you
      want from `wanted_scroll` too, so an agent action can scroll.
+   - `drops(part)` asks for `DragOver` and `Files` when files are dragged onto a
+     part. Return `Effect::PickFiles` to show the platform's file picker.
+   - `wake_after()` asks for a `Tick` that nothing else will bring, such as after
+     the owner set a value that starts a timer.
+   - To build on another primitive, hold it as a field and hand it inputs with
+     `Input::for_parts` and `Reaction::for_parts`. `date_picker.rs` and `menubar.rs`
+     show how.
    - `text(part, item)` gives the text of a part the person types into. Its role must
      be `TextBox` or `SpinButton`.
    - `popup_of(part)` returns a `Placement` for a popup part. `relations(part)` links

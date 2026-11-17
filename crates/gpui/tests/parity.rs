@@ -8,9 +8,11 @@ use armature_core::data_grid::{self, DataGrid};
 use armature_core::dialog::{self, Dialog};
 use armature_core::editable::{self, Editable};
 use armature_core::keys::Dir;
+use armature_core::menu::{self, Entry, Kind as EntryKind, Menu};
 use armature_core::picker::{self, Picker};
 use armature_core::popover::{self, Popover};
 use armature_core::primitive::{Item, Primitive};
+use armature_core::text_field::{self, Kind as FieldKind, TextField};
 use armature_core::toast::{self, Toast, Toaster};
 use armature_core::toggle::{self, Toggle};
 use armature_core::tooltip::{self, Tooltip};
@@ -532,4 +534,110 @@ fn a_toast_set_from_outside_starts_its_own_clock_and_leaves(cx: &mut TestAppCont
         toaster.read_with(cx, |m, _| m.value().is_empty()),
         "its five seconds are up"
     );
+}
+
+#[gpui::test]
+fn a_menu_drills_into_a_submenu_and_back_without_losing_focus(cx: &mut TestAppContext) {
+    let entries = vec![
+        Entry::action("new", "New file"),
+        Entry::action("share", "Share").of(EntryKind::Submenu),
+        Entry::action("email", "Email").inside("share"),
+    ];
+    let ran = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let heard = ran.clone();
+    let (page, cx) = cx.add_window_view(|_, cx| Page {
+        machine: cx.new(|cx| {
+            Machine::new(Menu::new(entries), "Actions", Vec::<Item>::new(), cx).on_value_change(
+                move |change, _| {
+                    heard.borrow_mut().extend(change.value.iter().cloned());
+                    true
+                },
+            )
+        }),
+        draw: Box::new(|menu: &Entity<Machine<Menu>>, cx: &mut App| {
+            let shown: Vec<String> = menu
+                .read(cx)
+                .primitive()
+                .shown()
+                .iter()
+                .map(|entry| entry.key.clone())
+                .collect();
+            menu.update(cx, |m, cx| m.track(menu::Part::Item, shown.clone(), cx));
+            div()
+                .child(part(menu, menu::Part::Trigger, None, cx).size(px(ROW)))
+                .child(
+                    part(menu, menu::Part::Content, None, cx).children(
+                        shown
+                            .iter()
+                            .map(|key| part(menu, menu::Part::Item, Some(key), cx).h(px(ROW)))
+                            .collect::<Vec<_>>(),
+                    ),
+                )
+                .into_any_element()
+        }),
+    });
+    let menu = page.update(cx, |page, _| page.machine.clone());
+    cx.update(|window, _| window.activate_window());
+    cx.run_until_parked();
+    let focused = |cx: &mut VisualTestContext, key: &str| {
+        menu.update_in(cx, |m, window, _| {
+            m.focus_handle(menu::Part::Item, Some(key))
+                .is_some_and(|handle| handle.is_focused(window))
+        })
+    };
+
+    focus(&menu, cx, menu::Part::Trigger, None);
+    cx.simulate_keystrokes("down down right");
+    cx.run_until_parked();
+    assert!(focused(cx, "email"), "inside the submenu");
+    assert!(menu.read_with(cx, |m, _| m.primitive().is_open()));
+    cx.simulate_keystrokes("escape");
+    cx.run_until_parked();
+    assert!(focused(cx, "share"), "back on the entry that opened it");
+    cx.simulate_keystrokes("up enter");
+    cx.run_until_parked();
+    assert_eq!(*ran.borrow(), ["run:new"]);
+    assert!(is_focused(&menu, cx, menu::Part::Trigger));
+}
+
+#[gpui::test]
+fn a_text_field_shows_its_problem_once_it_is_left(cx: &mut TestAppContext) {
+    struct Both {
+        email: Entity<Machine<TextField>>,
+        other: Entity<Machine<Toggle>>,
+    }
+    impl Render for Both {
+        fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .child(part(&self.email, text_field::Part::Input, None, cx).size(px(ROW)))
+                .child(part(&self.email, text_field::Part::Error, None, cx).size(px(ROW)))
+                .child(part(&self.other, toggle::Part::Root, None, cx).size(px(ROW)))
+        }
+    }
+    let (page, cx) = cx.add_window_view(|_, cx| Both {
+        email: cx.new(|cx| {
+            let field = TextField::new(FieldKind::Text).validate(|text| {
+                (!text.contains('@')).then(|| "Enter an email address.".to_string())
+            });
+            Machine::new(field, "Email", Vec::<Item>::new(), cx)
+        }),
+        other: cx.new(|cx| Machine::new(Toggle::default(), "Other", Vec::<Item>::new(), cx)),
+    });
+    let (email, other) = page.update(cx, |page, _| (page.email.clone(), page.other.clone()));
+    cx.update(|window, _| window.activate_window());
+    cx.run_until_parked();
+
+    focus(&email, cx, text_field::Part::Input, None);
+    cx.simulate_keystrokes("a d a");
+    assert_eq!(email.read_with(cx, |m, _| m.value()), ["ada"]);
+    assert!(
+        email.read_with(cx, |m, _| m.semantics(text_field::Part::Error, None).hidden),
+        "not while typing"
+    );
+    focus(&other, cx, toggle::Part::Root, None);
+    cx.simulate_keystrokes("space");
+    assert!(!email.read_with(cx, |m, _| m.semantics(text_field::Part::Error, None).hidden));
+    assert!(email.read_with(cx, |m, _| {
+        m.semantics(text_field::Part::Input, None).invalid
+    }));
 }

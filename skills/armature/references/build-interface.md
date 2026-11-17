@@ -37,6 +37,29 @@ Each lives in `armature_core::<module>` and exports a `Part` enum.
 | Hold button | `hold_button` | `Root` | None. Offers `confirmed` to the gate once held. Draw progress from `progress(now_ms)`. |
 | Transfer list | `transfer_list` | `Available`, `Chosen`, `Option`, `Add`, `Remove` | The chosen keys. Build it with `TransferList::new(keys)` and draw each list from `list(chosen)`. |
 | Wheel picker | `picker` | `Viewport`, `Option` | The option in the middle. Pad the content so the first and last options can reach the middle. |
+| Button | `button` | `Root` | None. A press offers `pressed` to the gate. Set `["pending"]` while its action runs. |
+| Checkbox | `checkbox` (`Checkbox`) | `Root`, `Indicator` | `["on"]`, `["indeterminate"]` or empty. |
+| Checkbox group | `checkbox` (`CheckboxGroup`) | `GroupPart::Root`, `All`, `Option` | The checked keys. `All` checks or clears every box. |
+| Toggle and toggle group | `toggle_group` | `Root`, `Toggle` | The keys of the toggles that are down. |
+| Collapsible | `collapsible` | `Trigger`, `Panel` | `["open"]` or empty. |
+| Meter, progress, separator | `gauge` (`Meter`, `Progress`, `Separator`) | `Root`, `Track`, `Indicator`, `Label`, `Value` | The number. Read-only: the owner sets it. |
+| Avatar | `avatar` | `Root`, `Image`, `Fallback` | None. Put the picture inside `Image`. Read `status()`. |
+| Pagination | `pagination` | `Root`, `First`, `Previous`, `Page`, `Next`, `Last` | The page, from 1. Draw the row from `range()`. |
+| Text field, password, multi-line, label and field | `text_field` | `Root`, `Label`, `Input`, `Description`, `Error`, `Clear`, `Reveal` | The text. A submit arrives with `Reason::Keyboard`. Fill `Error` from `error()`. |
+| Combobox and autocomplete | `combobox` | `Input`, `List`, `Option`, `Chip`, `Clear`, `Empty` | The chosen keys, or the text with `custom`. Render every option: the primitive hides those that do not match. |
+| Menu | `menu` | `Trigger`, `Content`, `Item` | The checked entries, with `group=key` for radios. Running an action offers `run:<key>`. Draw the entries of `shown()`. |
+| Menubar | `menubar` | `Root`, `Trigger`, `Content`, `Item` | As a menu, with entries keyed `menu/entry`. Draw each menu from `shown(menu)`. |
+| Navigation menu | `navigation_menu` | `Root`, `Trigger`, `Link`, `Panel` | The open panel. Following a link offers `link:<key>`. |
+| Hover card | `tooltip` (`Tooltip::hover_card()`) | `Trigger`, `Content` | None. |
+| Trigger menu (mentions, commands) | `trigger_menu` | `Input`, `List`, `Option`, `Empty` | The text. Key each option with its trigger character, such as `@ada`. |
+| Toasts | `toast` (`Toaster`) | `Region`, `Toast`, `Title`, `Description`, `Action`, `Close` | The toasts, each from `Toast::encode`. You add to the value. The toaster offers the list without a toast when it goes. Draw from `visible()`. |
+| Date input | `date_input` | `Root`, `Segment` | `YYYY-MM-DD`, with `THH:MM` for a time. Key segments `year`, `month`, `day`, `hour`, `minute`. |
+| Date picker | `date_picker` | `Segment`, `Trigger`, `Content`, `Grid`, `Day`, `PreviousMonth`, `NextMonth` | `YYYY-MM-DD`. Draw days from `calendar().weeks()`. |
+| Carousel | `carousel` | `Root`, `Viewport`, `Slide`, `Previous`, `Next`, `Indicator`, `Play` | The slide on show. Move the strip by `position()`. |
+| Scroll area | `scroll_area` | `Root`, `Viewport`, `Scrollbar`, `Thumb` | None. Place the grip with `thumb(track_length)`. |
+| Image cropper | `image_cropper` | `Area`, `Selection`, `Handle` | `x,y,width,height` in the picture's pixels. Place the selection with `fractions()`. Key handles by compass point. |
+| File input | `file_input` | `Dropzone`, `Trigger`, `List`, `File`, `Remove` | The file names. Draw from `files()`, and `rejected()` says what was turned away. |
+| Waterfall | `waterfall` | `Root`, `Row`, `Bar`, `Axis` | The selected span. Draw from `rows()`, `bar(key)` and `ticks(most)`. |
 
 A part marked as an item part (`Primitive::is_item`) is rendered once per item and takes
 that item's key. Some other parts also take a key: a tab's panel, an accordion's panel,
@@ -91,6 +114,9 @@ view! {
 - An accordion built with `findable: true` hides its panels with
   `hidden="until-found"`, so find-in-page searches them and opens the one it matches.
 - `use_shortcut("mod+k", action)` runs an action from anywhere on the page.
+- `chosen_file(name)` returns the browser `File` behind a name in a file input's
+  value, to read or upload.
+- A picture inside a part reports loading and failure to the primitive by itself.
 - `LocalStorage` and `CookieStorage` keep a `Preference` between visits.
   `armature_core::preference::preferences_script` writes the script for the page head
   that applies stored choices before the first paint. `system_prefers_dark()` resolves
@@ -131,8 +157,14 @@ div()
 - Render `live_region(&machine, cx)` once in the view that owns a machine that
   announces, such as a sortable list. It carries the latest announcement to a screen
   reader. The `Machine` also emits `Announcement` events if you want them yourself.
-- GPUI's own key bindings and actions are the way to bind shortcuts. The adapter adds
-  none.
+- GPUI's own key bindings and actions are the way to bind shortcuts.
+  `binding_for(&Shortcut)` turns one written as `mod+shift+k` into the text
+  `KeyBinding::new` takes.
+- Parts that name, control or describe one another are linked in the accessibility
+  tree for you.
+- A file dropped on a part that takes drops, or chosen in the picker, arrives with
+  its path. Call `machine.loaded(part, ok, window, cx)` when a picture inside a part
+  loads or fails, since GPUI's `img` does not report it.
 - Tab traversal is the application's job. Bind `tab` and `shift-tab` to actions that
   call `window.focus_next(cx)` and `window.focus_prev(cx)`, as `examples/gpui-demo`
   does. While a modal part is shown, Tab cycles among that primitive's own parts. Other
