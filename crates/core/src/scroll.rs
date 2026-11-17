@@ -109,7 +109,7 @@ impl Default for StickToBottom {
     fn default() -> Self {
         StickToBottom {
             following: true,
-            slack: 8.0,
+            slack: 24.0,
         }
     }
 }
@@ -154,11 +154,17 @@ pub fn picker_settle(offset: f64, velocity: f64, item_size: f64, count: usize) -
     )
 }
 
+/// How far in from an edge a drag starts scrolling.
+pub const EDGE_ZONE: f64 = 48.0;
+/// The fastest a drag at the edge scrolls, in units per second.
+pub const EDGE_SPEED: f64 = 1080.0;
+
 /// How fast to scroll a container, in units per second on each axis, while a drag is
 /// at `at`. Scrolling starts within `zone` of an edge and speeds up towards it.
 pub fn edge_scroll(container: Rect, at: Point, zone: f64, max_speed: f64) -> Point {
     let axis = |position: f64, start: f64, end: f64| {
-        let zone = zone.min((end - start) / 2.0).max(f64::MIN_POSITIVE);
+        // A small container gets a narrower band, never more than a third of it.
+        let zone = zone.min((end - start) / 3.0).max(f64::MIN_POSITIVE);
         if position < start + zone {
             -max_speed * ((start + zone - position) / zone).min(1.0)
         } else if position > end - zone {
@@ -231,7 +237,7 @@ mod tests {
         assert_eq!(log.content_grew(100.0, 500.0), Some(400.0));
         log.scrolled(200.0, 100.0, 500.0);
         assert_eq!(log.content_grew(100.0, 600.0), None);
-        log.scrolled(497.0, 100.0, 600.0);
+        log.scrolled(480.0, 100.0, 600.0);
         assert!(log.is_following(), "back within reach of the bottom");
     }
 

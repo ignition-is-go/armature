@@ -105,14 +105,10 @@ pub enum ReorderStep {
 pub fn reorder_message(step: ReorderStep, label: &str, reorder: Reorder, count: usize) -> String {
     let (from, to) = (reorder.from + 1, reorder.to + 1);
     match step {
-        ReorderStep::Grabbed => format!(
-            "{label} grabbed, position {from} of {count}. Use the arrow keys to move, Space to drop, Escape to cancel."
-        ),
-        ReorderStep::Moved => format!("{label} moved to position {to} of {count}."),
-        ReorderStep::Dropped => format!("{label} dropped at position {to} of {count}."),
-        ReorderStep::Cancelled => {
-            format!("Reorder cancelled. {label} returned to position {from} of {count}.")
-        }
+        ReorderStep::Grabbed => format!("Picked up {label}, position {from} of {count}."),
+        ReorderStep::Moved => format!("{label}, position {to} of {count}."),
+        ReorderStep::Dropped => format!("Dropped {label} at position {to} of {count}."),
+        ReorderStep::Cancelled => format!("Moved {label} back to position {from} of {count}."),
     }
 }
 
@@ -180,6 +176,6 @@ mod tests {
     #[test]
     fn messages_speak_positions_from_one() {
         let moved = reorder_message(ReorderStep::Moved, "Milk", Reorder { from: 0, to: 2 }, 4);
-        assert_eq!(moved, "Milk moved to position 3 of 4.");
+        assert_eq!(moved, "Milk, position 3 of 4.");
     }
 }

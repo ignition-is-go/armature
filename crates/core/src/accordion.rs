@@ -21,6 +21,8 @@ pub struct Options {
     pub multiple: bool,
     /// Whether the last open section may be closed.
     pub collapsible: bool,
+    /// Whether find-in-page searches closed sections and opens the one it matches.
+    pub findable: bool,
 }
 
 const ACTIONS: &[&str] = &["open", "close", "toggle"];
@@ -140,6 +142,7 @@ impl Primitive for Accordion {
             Part::Panel => Semantics {
                 role: Some(Role::Region),
                 hidden: !open,
+                findable: self.opts.findable,
                 ..Default::default()
             },
         }
@@ -157,6 +160,13 @@ impl Primitive for Accordion {
             } if self.items.is_enabled(&key) => {
                 self.set(&key, !self.is_open(&key), Source::User, Reason::Press, gate);
                 Reaction::item(Part::Trigger, true, Some(key))
+            }
+            Input::Found {
+                part: Part::Panel,
+                item: Some(key),
+            } if self.opts.findable => {
+                self.set(&key, true, Source::User, Reason::Keyboard, gate);
+                Reaction::handled()
             }
             Input::Focus { item, .. } => {
                 self.focused = item;
@@ -302,6 +312,7 @@ mod tests {
         let mut accordion = accordion(Options {
             multiple: true,
             collapsible: true,
+            findable: false,
         });
         press(&mut accordion, "returns");
         press(&mut accordion, "shipping");
@@ -337,6 +348,23 @@ mod tests {
         accordion
             .act("toggle", Some("returns"), &mut |_| true)
             .unwrap();
+        assert_eq!(accordion.value(), ["returns"]);
+    }
+
+    #[test]
+    fn a_find_in_page_match_inside_a_closed_section_opens_it() {
+        let mut accordion = accordion(Options {
+            findable: true,
+            ..Default::default()
+        });
+        assert!(accordion.semantics(Part::Panel, Some("returns")).findable);
+        accordion.send(
+            Input::Found {
+                part: Part::Panel,
+                item: Some("returns".into()),
+            },
+            &mut |_| true,
+        );
         assert_eq!(accordion.value(), ["returns"]);
     }
 

@@ -284,7 +284,8 @@ impl Primitive for Sheet {
                 if self.grabbed.take().is_none() {
                     return Reaction::default();
                 }
-                let landing = self.landing(self.height, self.speed.velocity());
+                let landing =
+                    self.landing(self.height, self.speed.velocity_at(pointer.now_ms as f64));
                 if self.settle(landing, Source::User, Reason::Drag, gate) && landing.is_none() {
                     return Reaction::focusing(Part::Trigger);
                 }

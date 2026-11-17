@@ -175,6 +175,20 @@ impl Tree {
         next
     }
 
+    /// The checked nodes as `strategy` reports them, in display order.
+    pub fn checked_value(&self, checked: &HashSet<String>, strategy: CheckStrategy) -> Vec<String> {
+        let states = self.checked_states(checked);
+        let full = |at: usize| states.get(&self.nodes[at].key) == Some(&Checked::Checked);
+        (0..self.nodes.len())
+            .filter(|at| match strategy {
+                CheckStrategy::Leaf => self.nodes[*at].children.is_empty() && full(*at),
+                CheckStrategy::Branch => full(*at),
+                CheckStrategy::Trunk => full(*at) && !self.nodes[*at].parent.is_some_and(full),
+            })
+            .map(|at| self.nodes[at].key.clone())
+            .collect()
+    }
+
     fn roots(&self) -> Vec<usize> {
         (0..self.nodes.len())
             .filter(|at| self.nodes[*at].parent.is_none())
@@ -278,6 +292,123 @@ pub fn tree_reorder_message(label: &str, target: &str, position: DropPosition) -
         DropPosition::After => format!("{label} moved after {target}."),
         DropPosition::Inside => format!("{label} moved into {target}."),
     }
+}
+
+/// How far sideways a dragged row moves to change depth by one level.
+pub const TREE_INDENT: f64 = 24.0;
+
+/// The depth a dragged row lands at. Dragging sideways changes it one level per
+/// `indent`. It can be no deeper than a child of the row above, and no shallower than
+/// the row below, which would otherwise be adopted. Depths start at 1.
+pub fn drop_depth(
+    start: usize,
+    sideways: f64,
+    indent: f64,
+    above: Option<usize>,
+    below: Option<usize>,
+) -> usize {
+    let wanted = start as f64 + (sideways / indent.max(f64::MIN_POSITIVE)).round();
+    let deepest = above.map_or(1, |above| above + 1);
+    let shallowest = below.unwrap_or(1).min(deepest);
+    (wanted.max(1.0) as usize).clamp(shallowest, deepest)
+}
+
+/// Where a row dropped at `slot` among `rows`, at `depth`, belongs: its parent and its
+/// place among that parent's children. `rows` are the rows on screen without the row
+/// being moved or anything beneath it.
+pub fn slot_target(
+    rows: &[Row],
+    slot: usize,
+    depth: usize,
+    tree: &Tree,
+) -> (Option<String>, usize) {
+    let above = &rows[..slot.min(rows.len())];
+    // The parent is the nearest row above that is one level shallower.
+    let parent = above
+        .iter()
+        .rev()
+        .find(|row| row.level < depth)
+        .filter(|row| row.level + 1 == depth);
+    let siblings: Vec<&str> = match parent {
+        Some(parent) => tree.children(&parent.key),
+        None => tree
+            .roots()
+            .into_iter()
+            .map(|at| tree.nodes[at].key.as_str())
+            .collect(),
+    };
+    let before = above
+        .iter()
+        .filter(|row| siblings.contains(&row.key.as_str()))
+        .count();
+    (parent.map(|parent| parent.key.clone()), before)
+}
+
+/// Moves node `key`, with everything beneath it, to be child number `index` of
+/// `parent`, or a root when there is none. Returns `false` and changes nothing if
+/// either is missing or `parent` is inside the moved subtree.
+pub fn place_node(
+    items: &mut Vec<TreeItem>,
+    key: &str,
+    parent: Option<&str>,
+    index: usize,
+) -> bool {
+    fn contains(item: &TreeItem, key: &str) -> bool {
+        item.key == key || item.children.iter().any(|child| contains(child, key))
+    }
+    fn find<'a>(items: &'a [TreeItem], key: &str) -> Option<&'a TreeItem> {
+        items.iter().find_map(|item| {
+            if item.key == key {
+                Some(item)
+            } else {
+                find(&item.children, key)
+            }
+        })
+    }
+    fn take(items: &mut Vec<TreeItem>, key: &str) -> Option<TreeItem> {
+        if let Some(at) = items.iter().position(|item| item.key == key) {
+            return Some(items.remove(at));
+        }
+        items
+            .iter_mut()
+            .find_map(|item| take(&mut item.children, key))
+    }
+    fn children_of<'a>(items: &'a mut Vec<TreeItem>, key: &str) -> Option<&'a mut Vec<TreeItem>> {
+        for item in items.iter_mut() {
+            if item.key == key {
+                return Some(&mut item.children);
+            }
+            if let Some(found) = children_of(&mut item.children, key) {
+                return Some(found);
+            }
+        }
+        None
+    }
+
+    let Some(node) = find(items, key) else {
+        return false;
+    };
+    if parent.is_some_and(|parent| contains(node, parent) || find(items, parent).is_none()) {
+        return false;
+    }
+    let node = take(items, key).expect("found above");
+    let siblings = match parent {
+        Some(parent) => children_of(items, parent).expect("found above"),
+        None => items,
+    };
+    siblings.insert(index.min(siblings.len()), node);
+    true
+}
+
+/// Which nodes stand for a checked set.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CheckStrategy {
+    /// The checked leaves.
+    Leaf,
+    /// Every node that is fully checked.
+    Branch,
+    /// Only the outermost fully checked nodes.
+    Trunk,
 }
 
 /// Builds a tree from slash-separated paths. Each node's key is its full path and its
@@ -445,5 +576,79 @@ mod tests {
         assert_eq!(drop_position(0.9, true), DropPosition::After);
         assert_eq!(drop_position(0.4, false), DropPosition::Before);
         assert_eq!(drop_position(0.6, false), DropPosition::After);
+    }
+
+    #[test]
+    fn dragging_sideways_changes_depth_within_what_the_neighbours_allow() {
+        assert_eq!(
+            drop_depth(1, 30.0, TREE_INDENT, Some(1), None),
+            2,
+            "one level in, under the row above"
+        );
+        assert_eq!(
+            drop_depth(1, 500.0, TREE_INDENT, Some(1), None),
+            2,
+            "no deeper than its child"
+        );
+        assert_eq!(
+            drop_depth(3, -500.0, TREE_INDENT, Some(3), Some(2)),
+            2,
+            "no shallower than the row below"
+        );
+        assert_eq!(
+            drop_depth(2, 0.0, TREE_INDENT, None, Some(1)),
+            1,
+            "nothing above means the top level"
+        );
+    }
+
+    #[test]
+    fn a_slot_and_depth_resolve_to_a_parent_and_a_place() {
+        let items = tree_from_paths(&[
+            "src/main.rs",
+            "src/ui/button.rs",
+            "docs/intro.md",
+            "README.md",
+        ]);
+        let tree = Tree::new(&items);
+        let expanded: HashSet<String> = ["src", "docs"].iter().map(|k| k.to_string()).collect();
+        let rows: Vec<Row> = tree
+            .visible_rows(&expanded)
+            .into_iter()
+            .filter(|row| row.key != "README.md")
+            .collect();
+        // Rows: src, src/main.rs, src/ui, docs, docs/intro.md.
+        assert_eq!(slot_target(&rows, 5, 2, &tree), (Some("docs".into()), 1));
+        assert_eq!(slot_target(&rows, 5, 1, &tree), (None, 2));
+        assert_eq!(slot_target(&rows, 1, 2, &tree), (Some("src".into()), 0));
+        assert_eq!(slot_target(&rows, 0, 1, &tree), (None, 0));
+    }
+
+    #[test]
+    fn a_node_is_placed_under_a_parent_at_an_index() {
+        let mut items = tree_from_paths(&["src/main.rs", "src/ui/button.rs", "README.md"]);
+        assert!(place_node(&mut items, "README.md", Some("src"), 1));
+        assert_eq!(
+            Tree::new(&items).children("src"),
+            ["src/main.rs", "README.md", "src/ui"]
+        );
+        assert!(place_node(&mut items, "src/ui", None, 0));
+        assert_eq!(items[0].key, "src/ui");
+        assert!(
+            !place_node(&mut items, "src", Some("src/main.rs"), 0),
+            "not into its own subtree"
+        );
+    }
+
+    #[test]
+    fn a_checked_set_can_be_reported_by_leaf_branch_or_trunk() {
+        let tree = tree();
+        let checked = set(&["src/main.rs", "src/ui/button.rs", "src/ui/menu.rs"]);
+        assert_eq!(
+            tree.checked_value(&checked, CheckStrategy::Leaf),
+            ["src/main.rs", "src/ui/button.rs", "src/ui/menu.rs"]
+        );
+        assert_eq!(tree.checked_value(&checked, CheckStrategy::Trunk), ["src"]);
+        assert_eq!(tree.checked_value(&checked, CheckStrategy::Branch).len(), 5);
     }
 }

@@ -96,6 +96,14 @@ fn inputs<P: Primitive>(items: &[Item]) -> Vec<Input<P::Part>> {
             item: item.clone(),
             value: "12".into(),
         });
+        all.push(Input::Blur {
+            part,
+            item: item.clone(),
+        });
+        all.push(Input::Found {
+            part,
+            item: item.clone(),
+        });
         all.push(Input::Hover {
             part,
             item: item.clone(),
@@ -443,6 +451,7 @@ mod tests {
                     Accordion::new(accordion::Options {
                         multiple,
                         collapsible,
+                        findable: true,
                     })
                 },
                 &mixed(),

@@ -1,8 +1,12 @@
 //! The arithmetic behind gestures: how fast a pointer is moving, where a flick will
 //! land, how a spring settles, and how far to give when pulled past an edge.
 
-/// Samples older than this are too stale to describe the current motion.
-const WINDOW_MS: f64 = 100.0;
+/// How far back samples count, so a fast flick after a slow drag is not diluted.
+const WINDOW_MS: f64 = 70.0;
+/// How old the newest sample may be before the pointer counts as stopped.
+const STOPPED_MS: f64 = 40.0;
+/// The fastest the tracker reads, in units per second either way.
+const MAX_SPEED: f64 = 8000.0;
 
 /// Measures velocity from recent positions along one axis.
 #[derive(Clone, Debug, Default)]
@@ -16,10 +20,41 @@ impl VelocityTracker {
         self.samples.retain(|(time, _)| time_ms - time <= WINDOW_MS);
     }
 
-    /// Units per second over the recent window. Zero without two samples apart in time.
+    /// Units per second as of the newest sample: the slope of a line fitted to the
+    /// recent samples. Zero without two samples apart in time.
     pub fn velocity(&self) -> f64 {
-        match (self.samples.first(), self.samples.last()) {
-            (Some((t0, p0)), Some((t1, p1))) if t1 > t0 => (p1 - p0) / (t1 - t0) * 1000.0,
+        let count = self.samples.len() as f64;
+        if count < 2.0 {
+            return 0.0;
+        }
+        let mean_time = self.samples.iter().map(|(time, _)| time).sum::<f64>() / count;
+        let mean_position = self
+            .samples
+            .iter()
+            .map(|(_, position)| position)
+            .sum::<f64>()
+            / count;
+        let spread: f64 = self
+            .samples
+            .iter()
+            .map(|(time, _)| (time - mean_time).powi(2))
+            .sum();
+        if spread == 0.0 {
+            return 0.0;
+        }
+        let slope: f64 = self
+            .samples
+            .iter()
+            .map(|(time, position)| (time - mean_time) * (position - mean_position))
+            .sum::<f64>()
+            / spread;
+        (slope * 1000.0).clamp(-MAX_SPEED, MAX_SPEED)
+    }
+
+    /// The velocity at release. A pointer that stopped before letting go reads zero.
+    pub fn velocity_at(&self, now_ms: f64) -> f64 {
+        match self.samples.last() {
+            Some((newest, _)) if now_ms - newest <= STOPPED_MS => self.velocity(),
             _ => 0.0,
         }
     }
@@ -120,6 +155,28 @@ mod tests {
             close(tracker.velocity(), 200.0),
             "the old fast stretch is forgotten"
         );
+    }
+
+    #[test]
+    fn a_pointer_that_stopped_before_release_has_no_velocity() {
+        let mut tracker = VelocityTracker::default();
+        tracker.push(0.0, 0.0);
+        tracker.push(20.0, 40.0);
+        assert!(close(tracker.velocity_at(30.0), 2000.0));
+        assert_eq!(tracker.velocity_at(100.0), 0.0);
+    }
+
+    #[test]
+    fn velocity_is_fitted_across_samples_and_capped() {
+        let mut steady = VelocityTracker::default();
+        for step in 0..5 {
+            steady.push(step as f64 * 10.0, step as f64 * 5.0);
+        }
+        assert!(close(steady.velocity(), 500.0));
+        let mut wild = VelocityTracker::default();
+        wild.push(0.0, 0.0);
+        wild.push(1.0, 10_000.0);
+        assert_eq!(wild.velocity(), 8000.0);
     }
 
     #[test]

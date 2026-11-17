@@ -13,6 +13,8 @@ pub enum Key {
     Escape,
     Tab,
     Backspace,
+    /// Conventionally starts editing the focused item.
+    F2,
     Char(char),
 }
 

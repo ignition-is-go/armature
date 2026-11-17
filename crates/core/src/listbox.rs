@@ -71,6 +71,12 @@ impl Listbox {
                 self.select(&key, mods, Reason::Keyboard, gate);
                 Reaction::item(Part::Option, true, None)
             }
+            Key::Char('a' | 'A') if mods.ctrl && self.opts.mode == Mode::Multiple => {
+                let order = self.items.enabled_keys();
+                let next = selection::toggle_all(self.opts.mode, &self.selected, &order);
+                self.commit(next, Source::User, Reason::Keyboard, gate);
+                Reaction::handled()
+            }
             Key::Char(ch) if !mods.ctrl => {
                 let labels: Vec<(&str, bool)> = self
                     .items

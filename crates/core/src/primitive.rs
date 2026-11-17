@@ -34,6 +34,10 @@ pub enum Input<Part> {
     },
     /// Focus landed on a part by some route other than a `Reaction`.
     Focus { part: Part, item: Option<String> },
+    /// Focus left a part for somewhere outside the primitive.
+    Blur { part: Part, item: Option<String> },
+    /// The platform's find-in-page matched text inside a hidden part.
+    Found { part: Part, item: Option<String> },
     /// A press landed outside every part of this primitive.
     PressOutside,
     /// The time asked for by `Effect::Wake` has arrived.
@@ -166,6 +170,15 @@ impl<Part> Reaction<Part> {
         })
     }
 
+    /// Announces at once, interrupting what is being read. For something the person
+    /// is in the middle of doing, such as moving an item.
+    pub fn alerting(self, message: impl Into<String>) -> Self {
+        self.with(Effect::Announce {
+            message: message.into(),
+            assertive: true,
+        })
+    }
+
     pub fn focus_item(&self) -> Option<&str> {
         self.focus.as_ref()?.item.as_deref()
     }
@@ -237,6 +250,9 @@ pub struct Semantics {
     pub orientation: Option<Orientation>,
     pub disabled: bool,
     pub hidden: bool,
+    /// While hidden, the platform's find-in-page may still search this part, and
+    /// reports a match as `Input::Found`.
+    pub findable: bool,
     /// Keeps Tab inside this part while it is shown, as a modal dialog must.
     pub modal: bool,
     pub focusable: Focusable,

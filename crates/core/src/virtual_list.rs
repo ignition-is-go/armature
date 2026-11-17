@@ -26,7 +26,7 @@ pub struct VirtualRow {
 }
 
 const ACTIONS: &[&str] = &["select", "scroll_to"];
-const OVERSCAN: usize = 3;
+const OVERSCAN: usize = 4;
 
 /// A list of any length that only renders the rows in view. The value is the selected
 /// row's index.

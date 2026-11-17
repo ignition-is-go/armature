@@ -113,18 +113,23 @@ impl Sortable {
                     Reorder { from: at, to: at },
                     count,
                 );
-                Reaction::handled().announcing(message)
+                Reaction::handled().alerting(message)
             }
             (Key::Space | Key::Enter, Some(_)) => match self.session.drop() {
                 Some(reorder) => match self.apply(reorder, Source::User, Reason::Keyboard, gate) {
-                    Some(message) => Reaction::handled().announcing(message),
+                    Some(message) => Reaction::handled().alerting(message),
                     None => Reaction::handled(),
                 },
                 None => Reaction::handled(),
             },
+            // Tab puts the item back and lets focus move on.
+            (Key::Tab, Some(_)) => {
+                self.session.cancel();
+                Reaction::default()
+            }
             (Key::Escape, Some(reorder)) => {
                 self.session.cancel();
-                Reaction::handled().announcing(reorder_message(
+                Reaction::handled().alerting(reorder_message(
                     ReorderStep::Cancelled,
                     &self.label_at(reorder.from),
                     reorder,
@@ -144,7 +149,7 @@ impl Sortable {
                 };
                 self.session.step(steps, count);
                 let now = self.session.current().unwrap_or(reorder);
-                Reaction::handled().announcing(reorder_message(
+                Reaction::handled().alerting(reorder_message(
                     ReorderStep::Moved,
                     &self.label_at(now.from),
                     now,
@@ -308,7 +313,7 @@ impl Primitive for Sortable {
                 match reorder
                     .and_then(|reorder| self.apply(reorder, Source::User, Reason::Drag, gate))
                 {
-                    Some(message) => Reaction::handled().announcing(message),
+                    Some(message) => Reaction::handled().alerting(message),
                     None => Reaction::handled(),
                 }
             }
@@ -456,7 +461,7 @@ mod tests {
         assert_eq!(list.dragging(), Some(("milk", Point::new(0.0, 45.0))));
         let dropped = pointer(&mut list, PointerPhase::Up, "milk", 55.0, &mut |_| true);
         assert_eq!(list.value(), ["eggs", "bread", "milk", "jam"]);
-        assert_eq!(spoken(&dropped), "milk dropped at position 3 of 4.");
+        assert_eq!(spoken(&dropped), "Dropped milk at position 3 of 4.");
     }
 
     #[test]
@@ -478,15 +483,18 @@ mod tests {
             },
             &mut |_| true,
         );
-        assert!(spoken(&key(&mut list, Key::Space)).starts_with("jam grabbed, position 4 of 4."));
+        assert_eq!(
+            spoken(&key(&mut list, Key::Space)),
+            "Picked up jam, position 4 of 4."
+        );
         assert_eq!(
             spoken(&key(&mut list, Key::ArrowUp)),
-            "jam moved to position 3 of 4."
+            "jam, position 3 of 4."
         );
         key(&mut list, Key::Home);
         assert_eq!(
             spoken(&key(&mut list, Key::Space)),
-            "jam dropped at position 1 of 4."
+            "Dropped jam at position 1 of 4."
         );
         assert_eq!(list.value(), ["jam", "milk", "eggs", "bread"]);
     }
@@ -503,7 +511,10 @@ mod tests {
         );
         key(&mut list, Key::Space);
         key(&mut list, Key::ArrowDown);
-        assert!(spoken(&key(&mut list, Key::Escape)).starts_with("Reorder cancelled."));
+        assert_eq!(
+            spoken(&key(&mut list, Key::Escape)),
+            "Moved milk back to position 1 of 4."
+        );
         assert_eq!(list.value(), ["milk", "eggs", "bread", "jam"]);
     }
 

@@ -231,7 +231,10 @@ impl Primitive for SwipeRow {
                     self.revealed = false;
                     return Reaction::handled();
                 }
-                match self.shape.settle(self.dragged, self.speed.velocity()) {
+                match self
+                    .shape
+                    .settle(self.dragged, self.speed.velocity_at(pointer.now_ms as f64))
+                {
                     Swipe::Full => {
                         self.revealed = false;
                         if let Some(first) = self.actions.first_enabled().map(str::to_string) {

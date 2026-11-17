@@ -19,7 +19,13 @@ pub fn propose(
     order: &[&str],
 ) -> Vec<String> {
     if mode == Mode::Single {
-        return vec![key.to_string()];
+        // Toggling the one selected item clears it.
+        let sole = mods.ctrl && selected.len() == 1 && selected[0] == key;
+        return if sole {
+            Vec::new()
+        } else {
+            vec![key.to_string()]
+        };
     }
     let position = |k: &str| order.iter().position(|o| *o == k);
 
@@ -41,6 +47,21 @@ pub fn propose(
         return next;
     }
     vec![key.to_string()]
+}
+
+/// What Ctrl+A leaves selected: everything selectable, or nothing once everything
+/// already is. Only a multiple selection has a select-all.
+pub fn toggle_all(mode: Mode, selected: &[String], order: &[&str]) -> Vec<String> {
+    let all = order
+        .iter()
+        .all(|key| selected.iter().any(|chosen| chosen == key));
+    if mode == Mode::Single {
+        selected.to_vec()
+    } else if all {
+        Vec::new()
+    } else {
+        order.iter().map(|key| key.to_string()).collect()
+    }
 }
 
 #[cfg(test)]
@@ -109,5 +130,25 @@ mod tests {
             &ORDER,
         );
         assert_eq!(next, strings(&["d"]));
+    }
+
+    #[test]
+    fn toggling_the_only_selected_item_in_single_mode_clears_it() {
+        assert!(propose(Mode::Single, &strings(&["a"]), Some("a"), "a", CTRL, &ORDER).is_empty());
+        assert_eq!(
+            propose(Mode::Single, &strings(&["a"]), Some("a"), "b", CTRL, &ORDER),
+            strings(&["b"])
+        );
+    }
+
+    #[test]
+    fn select_all_fills_then_empties_and_does_nothing_for_a_single_selection() {
+        let all = toggle_all(Mode::Multiple, &strings(&["b"]), &ORDER);
+        assert_eq!(all, strings(&ORDER));
+        assert!(toggle_all(Mode::Multiple, &all, &ORDER).is_empty());
+        assert_eq!(
+            toggle_all(Mode::Single, &strings(&["b"]), &ORDER),
+            strings(&["b"])
+        );
     }
 }
