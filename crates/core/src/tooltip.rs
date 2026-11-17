@@ -19,6 +19,9 @@ pub struct Options {
     pub open_delay_ms: u64,
     /// How long after the pointer leaves before it hides.
     pub close_delay_ms: u64,
+    /// A card of richer content that the pointer can move into and use, such as a
+    /// preview of a link, in place of a short description.
+    pub card: bool,
 }
 
 impl Default for Options {
@@ -26,6 +29,7 @@ impl Default for Options {
         Options {
             open_delay_ms: 500,
             close_delay_ms: 0,
+            card: false,
         }
     }
 }
@@ -48,6 +52,16 @@ impl Tooltip {
             opts,
             ..Default::default()
         }
+    }
+
+    /// A hover card: it waits longer to open and lingers after the pointer leaves,
+    /// so there is time to move into it.
+    pub fn hover_card() -> Self {
+        Tooltip::new(Options {
+            open_delay_ms: 600,
+            close_delay_ms: 300,
+            card: true,
+        })
     }
 
     pub fn is_open(&self) -> bool {
@@ -125,7 +139,11 @@ impl Primitive for Tooltip {
                 ..Default::default()
             },
             Part::Content => Semantics {
-                role: Some(Role::Tooltip),
+                role: Some(if self.opts.card {
+                    Role::Dialog
+                } else {
+                    Role::Tooltip
+                }),
                 hidden: !self.open,
                 ..Default::default()
             },
@@ -245,6 +263,7 @@ mod tests {
         let mut tooltip = Tooltip::new(Options {
             open_delay_ms: 0,
             close_delay_ms: 100,
+            ..Default::default()
         });
         hover(&mut tooltip, Part::Trigger, true, 0);
         hover(&mut tooltip, Part::Trigger, false, 10);
@@ -282,5 +301,35 @@ mod tests {
     #[test]
     fn it_conforms() {
         crate::testing::assert_conforms(Tooltip::default, &[]);
+    }
+
+    #[test]
+    fn a_hover_card_opens_late_and_lingers_so_the_pointer_can_reach_it() {
+        let mut card = Tooltip::hover_card();
+        let hover = |card: &mut Tooltip, part, inside, now_ms| {
+            card.send(
+                Input::Hover {
+                    part,
+                    item: None,
+                    inside,
+                    now_ms,
+                },
+                &mut |_| true,
+            );
+            card.send(Input::Tick { now_ms }, &mut |_| true);
+        };
+        hover(&mut card, Part::Trigger, true, 0);
+        card.send(Input::Tick { now_ms: 500 }, &mut |_| true);
+        assert!(!card.is_open());
+        card.send(Input::Tick { now_ms: 600 }, &mut |_| true);
+        assert!(card.is_open());
+        hover(&mut card, Part::Trigger, false, 700);
+        hover(&mut card, Part::Content, true, 850);
+        card.send(Input::Tick { now_ms: 1000 }, &mut |_| true);
+        assert!(
+            card.is_open(),
+            "the pointer reached the card before it closed"
+        );
+        assert_eq!(card.semantics(Part::Content, None).role, Some(Role::Dialog));
     }
 }

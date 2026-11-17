@@ -1,0 +1,657 @@
+use std::collections::{HashMap, HashSet};
+
+use crate::agent::{ActError, Snapshot, SnapshotItem};
+use crate::change::{Gate, Reason, Source, ValueChange};
+use crate::keys::Key;
+use crate::popup::{Align, Placement, Side};
+use crate::primitive::{
+    Focusable, Input, Item, PartOf, Primitive, Reaction, Relations, Role, Semantics,
+};
+use crate::roving::{self, Nav};
+use crate::typeahead::Typeahead;
+
+/// What an entry in a menu does when chosen.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Kind {
+    /// Runs something and closes the menu.
+    Action,
+    /// Turns on and off. The menu stays open.
+    Checkbox,
+    /// One of the entries sharing this group name is on at a time.
+    Radio(String),
+    /// Opens the entries whose `parent` is this one, in place of the current ones.
+    Submenu,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Entry {
+    pub key: String,
+    pub label: String,
+    pub kind: Kind,
+    /// The submenu this entry sits in, or `None` at the top.
+    pub parent: Option<String>,
+    pub disabled: bool,
+}
+
+impl Entry {
+    pub fn action(key: &str, label: &str) -> Self {
+        Entry {
+            key: key.into(),
+            label: label.into(),
+            kind: Kind::Action,
+            parent: None,
+            disabled: false,
+        }
+    }
+
+    pub fn of(mut self, kind: Kind) -> Self {
+        self.kind = kind;
+        self
+    }
+
+    pub fn inside(mut self, parent: &str) -> Self {
+        self.parent = Some(parent.into());
+        self
+    }
+
+    pub fn disabled(mut self) -> Self {
+        self.disabled = true;
+        self
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Part {
+    Trigger,
+    /// The popup. Draw the entries of `shown` inside it.
+    Content,
+    /// One entry, keyed by its key.
+    Item,
+}
+
+const ACTIONS: &[&str] = &["open", "close", "run", "toggle"];
+
+/// A menu of actions, checkboxes, radio choices and submenus, opened from a button.
+/// A submenu takes the place of the entries it was opened from, and ArrowLeft or
+/// Escape goes back. Choosing an action offers `run:<key>` to the gate. The value is
+/// what is on: a checkbox's key, and `group=key` for each radio group.
+#[derive(Clone, Debug, Default)]
+pub struct Menu {
+    entries: Vec<Entry>,
+    open: bool,
+    /// The submenus opened, outermost first.
+    path: Vec<String>,
+    active: Option<String>,
+    checked: HashSet<String>,
+    chosen: HashMap<String, String>,
+    typeahead: Typeahead,
+}
+
+impl Menu {
+    pub fn new(entries: Vec<Entry>) -> Self {
+        Menu {
+            entries,
+            ..Default::default()
+        }
+    }
+
+    pub fn is_open(&self) -> bool {
+        self.open
+    }
+
+    /// The entries of the level on show: the top, or the submenu last opened.
+    pub fn shown(&self) -> Vec<&Entry> {
+        let level = self.path.last();
+        self.entries
+            .iter()
+            .filter(|entry| entry.parent.as_ref() == level)
+            .collect()
+    }
+
+    /// The submenus opened to reach the level on show, for a heading or back button.
+    pub fn path(&self) -> &[String] {
+        &self.path
+    }
+
+    pub fn is_on(&self, key: &str) -> bool {
+        match self.entry(key).map(|entry| &entry.kind) {
+            Some(Kind::Checkbox) => self.checked.contains(key),
+            Some(Kind::Radio(group)) => self.chosen.get(group).is_some_and(|chosen| chosen == key),
+            _ => false,
+        }
+    }
+
+    fn entry(&self, key: &str) -> Option<&Entry> {
+        self.entries.iter().find(|entry| entry.key == key)
+    }
+
+    fn written(&self, checked: &HashSet<String>, chosen: &HashMap<String, String>) -> Vec<String> {
+        self.entries
+            .iter()
+            .filter_map(|entry| match &entry.kind {
+                Kind::Checkbox if checked.contains(&entry.key) => Some(entry.key.clone()),
+                Kind::Radio(group) if chosen.get(group) == Some(&entry.key) => {
+                    Some(format!("{group}={}", entry.key))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn close(&mut self) {
+        self.open = false;
+        self.path.clear();
+        self.active = None;
+    }
+
+    fn open_at(&mut self, last: bool) -> Reaction<Part> {
+        self.open = true;
+        self.path.clear();
+        self.active = self.edge(last);
+        Reaction::item(Part::Item, true, self.active.clone())
+    }
+
+    fn edge(&self, last: bool) -> Option<String> {
+        let mut enabled = self.shown().into_iter().filter(|entry| !entry.disabled);
+        if last {
+            enabled.next_back()
+        } else {
+            enabled.next()
+        }
+        .map(|entry| entry.key.clone())
+    }
+
+    /// Does what an entry does. Returns where focus goes.
+    fn choose(
+        &mut self,
+        key: &str,
+        source: Source,
+        reason: Reason,
+        gate: Gate,
+    ) -> Result<Reaction<Part>, ActError> {
+        let entry = self
+            .entry(key)
+            .ok_or_else(|| ActError::UnknownItem(key.to_string()))?
+            .clone();
+        if entry.disabled {
+            return Err(ActError::Disabled(key.to_string()));
+        }
+        match entry.kind {
+            Kind::Action => {
+                if !gate(&ValueChange {
+                    value: vec![format!("run:{key}")],
+                    source,
+                    reason,
+                }) {
+                    return Err(ActError::Refused);
+                }
+                self.close();
+                Ok(Reaction::focusing(Part::Trigger))
+            }
+            Kind::Submenu => {
+                self.path.push(entry.key);
+                self.active = self.edge(false);
+                Ok(Reaction::item(Part::Item, true, self.active.clone()))
+            }
+            Kind::Checkbox | Kind::Radio(_) => {
+                let (mut checked, mut chosen) = (self.checked.clone(), self.chosen.clone());
+                match &entry.kind {
+                    Kind::Radio(group) => drop(chosen.insert(group.clone(), entry.key.clone())),
+                    _ if !checked.remove(&entry.key) => drop(checked.insert(entry.key.clone())),
+                    _ => {}
+                }
+                let value = self.written(&checked, &chosen);
+                if value != self.value()
+                    && !gate(&ValueChange {
+                        value,
+                        source,
+                        reason,
+                    })
+                {
+                    return Err(ActError::Refused);
+                }
+                (self.checked, self.chosen) = (checked, chosen);
+                Ok(Reaction::handled())
+            }
+        }
+    }
+
+    /// Leaves the submenu on show, landing on the entry that opened it.
+    fn back(&mut self) -> Reaction<Part> {
+        self.active = self.path.pop();
+        Reaction::item(Part::Item, true, self.active.clone())
+    }
+}
+
+impl PartOf for Part {
+    type Primitive = Menu;
+}
+
+impl Primitive for Menu {
+    type Part = Part;
+
+    fn parts() -> &'static [Part] {
+        &[Part::Trigger, Part::Content, Part::Item]
+    }
+
+    fn is_item(_: Part) -> bool {
+        false
+    }
+
+    fn hovers(part: Part) -> bool {
+        part == Part::Item
+    }
+
+    fn popup_of(part: Part) -> Option<Placement<Part>> {
+        (part == Part::Content).then_some(Placement {
+            anchor: Part::Trigger,
+            side: Side::Bottom,
+            align: Align::Start,
+            gap: 4.0,
+        })
+    }
+
+    fn relations(part: Part) -> Relations<Part> {
+        match part {
+            Part::Trigger => Relations {
+                controls: Some(Part::Content),
+                ..Default::default()
+            },
+            Part::Content => Relations {
+                labelled_by: Some(Part::Trigger),
+                ..Default::default()
+            },
+            Part::Item => Relations::default(),
+        }
+    }
+
+    fn named_part(&self) -> Option<Part> {
+        Some(Part::Trigger)
+    }
+
+    /// The menu owns its entries. What is rendered only renames them.
+    fn upsert_item(&mut self, item: Item) {
+        if let Some(entry) = self
+            .entries
+            .iter_mut()
+            .find(|entry| entry.key == item.key && !item.label.is_empty())
+        {
+            entry.label = item.label;
+        }
+    }
+
+    fn remove_item(&mut self, _: &str) {}
+    fn set_order(&mut self, _: &[(String, String)]) {}
+
+    fn semantics(&self, part: Part, item: Option<&str>) -> Semantics {
+        match (part, item.and_then(|key| self.entry(key))) {
+            (Part::Trigger, _) => Semantics {
+                role: Some(Role::Button),
+                expanded: Some(self.open),
+                focusable: Focusable::TabStop,
+                ..Default::default()
+            },
+            (Part::Content, _) => Semantics {
+                role: Some(Role::Menu),
+                hidden: !self.open,
+                ..Default::default()
+            },
+            (Part::Item, Some(entry)) => {
+                let on_show = self.open && entry.parent.as_ref() == self.path.last();
+                let (role, checked) = match entry.kind {
+                    Kind::Action => (Role::MenuItem, None),
+                    Kind::Submenu => (Role::MenuItem, None),
+                    Kind::Checkbox => (Role::MenuItemCheckbox, Some(self.is_on(&entry.key))),
+                    Kind::Radio(_) => (Role::MenuItemRadio, Some(self.is_on(&entry.key))),
+                };
+                Semantics {
+                    role: Some(role),
+                    checked,
+                    expanded: (entry.kind == Kind::Submenu).then_some(false),
+                    disabled: entry.disabled,
+                    hidden: !on_show,
+                    focusable: if on_show {
+                        Focusable::Programmatic
+                    } else {
+                        Focusable::No
+                    },
+                    active: on_show && self.active.as_deref() == Some(entry.key.as_str()),
+                    ..Default::default()
+                }
+            }
+            (Part::Item, None) => Semantics {
+                role: Some(Role::MenuItem),
+                hidden: item.is_some(),
+                ..Default::default()
+            },
+        }
+    }
+
+    fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
+        match (input, self.open) {
+            (
+                Input::Press {
+                    part: Part::Trigger,
+                    ..
+                },
+                false,
+            ) => self.open_at(false),
+            (
+                Input::Press {
+                    part: Part::Trigger,
+                    ..
+                },
+                true,
+            ) => {
+                self.close();
+                Reaction::handled()
+            }
+            (
+                Input::Key {
+                    key: Key::Enter | Key::Space | Key::ArrowDown,
+                    ..
+                },
+                false,
+            ) => self.open_at(false),
+            (
+                Input::Key {
+                    key: Key::ArrowUp, ..
+                },
+                false,
+            ) => self.open_at(true),
+            (Input::PressOutside | Input::WindowBlur | Input::Blur { .. }, true) => {
+                self.close();
+                Reaction::default()
+            }
+            (
+                Input::Press {
+                    part: Part::Item,
+                    item: Some(key),
+                    ..
+                },
+                true,
+            ) => self
+                .choose(&key, Source::User, Reason::Press, gate)
+                .unwrap_or_else(|_| Reaction::handled()),
+            // The entry under the pointer is the one the keyboard would act on.
+            (
+                Input::Hover {
+                    part: Part::Item,
+                    item: Some(key),
+                    inside: true,
+                    ..
+                },
+                true,
+            ) => {
+                if self.entry(&key).is_some_and(|entry| !entry.disabled) {
+                    self.active = Some(key);
+                }
+                Reaction::default()
+            }
+            (
+                Input::Focus {
+                    part: Part::Item,
+                    item: Some(key),
+                },
+                true,
+            ) => {
+                self.active = Some(key);
+                Reaction::default()
+            }
+            (Input::Key { key, mods, now_ms }, true) => {
+                let shown: Vec<Entry> = self.shown().into_iter().cloned().collect();
+                let enabled: Vec<bool> = shown.iter().map(|entry| !entry.disabled).collect();
+                let at = self
+                    .active
+                    .as_deref()
+                    .and_then(|key| shown.iter().position(|entry| entry.key == key));
+                let go = |nav| {
+                    roving::step(&enabled, at, nav, true).map(|index| shown[index].key.clone())
+                };
+                let target = match key {
+                    Key::ArrowDown => go(Nav::Next),
+                    Key::ArrowUp => go(Nav::Prev),
+                    Key::Home => go(Nav::First),
+                    Key::End => go(Nav::Last),
+                    Key::Enter | Key::Space => {
+                        let Some(key) = self.active.clone() else {
+                            return Reaction::handled();
+                        };
+                        return self
+                            .choose(&key, Source::User, Reason::Keyboard, gate)
+                            .unwrap_or_else(|_| Reaction::handled());
+                    }
+                    Key::ArrowRight => {
+                        let submenu = at
+                            .map(|at| &shown[at])
+                            .filter(|entry| entry.kind == Kind::Submenu && !entry.disabled);
+                        let Some(key) = submenu.map(|entry| entry.key.clone()) else {
+                            return Reaction::default();
+                        };
+                        return self
+                            .choose(&key, Source::User, Reason::Keyboard, gate)
+                            .unwrap_or_else(|_| Reaction::handled());
+                    }
+                    Key::ArrowLeft if !self.path.is_empty() => return self.back(),
+                    Key::Escape if !self.path.is_empty() => return self.back(),
+                    Key::Escape => {
+                        self.close();
+                        return Reaction::focusing(Part::Trigger);
+                    }
+                    // Tab closes the menu and is left to move focus on from the trigger.
+                    Key::Tab => {
+                        self.close();
+                        return Reaction {
+                            handled: false,
+                            ..Reaction::focusing(Part::Trigger)
+                        };
+                    }
+                    Key::Char(ch) if !mods.ctrl && !mods.alt => {
+                        let labels: Vec<(&str, bool)> = shown
+                            .iter()
+                            .map(|entry| (entry.label.as_str(), !entry.disabled))
+                            .collect();
+                        self.typeahead
+                            .push(ch, now_ms, &labels, at)
+                            .map(|index| shown[index].key.clone())
+                    }
+                    _ => return Reaction::default(),
+                };
+                if let Some(key) = &target {
+                    self.active = Some(key.clone());
+                }
+                Reaction::item(Part::Item, true, target)
+            }
+            _ => Reaction::default(),
+        }
+    }
+
+    fn value(&self) -> Vec<String> {
+        self.written(&self.checked, &self.chosen)
+    }
+
+    fn set_value(&mut self, value: Vec<String>) {
+        self.checked.clear();
+        self.chosen.clear();
+        for entry in value {
+            match entry.split_once('=') {
+                Some((group, key)) => drop(self.chosen.insert(group.to_string(), key.to_string())),
+                None => drop(self.checked.insert(entry)),
+            }
+        }
+    }
+
+    fn snapshot(&self, label: &str) -> Snapshot {
+        let items = self
+            .entries
+            .iter()
+            .map(|entry| SnapshotItem {
+                key: entry.key.clone(),
+                label: entry.label.clone(),
+                disabled: entry.disabled,
+                selected: false,
+            })
+            .collect();
+        Snapshot {
+            name: "menu",
+            label: label.to_string(),
+            value: self.value(),
+            expanded: Some(self.open),
+            actions: ACTIONS,
+            items,
+        }
+    }
+
+    fn act(&mut self, action: &str, item: Option<&str>, gate: Gate) -> Result<(), ActError> {
+        let action: &'static str = match action {
+            "open" => {
+                self.open_at(false);
+                return Ok(());
+            }
+            "close" => {
+                self.close();
+                return Ok(());
+            }
+            "run" => "run",
+            "toggle" => "toggle",
+            other => {
+                return Err(ActError::UnknownAction {
+                    action: other.to_string(),
+                    valid: ACTIONS,
+                });
+            }
+        };
+        let key = item.ok_or(ActError::MissingItem { action })?;
+        // An agent names the entry directly, whichever submenu it is in.
+        let was = (self.open, self.path.clone(), self.active.clone());
+        let result = self
+            .choose(key, Source::Agent, Reason::Action, gate)
+            .map(|_| ());
+        if self
+            .entry(key)
+            .is_some_and(|entry| entry.kind == Kind::Submenu)
+            || result.is_err()
+        {
+            (self.open, self.path, self.active) = was;
+        }
+        result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::keys::Modifiers;
+
+    fn menu() -> Menu {
+        Menu::new(vec![
+            Entry::action("new", "New file"),
+            Entry::action("open", "Open").disabled(),
+            Entry::action("wrap", "Word wrap").of(Kind::Checkbox),
+            Entry::action("share", "Share").of(Kind::Submenu),
+            Entry::action("email", "Email").inside("share"),
+            Entry::action("link", "Copy link").inside("share"),
+            Entry::action("light", "Light").of(Kind::Radio("theme".into())),
+            Entry::action("dark", "Dark").of(Kind::Radio("theme".into())),
+        ])
+    }
+
+    fn key(menu: &mut Menu, key: Key, offered: &mut Vec<String>) -> Reaction<Part> {
+        menu.send(
+            Input::Key {
+                key,
+                mods: Modifiers::default(),
+                now_ms: 0,
+            },
+            &mut |change| {
+                offered.extend(change.value.iter().cloned());
+                true
+            },
+        )
+    }
+
+    #[test]
+    fn the_keyboard_opens_walks_past_disabled_entries_and_runs_one() {
+        let (mut menu, mut offered) = (menu(), Vec::new());
+        assert_eq!(
+            key(&mut menu, Key::ArrowDown, &mut offered).focus_item(),
+            Some("new")
+        );
+        assert_eq!(
+            key(&mut menu, Key::ArrowDown, &mut offered).focus_item(),
+            Some("wrap")
+        );
+        assert_eq!(
+            key(&mut menu, Key::ArrowUp, &mut offered).focus_item(),
+            Some("new")
+        );
+        let ran = key(&mut menu, Key::Enter, &mut offered);
+        assert_eq!(offered, ["run:new"]);
+        assert!(!menu.is_open());
+        assert_eq!(ran.focus.unwrap().part, Part::Trigger);
+    }
+
+    #[test]
+    fn checkboxes_and_radios_change_the_value_and_keep_the_menu_open() {
+        let (mut menu, mut offered) = (menu(), Vec::new());
+        key(&mut menu, Key::ArrowDown, &mut offered);
+        key(&mut menu, Key::Char('w'), &mut offered);
+        key(&mut menu, Key::Space, &mut offered);
+        key(&mut menu, Key::End, &mut offered);
+        key(&mut menu, Key::Enter, &mut offered);
+        assert_eq!(menu.value(), ["wrap", "theme=dark"]);
+        assert!(menu.is_open());
+        assert_eq!(menu.semantics(Part::Item, Some("dark")).checked, Some(true));
+        assert_eq!(
+            menu.semantics(Part::Item, Some("light")).checked,
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn a_submenu_takes_over_the_menu_and_escape_steps_back_out() {
+        let (mut menu, mut offered) = (menu(), Vec::new());
+        key(&mut menu, Key::ArrowDown, &mut offered);
+        key(&mut menu, Key::Char('s'), &mut offered);
+        assert_eq!(
+            key(&mut menu, Key::ArrowRight, &mut offered).focus_item(),
+            Some("email")
+        );
+        assert_eq!(
+            menu.shown()
+                .iter()
+                .map(|entry| entry.key.as_str())
+                .collect::<Vec<_>>(),
+            ["email", "link"]
+        );
+        assert!(menu.semantics(Part::Item, Some("new")).hidden);
+        assert_eq!(
+            key(&mut menu, Key::Escape, &mut offered).focus_item(),
+            Some("share")
+        );
+        assert!(menu.is_open());
+        key(&mut menu, Key::Escape, &mut offered);
+        assert!(!menu.is_open());
+    }
+
+    #[test]
+    fn an_agent_runs_an_entry_inside_a_submenu_by_name() {
+        let mut menu = menu();
+        let mut offered = Vec::new();
+        menu.act("run", Some("link"), &mut |change| {
+            offered.extend(change.value.iter().cloned());
+            true
+        })
+        .unwrap();
+        assert_eq!(offered, ["run:link"]);
+        assert_eq!(
+            menu.act("run", Some("open"), &mut |_| true),
+            Err(ActError::Disabled("open".into()))
+        );
+    }
+
+    #[test]
+    fn it_conforms() {
+        crate::testing::assert_conforms(menu, &[]);
+    }
+}

@@ -32,6 +32,7 @@ pub mod lasso;
 pub mod layers;
 pub mod listbox;
 pub mod locale;
+pub mod menu;
 pub mod motion;
 pub mod number;
 pub mod number_input;
