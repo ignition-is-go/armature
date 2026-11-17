@@ -724,3 +724,122 @@ fn outline_reordering() {
         "dropped where it was"
     );
 }
+
+use armature_core::outline::{OutlineMove, depth_at, move_row, slot_at};
+
+fn written(rows: &[OutlineRow]) -> String {
+    rows.iter()
+        .map(|row| format!("{}{}", "  ".repeat(row.depth), row.key))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+// tree-reorder.test.ts, "with the keyboard" and "with a pointer"
+#[test]
+fn outline_moves() {
+    let notes = outline("inbox\nprojects\n  site\n    copy\n  app\narchive\n");
+    let all = |_: &str| true;
+    // "Up and Down move an item and its children between rows, and Space drops it in one change"
+    let mut moving = OutlineMove::grab(&notes, "site", None).unwrap();
+    assert_eq!(moving.keys(), ["site", "copy"]);
+    moving.step(true, &all);
+    assert_eq!(
+        written(moving.rows()),
+        "inbox\nprojects\n  app\n  site\n    copy\narchive"
+    );
+    let landed = moving.dropped(&notes).unwrap();
+    assert_eq!(
+        (landed.key.as_str(), landed.parent.as_deref(), landed.index),
+        ("site", Some("projects"), 1)
+    );
+    // "Left and Right take an item out a level and in one, as far as the rows around it allow"
+    let mut moving = OutlineMove::grab(&notes, "app", None).unwrap();
+    moving.indent(false, &all);
+    assert!(written(moving.rows()).contains("projects\n  site\n    copy\napp\narchive"));
+    moving.indent(false, &all);
+    assert!(written(moving.rows()).contains("\napp\narchive"));
+    for _ in 0..3 {
+        moving.indent(true, &all);
+    }
+    assert!(
+        written(moving.rows()).contains("    copy\n      app\narchive"),
+        "a child of copy and no deeper"
+    );
+    // Escape: the move is forgotten and the rows are as they were.
+    // "an item never takes another's children: above a deeper row it goes in as deep"
+    let mut moving = OutlineMove::grab(&notes, "inbox", None).unwrap();
+    moving.step(true, &all);
+    assert!(written(moving.rows()).contains("projects\n  inbox\n  site"));
+    moving.step(true, &all);
+    assert!(written(moving.rows()).contains("  site\n    inbox\n    copy"));
+    moving.indent(false, &all);
+    assert!(written(moving.rows()).contains("  site\n    inbox\n    copy"));
+    // "moving through a deeper branch comes back out at the depth it aimed for"
+    let mut moving = OutlineMove::grab(&notes, "inbox", None).unwrap();
+    for _ in 0..5 {
+        moving.step(true, &all);
+    }
+    assert_eq!(
+        written(moving.rows()),
+        "projects\n  site\n    copy\n  app\narchive\ninbox"
+    );
+    // "rows inside a collapsed item are skipped, and dropping in one goes after its children"
+    let collapsed = |key: &str| !["site", "copy", "app"].contains(&key);
+    let mut moving = OutlineMove::grab(&notes, "inbox", None).unwrap();
+    moving.step(true, &collapsed);
+    moving.indent(true, &collapsed);
+    assert_eq!(
+        written(moving.rows()),
+        "projects\n  site\n    copy\n  app\n  inbox\narchive"
+    );
+    // "maxDepth caps how deep an item goes"
+    let mut moving = OutlineMove::grab(&notes, "archive", Some(1)).unwrap();
+    moving.indent(true, &all);
+    moving.indent(true, &all);
+    assert!(written(moving.rows()).contains("  app\n  archive"));
+    // "maxDepth counts the rows under an item too"
+    let mut moving = OutlineMove::grab(&notes, "site", Some(2)).unwrap();
+    moving.step(true, &all);
+    moving.indent(true, &all);
+    assert!(written(moving.rows()).contains("  app\n  site\n    copy"));
+    let moved = move_row(&notes, "site", Some("archive"), 2, Some(2)).unwrap();
+    assert!(written(&moved.rows).contains("  app\n  site\n    copy\narchive"));
+    // "move() commits at once and reports the new parent"
+    let moved = move_row(&notes, "archive", Some("site"), 1, None).unwrap();
+    assert_eq!(
+        (moved.parent.as_deref(), moved.index),
+        (Some("projects"), 0)
+    );
+    assert_eq!(
+        move_row(&notes, "projects", Some("copy"), 0, None),
+        None,
+        "not into itself"
+    );
+    // "a drag moves by the rows' middles and goes in a level for every indent sideways"
+    let middles = [10.0, 30.0, 50.0, 70.0, 90.0];
+    let mut drag = OutlineMove::grab(&notes, "archive", None).unwrap();
+    drag.place(
+        slot_at(&middles, 85.0),
+        depth_at(0, 58.0 - 10.0, 24.0),
+        &all,
+    );
+    assert!(written(drag.rows()).contains("    copy\n    archive\n  app"));
+    drag.place(
+        slot_at(&middles, 85.0),
+        depth_at(0, 34.0 - 10.0, 24.0),
+        &all,
+    );
+    assert!(written(drag.rows()).contains("    copy\n  archive\n  app"));
+    let landed = drag.dropped(&notes).unwrap();
+    assert_eq!(
+        (landed.parent.as_deref(), landed.index),
+        (Some("projects"), 1)
+    );
+    // "a row dropped where it was" changes nothing
+    assert_eq!(
+        OutlineMove::grab(&notes, "site", None)
+            .unwrap()
+            .dropped(&notes),
+        None
+    );
+}
