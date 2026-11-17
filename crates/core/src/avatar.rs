@@ -27,6 +27,11 @@ pub enum Part {
 #[derive(Clone, Debug, Default)]
 pub struct Avatar {
     status: ImageStatus,
+    /// How long to wait before showing the fallback, so a picture that loads at
+    /// once never flashes initials first.
+    fallback_delay_ms: u64,
+    /// When the wait began, and whether it is over.
+    waited: (Option<u64>, bool),
 }
 
 impl Avatar {
@@ -34,7 +39,17 @@ impl Avatar {
     pub fn loading() -> Self {
         Avatar {
             status: ImageStatus::Loading,
+            ..Default::default()
         }
+    }
+
+    pub fn fallback_after(mut self, delay_ms: u64) -> Self {
+        self.fallback_delay_ms = delay_ms;
+        self
+    }
+
+    fn waiting(&self) -> bool {
+        self.fallback_delay_ms > 0 && !self.waited.1 && self.status == ImageStatus::Loading
     }
 
     pub fn status(&self) -> ImageStatus {
@@ -61,6 +76,10 @@ impl Primitive for Avatar {
         Some(Part::Root)
     }
 
+    fn wake_after(&self) -> Option<u64> {
+        (self.waiting() && self.waited.0.is_none()).then_some(0)
+    }
+
     fn upsert_item(&mut self, _: Item) {}
     fn remove_item(&mut self, _: &str) {}
     fn set_order(&mut self, _: &[(String, String)]) {}
@@ -79,19 +98,31 @@ impl Primitive for Avatar {
                 ..Default::default()
             },
             Part::Fallback => Semantics {
-                hidden: loaded,
+                hidden: loaded || self.waiting(),
                 ..Default::default()
             },
         }
     }
 
     fn send(&mut self, input: Input<Part>, _: Gate) -> Reaction<Part> {
-        if let Input::Loaded { ok, .. } = input {
-            self.status = if ok {
-                ImageStatus::Loaded
-            } else {
-                ImageStatus::Error
-            };
+        match input {
+            Input::Loaded { ok, .. } => {
+                self.status = if ok {
+                    ImageStatus::Loaded
+                } else {
+                    ImageStatus::Error
+                }
+            }
+            Input::Tick { now_ms } if self.waiting() => match self.waited.0 {
+                None => {
+                    self.waited.0 = Some(now_ms);
+                    let at_ms = now_ms + self.fallback_delay_ms;
+                    return Reaction::default().with(crate::primitive::Effect::Wake { at_ms });
+                }
+                Some(since) if now_ms >= since + self.fallback_delay_ms => self.waited.1 = true,
+                Some(_) => {}
+            },
+            _ => {}
         }
         Reaction::default()
     }
@@ -154,5 +185,20 @@ mod tests {
     #[test]
     fn it_conforms() {
         crate::testing::assert_conforms(Avatar::default, &[]);
+    }
+
+    #[test]
+    fn the_fallback_can_wait_so_a_quick_picture_never_flashes_it() {
+        let mut avatar = Avatar::loading().fallback_after(300);
+        assert!(avatar.semantics(Part::Fallback, None).hidden);
+        assert_eq!(avatar.wake_after(), Some(0));
+        avatar.send(Input::Tick { now_ms: 1000 }, &mut |_| true);
+        avatar.send(Input::Tick { now_ms: 1200 }, &mut |_| true);
+        assert!(avatar.semantics(Part::Fallback, None).hidden);
+        avatar.send(Input::Tick { now_ms: 1300 }, &mut |_| true);
+        assert!(
+            !avatar.semantics(Part::Fallback, None).hidden,
+            "the picture is slow, so the initials show"
+        );
     }
 }

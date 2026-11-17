@@ -30,6 +30,11 @@ pub struct Options {
     /// How long each slide shows when advancing on its own. `None` never advances.
     pub autoplay_ms: Option<u64>,
     pub dir: Dir,
+    /// How many slides show at once. The buttons, keys and drags move a page of
+    /// them at a time.
+    pub per_page: usize,
+    /// Whether the slides run across or down.
+    pub orientation: crate::keys::Orientation,
 }
 
 impl Default for Options {
@@ -38,6 +43,8 @@ impl Default for Options {
             wrap: false,
             autoplay_ms: None,
             dir: Dir::Ltr,
+            per_page: 1,
+            orientation: crate::keys::Orientation::Horizontal,
         }
     }
 }
@@ -86,15 +93,30 @@ impl Carousel {
     /// Where the strip of slides sits, in slides: the index on show, shifted by a
     /// drag in progress.
     pub fn position(&self) -> f64 {
-        let dragged = self
-            .drag
-            .map_or(0.0, |(_, moved, width)| moved / width.max(1.0));
+        // A drag across the whole viewport is a whole page.
+        let dragged = self.drag.map_or(0.0, |(_, moved, width)| {
+            moved / width.max(1.0) * self.opts.per_page.max(1) as f64
+        });
         let dragged = if self.opts.dir == Dir::Rtl {
             -dragged
         } else {
             dragged
         };
         self.current as f64 - dragged
+    }
+
+    /// Where the pointer is along the way the slides run.
+    fn along(&self, pointer: &Pointer<Part>) -> f64 {
+        if self.opts.orientation == crate::keys::Orientation::Vertical {
+            pointer.at.y
+        } else {
+            pointer.at.x
+        }
+    }
+
+    /// How many pages of slides there are.
+    pub fn pages(&self) -> usize {
+        self.count().div_ceil(self.opts.per_page.max(1)).max(1)
     }
 
     fn count(&self) -> usize {
@@ -106,11 +128,17 @@ impl Carousel {
         if count == 0 {
             return None;
         }
-        let wanted = self.current as isize + by;
-        if self.opts.wrap {
-            Some(wanted.rem_euclid(count) as usize)
+        // A step is a page of slides, and the last page never runs past the end.
+        let per_page = self.opts.per_page.max(1) as isize;
+        let last = (count - per_page).max(0);
+        let now = self.current as isize;
+        let wanted = (now + by.signum() * per_page).clamp(0, last);
+        if wanted != now {
+            Some(wanted as usize)
+        } else if self.opts.wrap && last > 0 {
+            Some(if by > 0 { 0 } else { last as usize })
         } else {
-            (0..count).contains(&wanted).then_some(wanted as usize)
+            None
         }
     }
 
@@ -243,10 +271,10 @@ impl Primitive for Carousel {
     }
 
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
-        let (forward, back) = if self.opts.dir == Dir::Rtl {
-            (Key::ArrowLeft, Key::ArrowRight)
-        } else {
-            (Key::ArrowRight, Key::ArrowLeft)
+        let (forward, back) = match (self.opts.orientation, self.opts.dir) {
+            (crate::keys::Orientation::Vertical, _) => (Key::ArrowDown, Key::ArrowUp),
+            (_, Dir::Rtl) => (Key::ArrowLeft, Key::ArrowRight),
+            _ => (Key::ArrowRight, Key::ArrowLeft),
         };
         match input {
             Input::Focus { part, item } => {
@@ -348,16 +376,19 @@ impl Primitive for Carousel {
     ) -> Reaction<Part> {
         match pointer.phase {
             PointerPhase::Down => {
-                let width = measure(Part::Viewport, None).map_or(1.0, |rect| rect.width);
-                self.drag = Some((pointer.at.x, 0.0, width));
+                let down = self.opts.orientation == crate::keys::Orientation::Vertical;
+                let length = measure(Part::Viewport, None)
+                    .map_or(1.0, |rect| if down { rect.height } else { rect.width });
+                self.drag = Some((self.along(&pointer), 0.0, length));
                 self.speed = VelocityTracker::default();
                 self.advance_at = None;
                 Reaction::default().with(Effect::CapturePointer)
             }
             PointerPhase::Move => {
+                let along = self.along(&pointer);
                 if let Some((from, moved, _)) = &mut self.drag {
-                    *moved = pointer.at.x - *from;
-                    self.speed.push(pointer.now_ms as f64, pointer.at.x);
+                    *moved = along - *from;
+                    self.speed.push(pointer.now_ms as f64, along);
                 }
                 Reaction::default()
             }
@@ -373,7 +404,8 @@ impl Primitive for Carousel {
                 } else {
                     moved < 0.0
                 };
-                let next = towards_start != (self.opts.dir == Dir::Rtl);
+                let sideways = self.opts.orientation == crate::keys::Orientation::Horizontal;
+                let next = towards_start != (sideways && self.opts.dir == Dir::Rtl);
                 if far && let Some(index) = self.target(if next { 1 } else { -1 }) {
                     self.go(index, Source::User, Reason::Drag, gate);
                 }
@@ -600,5 +632,52 @@ mod tests {
             },
             &items,
         );
+    }
+
+    #[test]
+    fn with_several_slides_showing_a_step_is_a_page_and_stops_at_the_last_full_one() {
+        let mut carousel = Carousel::new(Options {
+            per_page: 2,
+            ..Default::default()
+        });
+        for key in ["a", "b", "c", "d", "e"] {
+            carousel.upsert_item(Item {
+                key: key.into(),
+                label: key.into(),
+                disabled: false,
+            });
+        }
+        assert_eq!(carousel.pages(), 3);
+        press(&mut carousel, Part::Next);
+        assert_eq!(carousel.value(), ["c"]);
+        press(&mut carousel, Part::Next);
+        assert_eq!(carousel.value(), ["d"], "the last two slides fill the view");
+        assert!(carousel.semantics(Part::Next, None).disabled);
+    }
+
+    #[test]
+    fn slides_that_run_down_answer_the_up_and_down_arrows() {
+        let mut carousel = carousel(Options {
+            orientation: crate::keys::Orientation::Vertical,
+            ..Default::default()
+        });
+        carousel.send(
+            Input::Key {
+                key: Key::ArrowDown,
+                mods: Modifiers::default(),
+                now_ms: 0,
+            },
+            &mut |_| true,
+        );
+        assert_eq!(carousel.index(), 1);
+        let across = carousel.send(
+            Input::Key {
+                key: Key::ArrowRight,
+                mods: Modifiers::default(),
+                now_ms: 0,
+            },
+            &mut |_| true,
+        );
+        assert!(!across.handled);
     }
 }

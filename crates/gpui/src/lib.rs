@@ -343,15 +343,16 @@ impl<P: Primitive> Machine<P> {
     /// Listens for the primitive's hotkey wherever focus is, and remembers where
     /// focus was so the key can send it back.
     fn watch_hotkey(&mut self, cx: &mut Context<Self>) {
-        let Some(shortcut) = self.machine.hotkey() else {
-            return;
-        };
         self.hotkey_watch = Some(cx.observe_keystrokes(move |state, event, window, cx| {
             let pressed = key_from_keystroke(&event.keystroke);
             let mods = modifiers(event.keystroke.modifiers);
-            if !pressed.is_some_and(|key| shortcut.matches(key, mods)) {
+            let keys = state.machine.hotkeys();
+            let Some(shortcut) = keys
+                .into_iter()
+                .find(|shortcut| pressed.is_some_and(|key| shortcut.matches(key, mods)))
+            else {
                 return;
-            }
+            };
             if !state
                 .handles
                 .values()
@@ -359,7 +360,7 @@ impl<P: Primitive> Machine<P> {
             {
                 state.return_to = window.focused(cx);
             }
-            state.dispatch(Input::Hotkey, window, cx);
+            state.dispatch(Input::Hotkey { shortcut }, window, cx);
         }));
     }
 
@@ -994,7 +995,7 @@ pub fn part<K: PartOf>(
                 state.bounds.insert(key.clone(), bounds);
                 let relinked =
                     node.is_some_and(|node| state.nodes.insert(key.clone(), node) != Some(node));
-                listen = state.hotkey_watch.is_none() && state.machine.hotkey().is_some();
+                listen = state.hotkey_watch.is_none() && !state.machine.hotkeys().is_empty();
                 // A value set from outside may have left a timer to start.
                 if !state.waking
                     && let Some(delay) = state.machine.wake_after()

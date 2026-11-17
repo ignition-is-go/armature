@@ -282,8 +282,8 @@ impl Primitive for Toaster {
 
     /// F6 moves focus into the stack and back, so the keyboard can reach a
     /// notification without tabbing through the page.
-    fn hotkey(&self) -> Option<crate::shortcut::Shortcut> {
-        crate::shortcut::Shortcut::parse("f6")
+    fn hotkeys(&self) -> Vec<crate::shortcut::Shortcut> {
+        crate::shortcut::Shortcut::parse("f6").into_iter().collect()
     }
 
     fn wake_after(&self) -> Option<u64> {
@@ -396,7 +396,7 @@ impl Primitive for Toaster {
                 self.focused = None;
                 Reaction::default()
             }
-            Input::Hotkey => match (&self.focused, self.visible().last()) {
+            Input::Hotkey { .. } => match (&self.focused, self.visible().last()) {
                 (Some(_), _) => {
                     self.focused = None;
                     Reaction::handled().with(Effect::RestoreFocus)
@@ -722,8 +722,13 @@ mod tests {
     #[test]
     fn the_hotkey_moves_focus_into_the_stack_and_back() {
         let mut toaster = toaster(&[Toast::new("a", "Saved"), Toast::new("b", "Sent")]);
-        assert_eq!(toaster.hotkey().map(|key| key.key), Some(Key::F6));
-        let entered = toaster.send(Input::Hotkey, &mut |_| true);
+        assert_eq!(toaster.hotkeys().first().map(|key| key.key), Some(Key::F6));
+        let entered = toaster.send(
+            Input::Hotkey {
+                shortcut: toaster.hotkeys()[0],
+            },
+            &mut |_| true,
+        );
         assert_eq!(
             (
                 entered.focus.as_ref().map(|target| target.part),
@@ -738,7 +743,12 @@ mod tests {
             },
             &mut |_| true,
         );
-        let left = toaster.send(Input::Hotkey, &mut |_| true);
+        let left = toaster.send(
+            Input::Hotkey {
+                shortcut: toaster.hotkeys()[0],
+            },
+            &mut |_| true,
+        );
         assert_eq!(left.effects, [Effect::RestoreFocus]);
     }
 

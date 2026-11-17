@@ -45,8 +45,8 @@ pub enum Input<Part> {
     Files { files: Vec<FileInfo>, dropped: bool },
     /// Files being dragged came over a part that takes drops, or left it.
     DragOver { inside: bool },
-    /// The primitive's `hotkey` was pressed, wherever focus was.
-    Hotkey,
+    /// One of the primitive's `hotkeys` was pressed, wherever focus was.
+    Hotkey { shortcut: crate::shortcut::Shortcut },
     /// The platform's gesture for a context menu, such as a right click or a long
     /// press, on a part that takes it. `at` is where, in the same space as a pointer.
     ContextMenu {
@@ -176,7 +176,7 @@ impl<Part> Input<Part> {
                 ok,
             },
             Input::PressOutside => Input::PressOutside,
-            Input::Hotkey => Input::Hotkey,
+            Input::Hotkey { shortcut } => Input::Hotkey { shortcut },
             Input::ContextMenu { part, item, at } => Input::ContextMenu {
                 part: to(part)?,
                 item,
@@ -476,9 +476,9 @@ pub trait Primitive: Clone + 'static {
         crate::keys::Orientation::Vertical
     }
 
-    /// A key that reaches the primitive from anywhere, as `Input::Hotkey`.
-    fn hotkey(&self) -> Option<crate::shortcut::Shortcut> {
-        None
+    /// Keys that reach the primitive from anywhere, as `Input::Hotkey`.
+    fn hotkeys(&self) -> Vec<crate::shortcut::Shortcut> {
+        Vec::new()
     }
 
     /// Whether a part takes the platform's context-menu gesture.

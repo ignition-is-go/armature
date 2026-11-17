@@ -36,6 +36,9 @@ pub struct ScrollArea {
     idle_at: Option<u64>,
     scrolling: bool,
     axis: Orientation,
+    /// Whether to stay at the end as content is added, as a chat or a log does,
+    /// for as long as the person has not scrolled away from it.
+    stick_to_end: bool,
 }
 
 impl Default for ScrollArea {
@@ -49,6 +52,7 @@ impl Default for ScrollArea {
             idle_at: None,
             scrolling: false,
             axis: Orientation::Vertical,
+            stick_to_end: false,
         }
     }
 }
@@ -61,6 +65,11 @@ impl ScrollArea {
             axis: Orientation::Horizontal,
             ..ScrollArea::default()
         }
+    }
+
+    pub fn stick_to_end(mut self) -> Self {
+        self.stick_to_end = true;
+        self
     }
 
     /// Whether there is more content than fits.
@@ -173,7 +182,16 @@ impl Primitive for ScrollArea {
                 ..
             } => {
                 let moved = offset != self.offset;
+                // At the end before, and the content has grown: follow it down.
+                let was_at_end = self.content - self.viewport - self.offset <= 24.0;
+                let grew = content > self.content && self.content > 0.0;
                 (self.offset, self.viewport, self.content) = (offset, viewport, content);
+                if self.stick_to_end && was_at_end && grew && !moved {
+                    let end = (content - viewport).max(0.0);
+                    return Reaction::default().with(Effect::ScrollTo {
+                        offset: end.round() as u32,
+                    });
+                }
                 if !moved {
                     return Reaction::default();
                 }
@@ -411,5 +429,35 @@ mod tests {
         area.pointer(at(10.0, PointerPhase::Down), &wide, &mut |_| true);
         let dragged = area.pointer(at(90.0, PointerPhase::Move), &wide, &mut |_| true);
         assert_eq!(dragged.effects, [Effect::ScrollTo { offset: 400 }]);
+    }
+
+    #[test]
+    fn a_box_that_sticks_to_the_end_follows_new_content_until_scrolled_away() {
+        let mut log = ScrollArea::default().stick_to_end();
+        let report = |log: &mut ScrollArea, offset: f64, content: f64| {
+            log.send(
+                Input::Scrolled {
+                    part: Part::Viewport,
+                    offset,
+                    viewport: 200.0,
+                    content,
+                    now_ms: 0,
+                },
+                &mut |_| true,
+            )
+        };
+        report(&mut log, 800.0, 1000.0);
+        assert_eq!(
+            report(&mut log, 800.0, 1100.0).effects,
+            [Effect::ScrollTo { offset: 900 }]
+        );
+        report(&mut log, 300.0, 1100.0);
+        let effects = report(&mut log, 300.0, 1200.0).effects;
+        assert!(
+            !effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::ScrollTo { .. })),
+            "reading further up, so left alone"
+        );
     }
 }

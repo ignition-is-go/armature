@@ -578,13 +578,19 @@ where
     }
 
     // A key that reaches the component from anywhere on the page.
-    if let Some(shortcut) = machine.with_untracked(|m| m.hotkey()) {
+    // The keys are read as they stand when the key is pressed, since they may change.
+    if !machine.with_untracked(|m| m.hotkeys()).is_empty() {
         let inside = format!("[data-armature=\"{instance}\"]");
         let listener = window_event_listener(leptos::ev::keydown, move |ev| {
             let mods = modifiers(ev.shift_key(), ev.ctrl_key() || ev.meta_key(), ev.alt_key());
-            if !key_from_dom(&ev.key()).is_some_and(|key| shortcut.matches(key, mods)) {
+            let pressed = key_from_dom(&ev.key());
+            let keys = machine.with_untracked(|m| m.hotkeys());
+            let Some(shortcut) = keys
+                .into_iter()
+                .find(|shortcut| pressed.is_some_and(|key| shortcut.matches(key, mods)))
+            else {
                 return;
-            }
+            };
             ev.prevent_default();
             // Where focus was is remembered, so the key can send it back.
             let active = document().active_element();
@@ -597,7 +603,7 @@ where
             {
                 RETURN_TO.with_borrow_mut(|held| held.insert(instance, active));
             }
-            ctx.dispatch(Input::Hotkey);
+            ctx.dispatch(Input::Hotkey { shortcut });
         });
         on_cleanup(move || {
             listener.remove();

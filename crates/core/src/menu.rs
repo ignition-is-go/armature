@@ -31,6 +31,8 @@ pub struct Entry {
     /// The submenu this entry sits in, or `None` at the top.
     pub parent: Option<String>,
     pub disabled: bool,
+    /// A key that runs the entry from anywhere, with the menu open or closed.
+    pub shortcut: Option<crate::shortcut::Shortcut>,
 }
 
 impl Entry {
@@ -41,6 +43,7 @@ impl Entry {
             kind: Kind::Action,
             parent: None,
             disabled: false,
+            shortcut: None,
         }
     }
 
@@ -56,6 +59,13 @@ impl Entry {
 
     pub fn disabled(mut self) -> Self {
         self.disabled = true;
+        self
+    }
+
+    /// Gives the entry a key written as `mod+shift+n`. One that cannot be read is
+    /// ignored.
+    pub fn keys(mut self, shortcut: &str) -> Self {
+        self.shortcut = crate::shortcut::Shortcut::parse(shortcut);
         self
     }
 }
@@ -252,6 +262,14 @@ impl Primitive for Menu {
         part == Part::Area
     }
 
+    fn hotkeys(&self) -> Vec<crate::shortcut::Shortcut> {
+        self.entries
+            .iter()
+            .filter(|entry| !entry.disabled)
+            .filter_map(|entry| entry.shortcut)
+            .collect()
+    }
+
     fn popup_point(&self) -> Option<crate::geometry::Point> {
         self.point.filter(|_| self.open)
     }
@@ -344,6 +362,28 @@ impl Primitive for Menu {
 
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
         match (input, self.open) {
+            // An entry's own key runs it, whether or not the menu is open.
+            (Input::Hotkey { shortcut }, _) => {
+                let entry = self
+                    .entries
+                    .iter()
+                    .find(|entry| entry.shortcut == Some(shortcut) && entry.kind != Kind::Submenu);
+                let Some(key) = entry.map(|entry| entry.key.clone()) else {
+                    return Reaction::default();
+                };
+                let was = (self.open, self.path.clone(), self.active.clone());
+                let ran = self
+                    .choose(&key, Source::User, Reason::Keyboard, gate)
+                    .is_ok();
+                // Running one by its key leaves the menu as it was, and focus too.
+                if !was.0 {
+                    (self.open, self.path, self.active) = was;
+                }
+                Reaction {
+                    handled: ran,
+                    ..Reaction::default()
+                }
+            }
             // Called up where the pointer is, as a context menu.
             (Input::ContextMenu { at, .. }, _) => {
                 let reaction = self.open_at(false);
@@ -693,5 +733,29 @@ mod tests {
     #[test]
     fn it_conforms() {
         crate::testing::assert_conforms(menu, &[]);
+    }
+
+    #[test]
+    fn an_entry_runs_from_its_own_key_with_the_menu_closed() {
+        let mut menu = Menu::new(vec![
+            Entry::action("new", "New file").keys("mod+n"),
+            Entry::action("wrap", "Word wrap")
+                .of(Kind::Checkbox)
+                .keys("alt+z"),
+        ]);
+        assert_eq!(menu.hotkeys().len(), 2);
+        let mut offered = Vec::new();
+        let mut press = |menu: &mut Menu, keys: &str| {
+            let shortcut = crate::shortcut::Shortcut::parse(keys).unwrap();
+            menu.send(Input::Hotkey { shortcut }, &mut |change| {
+                offered.extend(change.value.iter().cloned());
+                true
+            })
+        };
+        assert!(press(&mut menu, "mod+n").handled);
+        press(&mut menu, "alt+z");
+        assert_eq!(offered, ["run:new", "wrap"]);
+        assert!(!menu.is_open());
+        assert_eq!(menu.value(), ["wrap"]);
     }
 }

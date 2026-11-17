@@ -71,7 +71,9 @@ fn inputs<P: Primitive>(items: &[Item]) -> Vec<Input<P::Part>> {
     let mods = Modifiers::default();
     let mut all: Vec<Input<P::Part>> = vec![
         Input::PressOutside,
-        Input::Hotkey,
+        Input::Hotkey {
+            shortcut: crate::shortcut::Shortcut::parse("f6").expect("a key"),
+        },
         Input::DragOver { inside: true },
         Input::Files {
             files: vec![crate::primitive::FileInfo {
