@@ -1,11 +1,16 @@
 use std::cell::Cell;
 use std::rc::Rc;
+use std::time::Duration;
 
 use armature_core::agent::{ActError, Target};
 use armature_core::change::ValueChange;
+use armature_core::geometry::Point;
 use armature_core::keys::{Key, Modifiers, Orientation};
 use armature_core::popup::{self, Placement, Rect, Side, Size};
-use armature_core::primitive::{FocusTarget, Focusable, Input, Item, PartOf, Primitive, Role};
+use armature_core::primitive::{
+    Effect as Ask, FocusTarget, Focusable, Input, Item, PartOf, Pointer, PointerPhase, Primitive,
+    Reaction, Role,
+};
 use leptos::prelude::*;
 use send_wrapper::SendWrapper;
 use wasm_bindgen::closure::Closure;
@@ -26,6 +31,8 @@ struct Context<P: Primitive> {
     machine: RwSignal<P>,
     label: StoredValue<String>,
     gate: Option<ChangeGate>,
+    /// The part a pointer gesture is being sent to until the pointer is released.
+    captured: StoredValue<Option<(P::Part, Option<String>)>>,
 }
 
 impl<P: Primitive> Clone for Context<P> {
@@ -45,6 +52,46 @@ struct Rendered {
 
 impl<P: Primitive + Send + Sync> Context<P> {
     fn dispatch(self, input: Input<P::Part>) -> bool {
+        self.run(|machine, gate| machine.send(input, gate))
+    }
+
+    fn pointer(
+        self,
+        phase: PointerPhase,
+        part: P::Part,
+        item: Option<String>,
+        ev: &web_sys::MouseEvent,
+    ) -> bool {
+        let pointer = Pointer {
+            phase,
+            part,
+            item,
+            at: Point::new(ev.client_x() as f64, ev.client_y() as f64),
+            mods: modifiers(ev.shift_key(), ev.ctrl_key() || ev.meta_key(), ev.alt_key()),
+            now_ms: js_sys::Date::now() as u64,
+        };
+        let measure = move |part: P::Part, item: Option<&str>| {
+            let element = self.element_of(part, item)?;
+            let rect = element.get_bounding_client_rect();
+            Some(Rect {
+                x: rect.x(),
+                y: rect.y(),
+                width: rect.width(),
+                height: rect.height(),
+            })
+        };
+        self.run(|machine, gate| machine.pointer(pointer, &measure, gate))
+    }
+
+    /// Runs one step of the primitive and carries out what it asks for.
+    fn run(
+        self,
+        step: impl FnOnce(&mut P, &mut dyn FnMut(&ValueChange) -> bool) -> Reaction<P::Part>,
+    ) -> bool {
+        // The gate runs user code, so the primitive is copied out instead of borrowed.
+        let Some(mut machine) = self.machine.try_get_untracked() else {
+            return false;
+        };
         let rendered = self.rendered();
         let order: Vec<(String, String)> = rendered
             .iter()
@@ -56,15 +103,30 @@ impl<P: Primitive + Send + Sync> Context<P> {
                 ))
             })
             .collect();
-
-        // The gate runs user code, so it gets a copy instead of a borrow of the signal.
-        let mut machine = self.machine.get_untracked();
         machine.set_order(&order);
-        let reaction = machine.send(input, &mut |change| allows(self.gate, change));
+        let reaction = step(&mut machine, &mut |change| allows(self.gate, change));
         self.machine.set(machine);
 
-        if let Some(target) = reaction.focus {
-            self.focus(&rendered, &target);
+        if let Some(target) = &reaction.focus {
+            self.focus(&rendered, target);
+        }
+        for effect in reaction.effects {
+            match effect {
+                Ask::Announce { message, assertive } => announce(&message, assertive),
+                Ask::Wake { at_ms } => {
+                    let wait = at_ms.saturating_sub(js_sys::Date::now() as u64);
+                    set_timeout(
+                        move || {
+                            self.dispatch(Input::Tick {
+                                now_ms: js_sys::Date::now() as u64,
+                            });
+                        },
+                        Duration::from_millis(wait),
+                    );
+                }
+                // The part to send to was recorded when the gesture began.
+                Ask::CapturePointer => {}
+            }
         }
         reaction.handled
     }
@@ -87,11 +149,11 @@ impl<P: Primitive + Send + Sync> Context<P> {
             .collect()
     }
 
-    fn element_of(self, part: P::Part) -> Option<HtmlElement> {
+    fn element_of(self, part: P::Part, item: Option<&str>) -> Option<HtmlElement> {
         let name = format!("{part:?}");
         self.rendered()
             .into_iter()
-            .find(|r| r.part == name)
+            .find(|r| r.part == name && (item.is_none() || r.item.as_deref() == item))
             .map(|r| r.element)
     }
 
@@ -118,7 +180,7 @@ impl<P: Primitive + Send + Sync> Context<P> {
     }
 
     fn place(self, popup: &HtmlElement, placement: Placement<P::Part>) {
-        let Some(anchor) = self.element_of(placement.anchor) else {
+        let Some(anchor) = self.element_of(placement.anchor, None) else {
             return;
         };
         let anchor = anchor.get_bounding_client_rect();
@@ -160,6 +222,42 @@ fn allows(gate: Option<ChangeGate>, change: &ValueChange) -> bool {
     gate.is_none_or(|gate| gate.run(change.clone()))
 }
 
+fn modifiers(shift: bool, ctrl: bool, alt: bool) -> Modifiers {
+    Modifiers { shift, ctrl, alt }
+}
+
+/// Speaks a message through a live region shared by every component on the page.
+fn announce(message: &str, assertive: bool) {
+    let id = if assertive {
+        "armature-live-assertive"
+    } else {
+        "armature-live-polite"
+    };
+    let region = document().get_element_by_id(id).or_else(|| {
+        let region = document().create_element("div").ok()?;
+        region.set_id(id);
+        let _ = region.set_attribute("aria-live", if assertive { "assertive" } else { "polite" });
+        let _ = region.set_attribute("aria-atomic", "true");
+        let hidden = "position:absolute;width:1px;height:1px;overflow:hidden;\
+                      clip-path:inset(50%);white-space:nowrap";
+        let _ = region.set_attribute("style", hidden);
+        document().body()?.append_child(&region).ok()?;
+        Some(region)
+    });
+    let Some(region) = region else { return };
+    // Emptied first so that repeating a message is still spoken.
+    region.set_text_content(Some(""));
+    let message = message.to_string();
+    request_animation_frame(move || region.set_text_content(Some(&message)));
+}
+
+fn orientation_name(orientation: Option<Orientation>) -> Option<&'static str> {
+    orientation.map(|orientation| match orientation {
+        Orientation::Vertical => "vertical",
+        Orientation::Horizontal => "horizontal",
+    })
+}
+
 fn key_from_dom(key: &str) -> Option<Key> {
     Some(match key {
         "ArrowUp" => Key::ArrowUp,
@@ -168,6 +266,8 @@ fn key_from_dom(key: &str) -> Option<Key> {
         "ArrowRight" => Key::ArrowRight,
         "Home" => Key::Home,
         "End" => Key::End,
+        "PageUp" => Key::PageUp,
+        "PageDown" => Key::PageDown,
         "Enter" => Key::Enter,
         " " => Key::Space,
         "Escape" => Key::Escape,
@@ -190,6 +290,23 @@ fn aria_role(role: Role) -> &'static str {
         Role::Tab => "tab",
         Role::TabPanel => "tabpanel",
         Role::ComboBox => "combobox",
+        Role::Button => "button",
+        Role::Switch => "switch",
+        Role::RadioGroup => "radiogroup",
+        Role::Radio => "radio",
+        Role::Toolbar => "toolbar",
+        Role::Slider => "slider",
+        Role::SpinButton => "spinbutton",
+        Role::TextBox => "textbox",
+        Role::Tree => "tree",
+        Role::TreeItem => "treeitem",
+        Role::Group => "group",
+        Role::Region => "region",
+        Role::Grid => "grid",
+        Role::GridCell => "gridcell",
+        Role::Dialog => "dialog",
+        Role::List => "list",
+        Role::ListItem => "listitem",
     }
 }
 
@@ -200,7 +317,12 @@ pub fn Root<P>(
     /// Accessible name, also how agents find this component.
     #[prop(into)]
     label: String,
-    #[prop(optional, into)] on_value_change: Option<ChangeGate>,
+    /// Called with each proposed change. Returning `false` cancels it.
+    #[prop(optional, into)]
+    on_value_change: Option<ChangeGate>,
+    /// A value the owner controls. The component follows it whenever it changes.
+    #[prop(optional, into)]
+    value: Option<Signal<Vec<String>>>,
     children: Children,
 ) -> impl IntoView
 where
@@ -214,8 +336,18 @@ where
         machine,
         label,
         gate: on_value_change,
+        captured: StoredValue::new(None),
     };
     provide_context(ctx);
+
+    if let Some(value) = value {
+        Effect::new(move |_| {
+            let value = value.get();
+            if machine.with_untracked(|m| m.value() != value) {
+                machine.update(|m| m.set_value(value));
+            }
+        });
+    }
 
     let registration = agent::register(Target {
         snapshot: Rc::new(move |_| machine.try_with_untracked(|m| m.snapshot(&label.get_value()))),
@@ -229,7 +361,8 @@ where
     });
     on_cleanup(move || agent::unregister(registration));
 
-    if P::parts().iter().any(|part| P::popup_of(*part).is_some()) {
+    let parts = P::parts();
+    if parts.iter().any(|part| P::popup_of(*part).is_some()) {
         let inside = format!("[data-armature=\"{instance}\"]");
         let listener = window_event_listener(leptos::ev::pointerdown, move |ev| {
             let target = ev
@@ -244,22 +377,52 @@ where
         on_cleanup(move || listener.remove());
     }
 
+    // A captured gesture is followed on the window, so it continues when the pointer
+    // leaves the part it began on.
+    if parts.iter().any(|part| P::tracks_pointer(*part)) {
+        let follow = move |phase: PointerPhase, ev: &web_sys::MouseEvent| {
+            let Some((part, item)) = ctx.captured.try_get_value().flatten() else {
+                return;
+            };
+            if phase != PointerPhase::Move {
+                ctx.captured.set_value(None);
+            }
+            ctx.pointer(phase, part, item, ev);
+        };
+        let moved = window_event_listener(leptos::ev::pointermove, move |ev| {
+            follow(PointerPhase::Move, &ev)
+        });
+        let released = window_event_listener(leptos::ev::pointerup, move |ev| {
+            follow(PointerPhase::Up, &ev)
+        });
+        let cancelled = window_event_listener(leptos::ev::pointercancel, move |ev| {
+            follow(PointerPhase::Cancel, &ev)
+        });
+        on_cleanup(move || {
+            moved.remove();
+            released.remove();
+            cancelled.remove();
+        });
+    }
+
     children()
 }
 
-/// One part of the primitive owned by the nearest `Root`, rendered as an unstyled
-/// `div` carrying the part's semantics and event wiring.
+/// One part of the primitive owned by the nearest `Root`. It renders unstyled, as a
+/// `div`, or as an `input` for a part the person types into, and carries the part's
+/// semantics and event wiring.
 #[component]
 pub fn Part<K>(
     part: K,
     /// The item this part belongs to. Required for item parts.
     #[prop(optional, into)]
     item: Option<String>,
-    /// Text for typeahead and agents. Defaults to the rendered text.
+    /// For an item, its text for typeahead and agents, which defaults to the rendered
+    /// text. For any other part, its own accessible name.
     #[prop(optional, into)]
     label: String,
     #[prop(optional)] disabled: bool,
-    children: Children,
+    #[prop(optional)] children: Option<Children>,
 ) -> impl IntoView
 where
     K: PartOf,
@@ -267,6 +430,8 @@ where
 {
     let ctx = expect_context::<Context<K::Primitive>>();
     let registers = K::Primitive::is_item(part);
+    let tracks_pointer = K::Primitive::tracks_pointer(part);
+    let own_name = (!registers && !label.is_empty()).then(|| label.clone());
     if registers {
         let key = item
             .clone()
@@ -287,8 +452,11 @@ where
         let item = item.clone();
         move |_| ctx.machine.with(|m| m.semantics(part, item.as_deref()))
     });
+    let role = semantics.get_untracked().role;
     let interactive = move || semantics.get_untracked().focusable != Focusable::No;
-    let names_component = item.is_none() && semantics.get_untracked().role.is_some();
+    let names_component =
+        item.is_none() && ctx.machine.with_untracked(|m| m.named_part()) == Some(part);
+    let takes_text = matches!(role, Some(Role::TextBox | Role::SpinButton));
 
     let element = NodeRef::<leptos::html::Div>::new();
     let placement = K::Primitive::popup_of(part);
@@ -334,19 +502,28 @@ where
     let on_click = {
         let item = item.clone();
         move |ev: leptos::ev::MouseEvent| {
-            if !interactive() {
+            // A part that tracks the pointer already saw this press as a gesture.
+            if tracks_pointer || !interactive() {
                 return;
             }
-            let mods = Modifiers {
-                shift: ev.shift_key(),
-                ctrl: ev.ctrl_key() || ev.meta_key(),
-                alt: ev.alt_key(),
-            };
+            let mods = modifiers(ev.shift_key(), ev.ctrl_key() || ev.meta_key(), ev.alt_key());
             ctx.dispatch(Input::Press {
                 part,
                 item: item.clone(),
                 mods,
             });
+        }
+    };
+    let on_pointerdown = {
+        let item = item.clone();
+        move |ev: leptos::ev::PointerEvent| {
+            if !tracks_pointer || ev.button() != 0 {
+                return;
+            }
+            ctx.captured.set_value(Some((part, item.clone())));
+            ctx.pointer(PointerPhase::Down, part, item.clone(), &ev);
+            // Stops the browser starting a text selection or a native drag.
+            ev.prevent_default();
         }
     };
     let on_focus = {
@@ -367,11 +544,7 @@ where
         let Some(key) = key_from_dom(&ev.key()) else {
             return;
         };
-        let mods = Modifiers {
-            shift: ev.shift_key(),
-            ctrl: ev.ctrl_key() || ev.meta_key(),
-            alt: ev.alt_key(),
-        };
+        let mods = modifiers(ev.shift_key(), ev.ctrl_key() || ev.meta_key(), ev.alt_key());
         let now_ms = js_sys::Date::now() as u64;
         if ctx.dispatch(Input::Key { key, mods, now_ms }) {
             ev.prevent_default();
@@ -379,40 +552,113 @@ where
         }
     };
 
+    let range = move || semantics.get().range;
+    let tabindex = move || match semantics.get().focusable {
+        Focusable::No => None,
+        Focusable::Programmatic => Some("-1"),
+        Focusable::TabStop => Some("0"),
+    };
+    // State that changes often is written straight onto the element. The view layer
+    // caps how many attributes one element may declare.
+    Effect::new(move |_| {
+        let state = semantics.get();
+        let Some(element) = element.get() else { return };
+        let flag = |on: Option<bool>| on.map(|on| on.to_string());
+        let number = |value: Option<f64>| value.map(|value| value.to_string());
+        let attributes = [
+            ("aria-selected", flag(state.selected)),
+            ("aria-expanded", flag(state.expanded)),
+            ("aria-checked", flag(state.checked)),
+            ("aria-multiselectable", flag(state.multiselectable)),
+            ("aria-disabled", state.disabled.then(|| "true".to_string())),
+            ("aria-level", state.level.map(|level| level.to_string())),
+            ("aria-valuenow", number(state.range.map(|range| range.now))),
+            ("aria-valuemin", number(state.range.map(|range| range.min))),
+            ("aria-valuemax", number(state.range.map(|range| range.max))),
+            (
+                "aria-orientation",
+                orientation_name(state.orientation).map(str::to_string),
+            ),
+            (
+                "aria-haspopup",
+                (state.role == Some(Role::ComboBox)).then(|| "listbox".to_string()),
+            ),
+            ("data-active", state.active.then(String::new)),
+        ];
+        for (name, value) in attributes {
+            let _ = match value {
+                Some(value) => element.set_attribute(name, &value),
+                None => element.remove_attribute(name),
+            };
+        }
+    });
+
+    let label_text = match (names_component, own_name) {
+        (true, _) => Some(ctx.label.get_value()),
+        (false, name) => name,
+    };
+    let instance = ctx.instance.to_string();
+    let part_name = format!("{part:?}");
+
+    if takes_text {
+        let text_item = item.clone();
+        let text = move || {
+            ctx.machine
+                .with(|m| m.text(part, text_item.as_deref()))
+                .unwrap_or_default()
+        };
+        let input_item = item.clone();
+        let on_input = move |ev: leptos::ev::Event| {
+            let value = event_target_value(&ev);
+            ctx.dispatch(Input::Text {
+                part,
+                item: input_item.clone(),
+                value,
+            });
+        };
+        return view! {
+            <input
+                type="text"
+                role=(role == Some(Role::SpinButton)).then_some("spinbutton")
+                aria-label=label_text
+                aria-valuenow=move || range().map(|r| r.now.to_string())
+                aria-valuemin=move || range().map(|r| r.min.to_string())
+                aria-valuemax=move || range().map(|r| r.max.to_string())
+                aria-disabled=move || semantics.get().disabled.then_some("true")
+                autocomplete="off"
+                prop:value=text
+                data-armature=instance
+                data-armature-part=part_name
+                data-value=item
+                on:input=on_input
+                on:focus=on_focus
+                on:keydown=on_keydown
+            />
+        }
+        .into_any();
+    }
+
     view! {
         <div
             node_ref=element
             role=move || semantics.get().role.map(aria_role)
-            aria-label=names_component.then(|| ctx.label.get_value())
-            aria-selected=move || semantics.get().selected.map(|s| s.to_string())
-            aria-expanded=move || semantics.get().expanded.map(|e| e.to_string())
-            aria-haspopup=move || (semantics.get().role == Some(Role::ComboBox)).then_some("listbox")
-            aria-multiselectable=move || semantics.get().multiselectable.map(|m| m.to_string())
-            aria-orientation=move || {
-                semantics.get().orientation.map(|o| match o {
-                    Orientation::Vertical => "vertical",
-                    Orientation::Horizontal => "horizontal",
-                })
-            }
-            aria-disabled=move || semantics.get().disabled.then_some("true")
+            aria-label=label_text
             hidden=move || semantics.get().hidden
             style:display=move || semantics.get().hidden.then_some("none")
-            tabindex=move || match semantics.get().focusable {
-                Focusable::No => None,
-                Focusable::Programmatic => Some("-1"),
-                Focusable::TabStop => Some("0"),
-            }
             style:position=placement.map(|_| "fixed")
-            data-active=move || semantics.get().active
-            data-armature=ctx.instance.to_string()
-            data-armature-part=format!("{part:?}")
+            style:touch-action=tracks_pointer.then_some("none")
+            tabindex=tabindex
+            data-armature=instance
+            data-armature-part=part_name
             data-armature-item=registers
             data-value=item
             on:click=on_click
+            on:pointerdown=on_pointerdown
             on:focus=on_focus
             on:keydown=on_keydown
         >
-            {children()}
+            {children.map(|children| children())}
         </div>
     }
+    .into_any()
 }

@@ -245,6 +245,14 @@ pub trait Primitive: Clone + 'static {
         false
     }
 
+    /// The part that carries the component's accessible name: the first part with a
+    /// role that is not repeated per item.
+    fn named_part(&self) -> Option<Self::Part> {
+        let named =
+            |part: &Self::Part| !Self::is_item(*part) && self.semantics(*part, None).role.is_some();
+        Self::parts().iter().copied().find(named)
+    }
+
     fn upsert_item(&mut self, item: Item);
     fn remove_item(&mut self, key: &str);
     /// Aligns items with the rendered order. `rendered` is `(key, text)`; the text
