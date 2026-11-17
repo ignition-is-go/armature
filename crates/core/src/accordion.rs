@@ -108,13 +108,20 @@ impl Primitive for Accordion {
     fn semantics(&self, part: Part, item: Option<&str>) -> Semantics {
         let open = item.is_some_and(|key| self.is_open(key));
         match part {
-            Part::Trigger => Semantics {
-                role: Some(Role::Button),
-                expanded: Some(open),
-                disabled: !item.is_some_and(|key| self.items.is_enabled(key)),
-                focusable: Focusable::TabStop,
-                ..Default::default()
-            },
+            Part::Trigger => {
+                let enabled = item.is_some_and(|key| self.items.is_enabled(key));
+                Semantics {
+                    role: Some(Role::Button),
+                    expanded: Some(open),
+                    disabled: !enabled,
+                    focusable: if enabled {
+                        Focusable::TabStop
+                    } else {
+                        Focusable::No
+                    },
+                    ..Default::default()
+                }
+            }
             Part::Panel => Semantics {
                 role: Some(Role::Region),
                 hidden: !open,

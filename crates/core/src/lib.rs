@@ -35,6 +35,7 @@ pub mod sortable;
 pub mod spans;
 pub mod swipe;
 pub mod tabs;
+pub mod testing;
 pub mod text_match;
 pub mod timing;
 pub mod toggle;
