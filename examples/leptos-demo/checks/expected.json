@@ -138,7 +138,7 @@
   },
   "dialog": {
     "start": "shown=false backdrop=none",
-    "opened": "shown=true modal=true focus=Content expanded=true",
+    "opened": "shown=true modal=true focus=Content expanded=null",
     "tabCycle": "dialog-yes > Close > dialog-yes > Close",
     "shiftTab": "dialog-yes",
     "escape": "shown=false focus=Trigger",

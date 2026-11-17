@@ -718,3 +718,125 @@ fn calendar_behaviors() {
         Focusable::TabStop
     );
 }
+
+use armature_core::dialog::{self, Dialog, Dismiss, Refusal};
+
+// dialog.test.ts
+#[test]
+fn dialog_behaviors() {
+    let open = dialog::Options::default();
+    let press = |dialog: &mut Dialog, part: dialog::Part| {
+        dialog.send(
+            Input::Press {
+                part,
+                item: None,
+                mods: Modifiers::default(),
+            },
+            &mut |_| true,
+        );
+    };
+    // "dismissals close unless dismissible is false, which makes them attempts"
+    for dismiss in [Dismiss::Escape, Dismiss::OutsidePress, Dismiss::Back] {
+        assert_eq!(open.refusal(dismiss), None);
+        assert_eq!(
+            dialog::Options {
+                dismissible: false,
+                ..open
+            }
+            .refusal(dismiss),
+            Some(Refusal::Attempt)
+        );
+    }
+    // "Close parts, triggers and the controller close a non-dismissible dialog"
+    for dismiss in [
+        Dismiss::ClosePress,
+        Dismiss::TriggerPress,
+        Dismiss::Controller,
+    ] {
+        assert_eq!(
+            dialog::Options {
+                dismissible: false,
+                ..open
+            }
+            .refusal(dismiss),
+            None
+        );
+    }
+    // "an outside press is an attempt when outside presses don't close"
+    let kept = dialog::Options {
+        dismiss_on_backdrop: false,
+        ..open
+    };
+    assert_eq!(kept.refusal(Dismiss::OutsidePress), Some(Refusal::Attempt));
+    assert_eq!(kept.refusal(Dismiss::Escape), None);
+    // "a refused press beside a non-modal dialog is the page's, not an attempt"
+    let beside = dialog::Options {
+        dismiss_on_backdrop: false,
+        modal: false,
+        ..open
+    };
+    assert_eq!(beside.refusal(Dismiss::OutsidePress), Some(Refusal::Silent));
+    assert_eq!(
+        dialog::Options {
+            dismissible: false,
+            ..beside
+        }
+        .refusal(Dismiss::Escape),
+        Some(Refusal::Attempt)
+    );
+    // "an outside press never closes an alert dialog" and "an alert dialog is always modal"
+    let mut alert = Dialog::new(dialog::Options {
+        alert: true,
+        modal: false,
+        ..open
+    });
+    press(&mut alert, dialog::Part::Trigger);
+    alert.send(Input::PressOutside, &mut |_| true);
+    assert!(alert.is_open() && alert.semantics(dialog::Part::Content, None).modal);
+    // "a dialog is modal by default, and marked modal"
+    let mut modal = Dialog::default();
+    press(&mut modal, dialog::Part::Trigger);
+    assert!(modal.semantics(dialog::Part::Content, None).modal);
+    // "a modal dialog's trigger has no aria-expanded, and a non-modal one's does"
+    assert_eq!(modal.semantics(dialog::Part::Trigger, None).expanded, None);
+    let plain = Dialog::new(dialog::Options {
+        modal: false,
+        ..open
+    });
+    assert_eq!(
+        plain.semantics(dialog::Part::Trigger, None).expanded,
+        Some(false)
+    );
+    assert!(!plain.semantics(dialog::Part::Content, None).modal);
+    // "Escape on a non-dismissible dialog reports the attempt and keeps it open"
+    let mut fixed = Dialog::new(dialog::Options {
+        dismissible: false,
+        ..open
+    });
+    press(&mut fixed, dialog::Part::Trigger);
+    fixed.send(
+        Input::Key {
+            key: Key::Escape,
+            mods: Modifiers::default(),
+            now_ms: 0,
+        },
+        &mut |_| true,
+    );
+    assert!(fixed.is_open());
+    assert_eq!(fixed.attempts(), 1);
+    // "canceling the close keeps it open"
+    modal.send(
+        Input::Key {
+            key: Key::Escape,
+            mods: Modifiers::default(),
+            now_ms: 0,
+        },
+        &mut |_| false,
+    );
+    assert!(modal.is_open());
+    assert_eq!(
+        modal.attempts(),
+        0,
+        "the owner's own refusal is not counted again"
+    );
+}

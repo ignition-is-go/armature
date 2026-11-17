@@ -23,6 +23,63 @@ pub struct Options {
     /// Whether it interrupts with something that must be answered, such as
     /// confirming a deletion. Assistive technology then announces it at once.
     pub alert: bool,
+    /// Whether Escape and a press outside may close it. When they may not, each
+    /// try is counted in `attempts`, so the owner can say why it stays.
+    pub dismissible: bool,
+    /// Whether the page behind is out of reach while it is open. A dialog that is
+    /// not modal leaves the page usable, so a press beside it is the page's.
+    pub modal: bool,
+}
+
+/// What asked a dialog to close.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Dismiss {
+    Escape,
+    OutsidePress,
+    /// The platform's back gesture or button.
+    Back,
+    ClosePress,
+    TriggerPress,
+    /// The owner or an agent.
+    Controller,
+}
+
+/// Why a dialog stayed open.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Refusal {
+    /// Someone tried to dismiss it on purpose. Worth telling the owner.
+    Attempt,
+    /// A press that was meant for the page beside it. Nothing to report.
+    Silent,
+}
+
+impl Options {
+    fn is_modal(&self) -> bool {
+        self.modal || self.alert
+    }
+
+    /// Whether a way of closing is refused, and whether that counts as a try.
+    /// Close buttons, triggers and the controller always close.
+    pub fn refusal(&self, dismiss: Dismiss) -> Option<Refusal> {
+        match dismiss {
+            Dismiss::ClosePress | Dismiss::TriggerPress | Dismiss::Controller => None,
+            Dismiss::OutsidePress
+                if !self.is_modal() && !(self.dismiss_on_backdrop && self.dismissible) =>
+            {
+                Some(Refusal::Silent)
+            }
+            Dismiss::OutsidePress
+                if self.alert || !self.dismiss_on_backdrop || !self.dismissible =>
+            {
+                Some(Refusal::Attempt)
+            }
+            Dismiss::Escape if !self.dismiss_on_escape || !self.dismissible => {
+                Some(Refusal::Attempt)
+            }
+            Dismiss::Back if !self.dismissible => Some(Refusal::Attempt),
+            _ => None,
+        }
+    }
 }
 
 impl Default for Options {
@@ -31,6 +88,8 @@ impl Default for Options {
             dismiss_on_backdrop: true,
             dismiss_on_escape: true,
             alert: false,
+            dismissible: true,
+            modal: true,
         }
     }
 }
@@ -44,6 +103,7 @@ pub struct Dialog {
     opts: Options,
     open: bool,
     focused: Option<Part>,
+    attempts: u32,
 }
 
 impl Dialog {
@@ -52,11 +112,30 @@ impl Dialog {
             opts,
             open: false,
             focused: None,
+            attempts: 0,
         }
     }
 
     pub fn is_open(&self) -> bool {
         self.open
+    }
+
+    /// How many times someone has tried to dismiss it and been refused by its
+    /// options. Watch it to nudge the dialog or explain why it stays.
+    pub fn attempts(&self) -> u32 {
+        self.attempts
+    }
+
+    /// Closes for `dismiss` if the options allow it, and counts the try if not.
+    fn try_dismiss(&mut self, dismiss: Dismiss, reason: Reason, gate: Gate) -> Reaction<Part> {
+        match self.opts.refusal(dismiss) {
+            None => self.dismiss(reason, gate),
+            Some(Refusal::Attempt) => {
+                self.attempts += 1;
+                Reaction::handled()
+            }
+            Some(Refusal::Silent) => Reaction::default(),
+        }
     }
 
     fn set(&mut self, open: bool, source: Source, reason: Reason, gate: Gate) -> bool {
@@ -127,7 +206,8 @@ impl Primitive for Dialog {
         match part {
             Part::Trigger => Semantics {
                 role: Some(Role::Button),
-                expanded: Some(self.open),
+                // Only a dialog that leaves the page usable reads as expanded.
+                expanded: (!self.opts.is_modal()).then_some(self.open),
                 focusable: Focusable::TabStop,
                 ..Default::default()
             },
@@ -142,7 +222,7 @@ impl Primitive for Dialog {
                     Role::Dialog
                 }),
                 hidden,
-                modal: true,
+                modal: self.opts.is_modal(),
                 focusable: Focusable::Programmatic,
                 ..Default::default()
             },
@@ -197,15 +277,18 @@ impl Primitive for Dialog {
             } => self.dismiss(Reason::Press, gate),
             Input::Key {
                 key: Key::Escape, ..
-            } if self.open && self.opts.dismiss_on_escape => self.dismiss(Reason::Keyboard, gate),
+            } if self.open => self.try_dismiss(Dismiss::Escape, Reason::Keyboard, gate),
+            Input::PressOutside if self.open => {
+                self.try_dismiss(Dismiss::OutsidePress, Reason::Press, gate)
+            }
             _ => Reaction::default(),
         }
     }
 
     fn pointer(&mut self, pointer: Pointer<Part>, _: Measure<Part>, gate: Gate) -> Reaction<Part> {
         match pointer.phase {
-            PointerPhase::Down if self.open && self.opts.dismiss_on_backdrop => {
-                self.dismiss(Reason::Press, gate)
+            PointerPhase::Down if self.open => {
+                self.try_dismiss(Dismiss::OutsidePress, Reason::Press, gate)
             }
             _ => Reaction::default(),
         }
@@ -302,7 +385,7 @@ mod tests {
         assert_eq!(opened.focus.unwrap().part, Part::Content);
         let content = dialog.semantics(Part::Content, None);
         assert!(!content.hidden && content.modal);
-        assert_eq!(dialog.semantics(Part::Trigger, None).expanded, Some(true));
+        assert_eq!(dialog.semantics(Part::Trigger, None).expanded, None);
     }
 
     #[test]
@@ -330,6 +413,7 @@ mod tests {
             dismiss_on_backdrop: false,
             dismiss_on_escape: false,
             alert: true,
+            ..Default::default()
         });
         assert_eq!(
             dialog.semantics(Part::Content, None).role,
