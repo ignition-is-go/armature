@@ -786,6 +786,19 @@ where
             let _ = element
                 .add_event_listener_with_callback("beforematch", found.as_ref().unchecked_ref());
             found.forget();
+            // A picture inside the part says when it has loaded or failed. Those events
+            // do not bubble, so they are caught on the way down.
+            for (name, ok) in [("load", true), ("error", false)] {
+                let heard = Closure::<dyn Fn()>::new(move || {
+                    ctx.dispatch(Input::Loaded { part, ok });
+                });
+                let _ = element.add_event_listener_with_callback_and_bool(
+                    name,
+                    heard.as_ref().unchecked_ref(),
+                    true,
+                );
+                heard.forget();
+            }
         });
     }
     let on_keydown = move |ev: leptos::ev::KeyboardEvent| {

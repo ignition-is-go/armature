@@ -302,6 +302,12 @@ impl<P: Primitive> Machine<P> {
     }
 
     /// Everything announced so far, oldest first.
+    /// Tells the primitive that a picture inside a part loaded or failed. GPUI's `img`
+    /// does not report this to its parent, so the view passes it on.
+    pub fn loaded(&mut self, part: P::Part, ok: bool, window: &mut Window, cx: &mut Context<Self>) {
+        self.dispatch(Input::Loaded { part, ok }, window, cx);
+    }
+
     /// The accessibility node a part was last drawn as.
     pub fn node(&self, part: P::Part, item: Option<&str>) -> Option<accesskit::NodeId> {
         self.nodes.get(&(part, item.map(str::to_string))).copied()
