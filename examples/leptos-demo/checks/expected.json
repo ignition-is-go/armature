@@ -144,7 +144,10 @@
     "escape": "shown=false focus=Trigger",
     "backdrop": "shown=false focus=Trigger",
     "close": "shown=false focus=Trigger",
-    "agentOpen": "shown=true expanded=true"
+    "agentOpen": "shown=true expanded=true",
+    "fixed": "escape=true outside=true",
+    "fixedClose": "shown=false",
+    "warm": "early=false first=true secondAtOnce=true firstGone=true"
   },
   "sheet": {
     "visible": true,

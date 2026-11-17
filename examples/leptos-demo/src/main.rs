@@ -696,6 +696,20 @@ fn App() -> impl IntoView {
                     <Part part=tooltip::Part::Trigger>"Hover or focus me"</Part>
                     <Part part=tooltip::Part::Content>"Saves your work"</Part>
                 </Root>
+                // Tooltips that sit together share their warmth: once one has
+                // shown, its neighbour shows without waiting again.
+                {
+                    let warmth = tooltip::Warmth::default();
+                    let tip = move |label: &'static str, text: &'static str| {
+                        view! {
+                            <Root machine=Tooltip::default().sharing(warmth.clone()) label=label>
+                                <Part part=tooltip::Part::Trigger>{label}</Part>
+                                <Part part=tooltip::Part::Content>{text}</Part>
+                            </Root>
+                        }
+                    };
+                    view! { <div id="warm-tips">{tip("Bold", "Make it bold")}{tip("Italic", "Make it italic")}</div> }
+                }
             </Section>
 
             <Section title="Colour">
@@ -758,6 +772,16 @@ fn App() -> impl IntoView {
                         <p>"Are you sure?"</p>
                         <button id="dialog-yes">"Yes"</button>
                         <Part part=dialog::Part::Close>"Cancel"</Part>
+                    </Part>
+                </Root>
+                // One that must be answered with its own button: Escape and a press
+                // outside are refused.
+                <Root machine=Dialog::new(dialog::Options { dismissible: false, ..Default::default() }) label="Terms">
+                    <Part part=dialog::Part::Trigger>"Open terms"</Part>
+                    <Part part=dialog::Part::Backdrop />
+                    <Part part=dialog::Part::Content>
+                        <p>"Accept the terms to continue."</p>
+                        <Part part=dialog::Part::Close>"Accept"</Part>
                     </Part>
                 </Root>
             </Section>

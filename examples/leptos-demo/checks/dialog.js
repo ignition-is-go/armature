@@ -27,5 +27,33 @@ async () => {
   a.act(ref, 'open'); await frame();
   out.agentOpen = `shown=${shown()} expanded=${a.snapshot().find(s => s.label === 'Confirm').expanded}`;
   a.act(ref, 'close'); await frame();
+  // A dialog that is not dismissible stays through Escape and an outside press.
+  const terms = document.querySelector('[data-armature-part="Trigger"][aria-label="Terms"]');
+  const sheet = document.getElementById(terms.getAttribute('aria-controls'));
+  const up = () => getComputedStyle(sheet).display !== 'none';
+  terms.focus(); terms.click(); await frame();
+  key('Escape'); await frame();
+  const afterEscape = up();
+  sheet.previousElementSibling.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 })); await frame();
+  out.fixed = `escape=${afterEscape} outside=${up()}`;
+  sheet.querySelector('[data-armature-part="Close"]').click(); await frame();
+  out.fixedClose = `shown=${up()}`;
+  // Tooltips sharing warmth: the second opens without its delay.
+  const [bold, italic] = document.querySelectorAll('#warm-tips [data-armature-part="Trigger"]');
+  const tipOf = (el) => document.getElementById(el.getAttribute('aria-describedby'));
+  const seen = (el) => getComputedStyle(tipOf(el)).display !== 'none';
+  const move = (el, type) => el.dispatchEvent(new PointerEvent(type, { bubbles: false, cancelable: true, clientX: 0, clientY: 0, button: 0, pointerType: 'mouse' }));
+  bold.scrollIntoView(); await frame();
+  move(bold, 'pointerenter'); await new Promise(r => setTimeout(r, 150));
+  const early = seen(bold);
+  await new Promise(r => setTimeout(r, 500));
+  const first = seen(bold);
+  move(bold, 'pointerleave');
+  // The pointer moves well away, so it is not on its way to the tooltip.
+  window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: 5000, clientY: 5000, pointerType: 'mouse' })); await frame();
+  const gone = !seen(bold);
+  move(italic, 'pointerenter'); await frame();
+  out.warm = `early=${early} first=${first} secondAtOnce=${seen(italic)} firstGone=${gone}`;
+  move(italic, 'pointerleave'); await frame();
   return out;
 }
