@@ -9,7 +9,9 @@ use crate::primitive::{
     Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction,
     Role, Semantics,
 };
-use crate::tree::{Row, TREE_INDENT, Tree, TreeItem, drop_depth, place_node, slot_target};
+use crate::tree::{
+    CheckStrategy, Checked, Row, TREE_INDENT, Tree, TreeItem, drop_depth, place_node, slot_target,
+};
 use crate::typeahead::Typeahead;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -31,6 +33,10 @@ pub struct TreeView {
     disabled: HashSet<String>,
     labels: HashMap<String, String>,
     selected: Option<String>,
+    /// How the checked nodes are reported, for a tree of checkboxes.
+    check: Option<CheckStrategy>,
+    /// The checked leaves.
+    checked: HashSet<String>,
     focused: Option<String>,
     typeahead: Typeahead,
     drag: Drag,
@@ -83,7 +89,35 @@ impl TreeView {
             })
     }
 
+    /// Turns the tree into one of checkboxes. Choosing a node checks or unchecks it
+    /// and everything beneath it, and the value becomes the checked nodes as
+    /// `strategy` reports them.
+    pub fn checkable(mut self, strategy: CheckStrategy) -> Self {
+        self.check = Some(strategy);
+        self
+    }
+
+    /// Whether a node is checked, unchecked, or checked only in part.
+    pub fn checked_state(&self, key: &str) -> Checked {
+        let states = Tree::new(&self.data).checked_states(&self.checked);
+        states.get(key).copied().unwrap_or(Checked::Unchecked)
+    }
+
     fn select(&mut self, key: &str, source: Source, reason: Reason, gate: Gate) -> bool {
+        if let Some(strategy) = self.check {
+            let tree = Tree::new(&self.data);
+            let next = tree.toggle_checked(key, &self.checked);
+            let value = tree.checked_value(&next, strategy);
+            let allowed = gate(&ValueChange {
+                value,
+                source,
+                reason,
+            });
+            if allowed {
+                self.checked = next;
+            }
+            return allowed;
+        }
         if self.selected.as_deref() == Some(key) {
             return true;
         }
@@ -354,7 +388,13 @@ impl Primitive for TreeView {
             role: Some(Role::TreeItem),
             level: Some(row.level as u32),
             expanded: row.has_children.then_some(row.expanded),
-            selected: Some(self.selected.as_deref() == Some(key)),
+            selected: self
+                .check
+                .is_none()
+                .then(|| self.selected.as_deref() == Some(key)),
+            checked: self
+                .check
+                .map(|_| self.checked_state(key) == Checked::Checked),
             disabled: !self.enabled(key),
             focusable: if current.as_deref() == Some(key) {
                 Focusable::TabStop
@@ -466,22 +506,37 @@ impl Primitive for TreeView {
     }
 
     fn value(&self) -> Vec<String> {
-        self.selected.iter().cloned().collect()
+        match self.check {
+            Some(strategy) => Tree::new(&self.data).checked_value(&self.checked, strategy),
+            None => self.selected.iter().cloned().collect(),
+        }
     }
 
     fn set_value(&mut self, value: Vec<String>) {
         let tree = Tree::new(&self.data);
+        if self.check.is_some() {
+            // Any node named stands for every leaf beneath it.
+            let leaf = |key: &&str| tree.children(key).is_empty();
+            self.checked = value
+                .iter()
+                .flat_map(|key| tree.subtree(key))
+                .filter(leaf)
+                .map(str::to_string)
+                .collect();
+            return;
+        }
         self.selected = value.into_iter().find(|key| tree.level(key).is_some());
     }
 
     fn snapshot(&self, label: &str) -> Snapshot {
+        let value = self.value();
         let items = self
             .rows()
             .into_iter()
             .map(|row| SnapshotItem {
                 label: self.label(&row.key),
                 disabled: !self.enabled(&row.key),
-                selected: self.selected.as_deref() == Some(row.key.as_str()),
+                selected: value.contains(&row.key),
                 key: row.key,
             })
             .collect();
@@ -783,5 +838,47 @@ mod tests {
             &mut |_| false,
         );
         assert_eq!(visible(&tree), ["src", "docs", "README.md"]);
+    }
+
+    #[test]
+    fn a_tree_of_checkboxes_checks_a_branch_at_once_and_reports_by_strategy() {
+        let data = tree_from_paths(&["src/main.rs", "src/ui/button.rs", "docs/intro.md"]);
+        let mut tree = TreeView::new(data.clone(), Dir::Ltr).checkable(CheckStrategy::Trunk);
+        tree.act("select", Some("src"), &mut |_| true).unwrap();
+        assert_eq!(
+            tree.value(),
+            ["src"],
+            "the outermost fully checked node stands for the rest"
+        );
+        assert_eq!(tree.semantics(Part::Node, Some("src")).checked, Some(true));
+        assert_eq!(tree.semantics(Part::Node, Some("src")).selected, None);
+
+        tree.act("expand", Some("src"), &mut |_| true).unwrap();
+        tree.send(
+            Input::Focus {
+                part: Part::Node,
+                item: Some("src/main.rs".into()),
+            },
+            &mut |_| true,
+        );
+        key(&mut tree, Key::Space);
+        assert_eq!(tree.value(), ["src/ui"]);
+        assert_eq!(tree.checked_state("src"), Checked::Mixed);
+
+        let mut leaves = TreeView::new(data, Dir::Ltr).checkable(CheckStrategy::Leaf);
+        leaves.set_value(vec!["src".into()]);
+        assert_eq!(leaves.value(), ["src/main.rs", "src/ui/button.rs"]);
+    }
+
+    #[test]
+    fn a_tree_of_checkboxes_conforms() {
+        let make = || {
+            TreeView::new(
+                tree_from_paths(&["src/main.rs", "docs/intro.md", "README.md"]),
+                Dir::Ltr,
+            )
+            .checkable(CheckStrategy::Leaf)
+        };
+        crate::testing::assert_conforms(make, &[]);
     }
 }

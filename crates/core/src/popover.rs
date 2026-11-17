@@ -159,7 +159,7 @@ impl Primitive for Popover {
                 key: Key::Escape, ..
             } if self.open => self.dismiss(),
             // A press elsewhere, or focus leaving, closes it without pulling focus back.
-            Input::PressOutside | Input::Blur { .. } => {
+            Input::PressOutside | Input::Blur { .. } | Input::WindowBlur => {
                 self.open = false;
                 Reaction::default()
             }
@@ -252,6 +252,14 @@ mod tests {
             popover.send(Input::PressOutside, &mut |_| true),
             Reaction::default()
         );
+        assert!(!popover.is_open());
+    }
+
+    #[test]
+    fn switching_to_another_window_closes_it() {
+        let mut popover = Popover::default();
+        press(&mut popover, Part::Trigger);
+        popover.send(Input::WindowBlur, &mut |_| true);
         assert!(!popover.is_open());
     }
 

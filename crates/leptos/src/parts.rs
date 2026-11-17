@@ -486,6 +486,11 @@ where
             }
         });
         on_cleanup(move || listener.remove());
+        // Switching to another window or tab closes what is open, as a press elsewhere does.
+        let away = window_event_listener(leptos::ev::blur, move |_| {
+            ctx.dispatch(Input::WindowBlur);
+        });
+        on_cleanup(move || away.remove());
     }
 
     // Anything that opens joins the stack of layers while it is open.

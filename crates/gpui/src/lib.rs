@@ -11,11 +11,13 @@ use armature_core::agent::{Access, ActError, Target};
 use armature_core::change::ValueChange;
 use armature_core::geometry::{Point as CorePoint, Rect};
 use armature_core::keys::{Key, Modifiers, Orientation};
+use armature_core::layers::{Layer, LayerStack};
 use armature_core::popup::{Align, Side};
 use armature_core::primitive::{
     Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction,
     Role, Semantics,
 };
+use armature_core::shortcut::Shortcut;
 use armature_core::text_edit::{Edit, TextEdit};
 use gpui::prelude::*;
 use gpui::{
@@ -27,6 +29,53 @@ use gpui::{
 };
 
 pub use armature_core::change::{Reason, Source};
+
+/// The popups and dialogs open in the application, in the order they opened.
+#[derive(Default)]
+struct Layers(LayerStack);
+
+impl gpui::Global for Layers {}
+
+/// The text GPUI's key bindings use for a shortcut, so one written once as
+/// `mod+shift+k` can be bound with `KeyBinding::new`. `mod` becomes Cmd on macOS and
+/// Ctrl elsewhere.
+pub fn binding_for(shortcut: &Shortcut) -> String {
+    let key = match shortcut.key {
+        Key::ArrowUp => "up".to_string(),
+        Key::ArrowDown => "down".to_string(),
+        Key::ArrowLeft => "left".to_string(),
+        Key::ArrowRight => "right".to_string(),
+        Key::Home => "home".to_string(),
+        Key::End => "end".to_string(),
+        Key::PageUp => "pageup".to_string(),
+        Key::PageDown => "pagedown".to_string(),
+        Key::Enter => "enter".to_string(),
+        Key::Space => "space".to_string(),
+        Key::Escape => "escape".to_string(),
+        Key::Tab => "tab".to_string(),
+        Key::Backspace => "backspace".to_string(),
+        Key::F2 => "f2".to_string(),
+        Key::Char(ch) => ch.to_lowercase().to_string(),
+    };
+    let mods = [
+        (
+            shortcut.mods.ctrl,
+            if cfg!(target_os = "macos") {
+                "cmd-"
+            } else {
+                "ctrl-"
+            },
+        ),
+        (shortcut.mods.alt, "alt-"),
+        (shortcut.mods.shift, "shift-"),
+    ];
+    let prefix: String = mods
+        .iter()
+        .filter(|(held, _)| *held)
+        .map(|(_, name)| *name)
+        .collect();
+    format!("{prefix}{key}")
+}
 
 type ChangeGate = Box<dyn FnMut(&ValueChange, &mut App) -> bool>;
 type PartKey<P> = (<P as Primitive>::Part, Option<String>);
@@ -54,6 +103,11 @@ pub struct Machine<P: Primitive> {
     scroll: ScrollHandle,
     /// The scroll offset and viewport length last reported to the primitive.
     scrolled: (f64, f64),
+    /// The accessibility node each part was last drawn as, so parts can refer to
+    /// one another.
+    nodes: HashMap<PartKey<P>, accesskit::NodeId>,
+    /// Watches for the window being switched away from.
+    away_watch: Option<gpui::Subscription>,
     /// Watches for focus leaving each part that has held it.
     blur_watch: HashMap<PartKey<P>, gpui::Subscription>,
     announcements: Vec<Announcement>,
@@ -145,6 +199,8 @@ impl<P: Primitive> Machine<P> {
             scrolled: (0.0, 0.0),
             announcements: Vec::new(),
             blur_watch: HashMap::new(),
+            away_watch: None,
+            nodes: HashMap::new(),
             gate: None,
             registration,
             secret: false,
@@ -191,6 +247,20 @@ impl<P: Primitive> Machine<P> {
 
     /// Records a committed change in the shared history.
     fn remember(&self, before: Vec<String>, source: Source, cx: &mut App) {
+        // Whatever is open sits in the stack of layers while it is open.
+        let open = self.machine.snapshot("").expanded == Some(true);
+        let modal = P::parts().iter().any(|part| {
+            let semantics = self.machine.semantics(*part, None);
+            semantics.modal && !semantics.hidden
+        });
+        let id = self.registration.to_string();
+        let layers = &mut cx.default_global::<Layers>().0;
+        match (open || modal, modal) {
+            (true, true) if layers.top() != Some(id.as_str()) => layers.open(Layer::dialog(&id)),
+            (true, false) if layers.top() != Some(id.as_str()) => layers.open(Layer::popup(&id)),
+            (false, _) => drop(layers.close(&id)),
+            _ => {}
+        }
         let after = self.machine.value();
         agent::record(
             self.label.to_string(),
@@ -232,6 +302,26 @@ impl<P: Primitive> Machine<P> {
     }
 
     /// Everything announced so far, oldest first.
+    /// The accessibility node a part was last drawn as.
+    pub fn node(&self, part: P::Part, item: Option<&str>) -> Option<accesskit::NodeId> {
+        self.nodes.get(&(part, item.map(str::to_string))).copied()
+    }
+
+    /// The nodes a part refers to: the one that names it, the one it controls and
+    /// the one that describes it.
+    pub fn links(&self, part: P::Part, item: Option<&str>) -> [Option<accesskit::NodeId>; 3] {
+        let relations = P::relations(part);
+        let node = |target: Option<P::Part>| {
+            let target = target?;
+            self.node(target, item).or_else(|| self.node(target, None))
+        };
+        [
+            node(relations.labelled_by),
+            node(relations.controls),
+            node(relations.described_by),
+        ]
+    }
+
     pub fn announcements(&self) -> &[Announcement] {
         &self.announcements
     }
@@ -420,6 +510,15 @@ impl<P: Primitive> Machine<P> {
     /// Tells the primitive when focus leaves the part holding it for somewhere
     /// outside the primitive.
     fn watch_blur(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.away_watch.is_none() {
+            self.away_watch = Some(cx.observe_window_activation(window, |this, window, cx| {
+                if !window.is_window_active() {
+                    this.run(window, cx, |machine, _, gate| {
+                        machine.send(Input::WindowBlur, gate)
+                    });
+                }
+            }));
+        }
         let focused = self
             .handles
             .iter()
@@ -593,7 +692,13 @@ pub fn part<K: PartOf>(
                     .bounds
                     .get(&(placement.anchor, None))
                     .is_some_and(|bounds| bounds.contains(&event.position));
-                if !on_anchor {
+                // A press while a dialog is up belongs to the dialog, not to what is
+                // under it.
+                let inert = cx
+                    .default_global::<Layers>()
+                    .0
+                    .is_inert(&state.registration.to_string());
+                if !on_anchor && !inert {
                     state.dispatch(Input::PressOutside, window, cx);
                 }
             });
@@ -688,18 +793,39 @@ pub fn part<K: PartOf>(
             None => Layout::Hidden,
         },
     };
+    let links = {
+        let relations = K::Primitive::relations(part);
+        // An item's partner is the same item's other part, such as a tab's panel.
+        let node = |target: Option<K>| {
+            let target = target?;
+            let own = machine.nodes.get(&(target, item.map(str::to_string)));
+            own.or_else(|| machine.nodes.get(&(target, None))).copied()
+        };
+        Links {
+            labelled_by: node(relations.labelled_by),
+            controls: node(relations.controls),
+            described_by: node(relations.described_by),
+        }
+    };
     let record: RecordBounds = {
         let (state, key) = (state.clone(), key.clone());
-        Box::new(move |bounds, window: &mut Window, cx: &mut App| {
-            let scrolled = state.update(cx, |state, _| {
+        Box::new(move |bounds, node, window: &mut Window, cx: &mut App| {
+            let (scrolled, relinked) = state.update(cx, |state, _| {
                 state.bounds.insert(key.clone(), bounds);
+                let relinked =
+                    node.is_some_and(|node| state.nodes.insert(key.clone(), node) != Some(node));
                 // Scrolling is read off the handle each frame.
                 let now = (
                     -f32::from(state.scroll.offset().y) as f64,
                     f32::from(bounds.size.height) as f64,
                 );
-                (scrolls && now != state.scrolled).then_some(now)
+                ((scrolls && now != state.scrolled).then_some(now), relinked)
             });
+            // Parts that refer to this one pick up its node on the next frame.
+            if relinked {
+                let state = state.clone();
+                window.defer(cx, move |_, cx| state.update(cx, |_, cx| cx.notify()));
+            }
             // The primitive hears of a change once this frame is done, since a frame
             // being drawn cannot ask for another.
             if let Some(now) = scrolled {
@@ -730,6 +856,7 @@ pub fn part<K: PartOf>(
             inner: el,
             layout,
             record,
+            links,
         };
     };
     let handle = handle.tab_stop(semantics.focusable == Focusable::TabStop);
@@ -769,6 +896,7 @@ pub fn part<K: PartOf>(
         inner,
         layout,
         record,
+        links,
     }
 }
 
@@ -801,7 +929,7 @@ fn floating(side: Side, align: Align, gap: f64, anchor: Bounds<Pixels>) -> Layou
     }
 }
 
-type RecordBounds = Box<dyn Fn(Bounds<Pixels>, &mut Window, &mut App)>;
+type RecordBounds = Box<dyn Fn(Bounds<Pixels>, Option<accesskit::NodeId>, &mut Window, &mut App)>;
 
 /// A part's `div`. It takes styles, children and listeners like a `div`, but whether
 /// and where it appears is decided by the primitive, so styling cannot un-hide it.
@@ -809,6 +937,25 @@ pub struct PartElement {
     inner: Stateful<Div>,
     layout: Layout,
     record: RecordBounds,
+    links: Links,
+}
+
+/// The nodes of the parts this one refers to.
+#[derive(Clone, Default)]
+struct Links {
+    labelled_by: Option<accesskit::NodeId>,
+    controls: Option<accesskit::NodeId>,
+    described_by: Option<accesskit::NodeId>,
+}
+
+/// The accessibility node GPUI draws an element as. GPUI keeps this to itself, so it
+/// is read out of the id's debug text. If that text ever changes shape this finds
+/// nothing and parts simply go without their links.
+fn node_id(id: &GlobalElementId) -> Option<accesskit::NodeId> {
+    let text = format!("{id:?}");
+    let hash = text.rsplit_once("hash: ")?.1;
+    let digits: String = hash.chars().take_while(char::is_ascii_digit).collect();
+    digits.parse().ok().map(accesskit::NodeId)
 }
 
 impl Styled for PartElement {
@@ -839,6 +986,7 @@ impl IntoElement for PartElement {
             inner: self.inner,
             record: self.record,
             live: None,
+            links: self.links,
         };
         match self.layout {
             Layout::Inline => measured.into_any_element(),
@@ -924,7 +1072,8 @@ fn live_node(id: ElementId, message: SharedString, assertive: bool) -> Measured 
     };
     Measured {
         inner: div().id(id).role(role).aria_label(message),
-        record: Box::new(|_, _, _| {}),
+        record: Box::new(|_, _, _, _| {}),
+        links: Links::default(),
         live: Some(live),
     }
 }
@@ -955,6 +1104,7 @@ struct Measured {
     record: RecordBounds,
     /// Set on a region whose changes a screen reader should speak.
     live: Option<accesskit::Live>,
+    links: Links,
 }
 
 impl IntoElement for Measured {
@@ -986,6 +1136,15 @@ impl Element for Measured {
         if let Some(live) = self.live {
             node.set_live(live);
         }
+        if let Some(target) = self.links.labelled_by {
+            node.set_labelled_by(vec![target]);
+        }
+        if let Some(target) = self.links.controls {
+            node.set_controls(vec![target]);
+        }
+        if let Some(target) = self.links.described_by {
+            node.set_described_by(vec![target]);
+        }
     }
 
     fn a11y_synthetic_children(
@@ -1015,7 +1174,7 @@ impl Element for Measured {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        (self.record)(bounds, window, cx);
+        (self.record)(bounds, id.and_then(node_id), window, cx);
         self.inner
             .prepaint(id, inspector_id, bounds, state, window, cx)
     }
@@ -1074,6 +1233,39 @@ mod tests {
                 Some(accesskit::Live::Assertive),
                 said
             )
+        );
+    }
+
+    #[test]
+    fn a_part_points_at_the_parts_it_is_related_to() {
+        let mut part = live_node("part".into(), "".into(), false);
+        part.live = None;
+        part.links = Links {
+            labelled_by: Some(accesskit::NodeId(7)),
+            controls: Some(accesskit::NodeId(8)),
+            described_by: None,
+        };
+        let mut node = accesskit::Node::new(accesskit::Role::Dialog);
+        Element::write_a11y_info(&part, &mut node);
+        assert_eq!(node.labelled_by(), [accesskit::NodeId(7)]);
+        assert_eq!(node.controls(), [accesskit::NodeId(8)]);
+        assert!(node.described_by().is_empty());
+    }
+
+    #[test]
+    fn a_shortcut_written_once_becomes_a_gpui_binding() {
+        let text = binding_for(&Shortcut::parse("mod+shift+k").unwrap());
+        let wanted = if cfg!(target_os = "macos") {
+            "cmd-shift-k"
+        } else {
+            "ctrl-shift-k"
+        };
+        assert_eq!(text, wanted);
+        let parsed = gpui::Keystroke::parse(wanted).expect("a binding GPUI accepts");
+        assert!(parsed.modifiers.shift && parsed.key == "k");
+        assert_eq!(
+            binding_for(&Shortcut::parse("alt+enter").unwrap()),
+            "alt-enter"
         );
     }
 }

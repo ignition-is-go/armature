@@ -40,6 +40,8 @@ pub enum Input<Part> {
     Found { part: Part, item: Option<String> },
     /// A press landed outside every part of this primitive.
     PressOutside,
+    /// The window stopped being the one the person is working in.
+    WindowBlur,
     /// The time asked for by `Effect::Wake` has arrived.
     Tick { now_ms: u64 },
     /// The pointer came to rest over a part, or left it. Touch never hovers.

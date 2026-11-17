@@ -9,6 +9,7 @@ use armature_core::dialog::{self, Dialog};
 use armature_core::editable::{self, Editable};
 use armature_core::keys::Dir;
 use armature_core::picker::{self, Picker};
+use armature_core::popover::{self, Popover};
 use armature_core::primitive::{Item, Primitive};
 use armature_core::toggle::{self, Toggle};
 use armature_core::tooltip::{self, Tooltip};
@@ -378,4 +379,102 @@ fn a_wheel_picker_scrolls_to_what_the_keys_choose_and_follows_the_scroll(cx: &mu
     cx.executor().advance_clock(Duration::from_millis(300));
     cx.run_until_parked();
     assert_eq!(picker.read_with(cx, |m, _| m.value()), ["12"]);
+}
+
+#[gpui::test]
+fn a_popup_is_tied_to_its_trigger_and_title_in_the_accessibility_tree(cx: &mut TestAppContext) {
+    let (popover, cx) = open(
+        cx,
+        Popover::default(),
+        |popover: &Entity<Machine<Popover>>, cx: &mut App| {
+            div()
+                .child(part(popover, popover::Part::Trigger, None, cx).size(px(ROW)))
+                .child(
+                    part(popover, popover::Part::Content, None, cx)
+                        .child(
+                            part(popover, popover::Part::Title, None, cx).child("Share this page"),
+                        )
+                        .child(
+                            part(popover, popover::Part::Description, None, cx)
+                                .child("Anyone can view."),
+                        ),
+                )
+        },
+    );
+    focus(&popover, cx, popover::Part::Trigger, None);
+    cx.simulate_keystrokes("enter");
+    cx.run_until_parked();
+    cx.update(|window, _| window.refresh());
+    cx.run_until_parked();
+
+    let links = |kind: popover::Part| popover.read_with(cx, |m, _| m.links(kind, None));
+    let node = |kind: popover::Part| {
+        popover
+            .read_with(cx, |m, _| m.node(kind, None))
+            .expect("drawn")
+    };
+    assert_ne!(node(popover::Part::Title), node(popover::Part::Content));
+    assert_eq!(
+        links(popover::Part::Trigger)[1],
+        Some(node(popover::Part::Content)),
+        "controls"
+    );
+    assert_eq!(
+        links(popover::Part::Content)[0],
+        Some(node(popover::Part::Title)),
+        "labelled by"
+    );
+    assert_eq!(
+        links(popover::Part::Content)[2],
+        Some(node(popover::Part::Description)),
+        "described by"
+    );
+}
+
+#[gpui::test]
+fn a_press_while_a_dialog_is_up_does_not_close_the_popover_under_it(cx: &mut TestAppContext) {
+    struct Both {
+        share: Entity<Machine<Popover>>,
+        confirm: Entity<Machine<Dialog>>,
+    }
+    impl Render for Both {
+        fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .size_full()
+                .child(part(&self.share, popover::Part::Trigger, None, cx).size(px(ROW)))
+                .child(part(&self.share, popover::Part::Content, None, cx).size(px(ROW)))
+                .child(part(&self.confirm, dialog::Part::Content, None, cx).size(px(ROW)))
+        }
+    }
+    let (page, cx) = cx.add_window_view(|_, cx| Both {
+        share: cx.new(|cx| Machine::new(Popover::default(), "Share", Vec::<Item>::new(), cx)),
+        confirm: cx.new(|cx| Machine::new(Dialog::default(), "Confirm", Vec::<Item>::new(), cx)),
+    });
+    let (share, confirm) = page.update(cx, |page, _| (page.share.clone(), page.confirm.clone()));
+    let act = |cx: &mut VisualTestContext, label: &str, action: &str| {
+        cx.update(|_, cx| {
+            let found = armature_gpui::agent::snapshot(cx)
+                .into_iter()
+                .find(|(_, s)| s.label == label)
+                .unwrap();
+            armature_gpui::agent::act(cx, &found.0, action, None).unwrap();
+        });
+        cx.run_until_parked();
+    };
+    let open = |cx: &mut VisualTestContext| {
+        share.read_with(cx, |m, _| m.snapshot().expanded) == Some(true)
+    };
+
+    act(cx, "Share", "open");
+    act(cx, "Confirm", "open");
+    cx.simulate_click(point(px(300.), px(300.)), Modifiers::default());
+    assert!(open(cx), "the dialog is in the way");
+
+    act(cx, "Confirm", "close");
+    cx.simulate_click(point(px(300.), px(300.)), Modifiers::default());
+    assert!(
+        !open(cx),
+        "with the dialog gone, a press elsewhere closes it"
+    );
+    let _ = confirm;
 }

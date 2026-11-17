@@ -156,7 +156,8 @@ impl Primitive for Tooltip {
                 key: Key::Escape, ..
             }
             | Input::Press { .. }
-            | Input::PressOutside => {
+            | Input::PressOutside
+            | Input::WindowBlur => {
                 self.due = None;
                 self.open = false;
                 Reaction::default()

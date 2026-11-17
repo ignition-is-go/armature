@@ -71,6 +71,7 @@ fn inputs<P: Primitive>(items: &[Item]) -> Vec<Input<P::Part>> {
     let mods = Modifiers::default();
     let mut all: Vec<Input<P::Part>> = vec![
         Input::PressOutside,
+        Input::WindowBlur,
         Input::Tick { now_ms: 10_000 },
         Input::Paste {
             text: "a\tb\nc\td".into(),

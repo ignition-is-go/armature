@@ -157,7 +157,7 @@ impl Primitive for Select {
 
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
         match input {
-            Input::PressOutside => {
+            Input::PressOutside | Input::WindowBlur => {
                 self.open = false;
                 Reaction::default()
             }
