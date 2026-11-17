@@ -144,6 +144,15 @@ impl<P: Primitive + Send + Sync> Context<P> {
                 }
                 // The part to send to was recorded when the gesture began.
                 Ask::CapturePointer => {}
+                Ask::ScrollTo { offset } => {
+                    let scrolling = P::parts().iter().copied().find(|part| P::scrolls(*part));
+                    if let Some(element) = scrolling.and_then(|part| self.element_of(part, None)) {
+                        element.set_scroll_top(offset as i32);
+                    }
+                }
+                Ask::Copy { text } => {
+                    let _ = window().navigator().clipboard().write_text(&text);
+                }
             }
         }
         reaction.handled
@@ -223,6 +232,18 @@ impl<P: Primitive + Send + Sync> Context<P> {
         let style = popup.style();
         let _ = style.set_property("left", &format!("{}px", placed.x));
         let _ = style.set_property("top", &format!("{}px", placed.y));
+        let anchor_box = Rect {
+            x: anchor.x(),
+            y: anchor.y(),
+            width: anchor.width(),
+            height: anchor.height(),
+        };
+        let popup_size = Size {
+            width: size.width(),
+            height: size.height(),
+        };
+        let arrow = popup::arrow_offset(anchor_box, placed, popup_size, 12.0);
+        let _ = style.set_property("--armature-arrow-x", &format!("{arrow}px"));
         let side = if placed.side == Side::Bottom {
             "bottom"
         } else {
@@ -345,6 +366,7 @@ fn aria_role(role: Role) -> &'static str {
         Role::List => "list",
         Role::ListItem => "listitem",
         Role::Separator => "separator",
+        Role::Tooltip => "tooltip",
     }
 }
 
@@ -591,7 +613,8 @@ where
     let on_pointerdown = {
         let item = item.clone();
         move |ev: leptos::ev::PointerEvent| {
-            if !tracks_pointer || ev.button() != 0 {
+            // A part nested inside this one may already have taken the gesture.
+            if !tracks_pointer || ev.button() != 0 || ev.default_prevented() {
                 return;
             }
             ctx.captured.set_value(Some((part, item.clone())));
@@ -612,7 +635,8 @@ where
         }
     };
     let on_keydown = move |ev: leptos::ev::KeyboardEvent| {
-        if !interactive() {
+        // Keys pressed while an input method is composing belong to it.
+        if !interactive() || ev.is_composing() {
             return;
         }
         if ev.key() == "Tab"
@@ -635,6 +659,54 @@ where
         }
     };
 
+    let hovers = K::Primitive::hovers(part);
+    let hover = {
+        let item = item.clone();
+        move |inside: bool, ev: leptos::ev::PointerEvent| {
+            // Touch has no hover, so a tap never counts as one.
+            if hovers && ev.pointer_type() != "touch" {
+                let now_ms = js_sys::Date::now() as u64;
+                ctx.dispatch(Input::Hover {
+                    part,
+                    item: item.clone(),
+                    inside,
+                    now_ms,
+                });
+            }
+        }
+    };
+    let (on_enter, on_leave) = (hover.clone(), hover);
+    let scrolls = K::Primitive::scrolls(part);
+    let report_scroll = move || {
+        if let Some(scroller) = element.get_untracked() {
+            let offset = scroller.scroll_top() as f64;
+            let viewport = scroller.client_height() as f64;
+            ctx.dispatch(Input::Scrolled {
+                part,
+                offset,
+                viewport,
+            });
+        }
+    };
+    if scrolls {
+        // The first report waits a frame, for the part to have a size.
+        Effect::new(move |_| request_animation_frame(report_scroll));
+    }
+    let on_paste = move |ev: leptos::ev::ClipboardEvent| {
+        if !interactive() {
+            return;
+        }
+        let pasted = ev
+            .clipboard_data()
+            .and_then(|data| data.get_data("text/plain").ok());
+        if let Some(text) = pasted
+            && ctx.dispatch(Input::Paste { text })
+        {
+            ev.prevent_default();
+            ev.stop_propagation();
+        }
+    };
+
     let range = move || semantics.get().range;
     let tabindex = move || match semantics.get().focusable {
         Focusable::No => None,
@@ -652,6 +724,7 @@ where
     let relations = K::Primitive::relations(part);
     let controls = relations.controls.map(&id_of);
     let labelled_by = relations.labelled_by.map(&id_of);
+    let described_by = relations.described_by.map(&id_of);
     let own_id = id_of(part);
 
     // State that changes often is written straight onto the element. The view layer
@@ -682,6 +755,7 @@ where
             ("aria-modal", state.modal.then(|| "true".to_string())),
             ("aria-controls", controls.clone()),
             ("aria-labelledby", labelled_by.clone()),
+            ("aria-describedby", described_by.clone()),
             ("data-active", state.active.then(String::new)),
         ];
         for (name, value) in attributes {
@@ -757,6 +831,14 @@ where
             on:pointerdown=on_pointerdown
             on:focus=on_focus
             on:keydown=on_keydown
+            on:pointerenter=move |ev| on_enter(true, ev)
+            on:pointerleave=move |ev| on_leave(false, ev)
+            on:scroll=move |_| {
+                if scrolls {
+                    report_scroll();
+                }
+            }
+            on:paste=on_paste
         >
             {children.map(|children| children())}
         </div>

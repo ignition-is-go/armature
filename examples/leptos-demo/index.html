@@ -85,6 +85,45 @@
       .panel.grow { flex: 1; }
       [role="separator"] { width: 6px; background: #ccd; cursor: col-resize; outline: none; flex: none; }
       [role="separator"]:focus-visible, [role="separator"][data-active] { background: #3b6fe0; }
+      [data-armature-part="Content"][role="dialog"]:not([aria-modal]) { position: fixed; transform: none; top: auto; left: auto; width: 14rem; }
+      [data-armature-part="Arrow"] { position: absolute; top: -6px; left: var(--armature-arrow-x); width: 10px; height: 10px; margin-left: -5px; background: white; transform: rotate(45deg); }
+      [data-side="top"] > [data-armature-part="Arrow"] { top: auto; bottom: -6px; }
+      [data-armature-part="Title"] { font-weight: 600; }
+      [role="tooltip"] { padding: 4px 8px; background: #1f2430; color: white; border-radius: 6px; font-size: 13px; white-space: nowrap; }
+      [data-armature-part="Area"] { position: relative; width: 12rem; height: 7rem; border-radius: 6px; overflow: visible; }
+      .color-pad { position: absolute; inset: 0; border-radius: 6px; background-image: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent); }
+      [data-armature-part="Hue"] { position: relative; width: 12rem; height: 10px; margin: 10px 0; border-radius: 5px; background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+      .color-dot { position: absolute; }
+      .color-dot [role="slider"] { margin: -8px 0 0 -8px; }
+      .color-row { display: flex; gap: 8px; align-items: center; }
+      .swatch { width: 28px; height: 28px; border-radius: 6px; border: 1px solid #bbb; }
+      .color-row input { width: 6rem; }
+      .swipe { position: relative; width: 16rem; height: 2.4rem; overflow: hidden; border: 1px solid #bbb; border-radius: 6px; }
+      .swipe-actions { position: absolute; right: 0; top: 0; bottom: 0; display: flex; align-items: center; }
+      .swipe-actions [role="button"] { padding: 0 8px; height: 100%; line-height: 2.4rem; background: #e0553b; color: white; cursor: default; font-size: 12px; }
+      .swipe-slide { position: absolute; inset: 0; background: white; }
+      .swipe-slide > div { height: 100%; padding: 0 10px; line-height: 2.4rem; outline: none; user-select: none; }
+      [data-armature-part="Viewport"] { position: relative; width: 14rem; height: 120px; overflow-y: auto; border: 1px solid #bbb; border-radius: 6px; }
+      .virtual-space { position: relative; }
+      .virtual-row { position: absolute; left: 0; right: 0; height: 24px; }
+      .virtual-row [role="option"] { height: 24px; line-height: 24px; padding: 0 8px; }
+      [data-armature-part="Track"][role="list"] { position: relative; width: 20rem; height: 70px; background: repeating-linear-gradient(to right, #f3f4f8 0, #f3f4f8 calc(100% / 24 - 1px), #dde 0, #dde calc(100% / 24)); border-radius: 6px; margin: 0; }
+      .span-slot { position: absolute; height: 20px; }
+      .span-slot [role="listitem"] { position: relative; width: 100%; height: 20px; margin: 0; padding: 0 4px; box-sizing: border-box; background: #3b6fe0; color: white; border: none; font-size: 11px; line-height: 20px; overflow: hidden; }
+      [data-armature-part="SpanEnd"] { position: absolute; right: 0; top: 0; bottom: 0; width: 6px; background: rgba(255, 255, 255, 0.5); cursor: ew-resize; }
+      [role="grid"][aria-multiselectable] { grid-template-columns: repeat(3, 4rem); }
+      [role="grid"][aria-multiselectable] [role="gridcell"] { color: inherit; border: 1px solid #dde; border-radius: 0; }
+      [role="grid"][aria-multiselectable] [role="gridcell"][aria-selected="true"] { background: #e8eefc; color: inherit; }
+      [data-armature-part="Surface"] { position: relative; width: 20rem; height: 12rem; border: 1px solid #bbb; border-radius: 6px; overflow: hidden; outline: none; background: #fafbfd; }
+      [data-armature-part="Surface"]:focus-visible { border-color: #3b6fe0; }
+      .node-slot { position: absolute; }
+      .node-slot [role="listitem"] { position: relative; width: 100%; height: 100%; margin: 0; box-sizing: border-box; cursor: move; }
+      [data-armature-part="Resize"] { position: absolute; right: 0; bottom: 0; width: 10px; height: 10px; background: #3b6fe0; cursor: nwse-resize; }
+      [data-armature-part="PortIn"], [data-armature-part="PortOut"] { position: absolute; top: 50%; margin-top: -8px; font-size: 12px; cursor: default; color: #889; }
+      [data-armature-part="PortIn"] { left: 2px; }
+      [data-armature-part="PortOut"] { right: 2px; }
+      [data-armature-part="PortOut"][data-active] { color: #3b6fe0; }
+      .lasso { position: absolute; border: 1px dashed #3b6fe0; background: rgba(59, 111, 224, 0.1); pointer-events: none; }
     </style>
   </head>
   <body></body>

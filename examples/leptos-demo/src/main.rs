@@ -1,25 +1,34 @@
 use armature_core::accordion::{self, Accordion};
 use armature_core::calendar::{self, Calendar};
+use armature_core::canvas::{self, Canvas, Node};
+use armature_core::color_picker::{self, ColorPicker};
 use armature_core::command::{self, Command};
+use armature_core::data_grid::{self, DataGrid};
 use armature_core::date::Date;
 use armature_core::dialog::{self, Dialog};
+use armature_core::geometry::Rect;
 use armature_core::keys::Dir;
 use armature_core::listbox::{self, Listbox};
 use armature_core::number::NumberRange;
 use armature_core::number_input::{self, NumberInput};
 use armature_core::otp_input::{self, OtpInput};
+use armature_core::popover::{self, Popover};
 use armature_core::radio::{self, Radio};
 use armature_core::resizable::{self, Resizable};
 use armature_core::select::{self, Select};
 use armature_core::selection::Mode;
 use armature_core::slider::{self, Slider};
 use armature_core::sortable::{self, Sortable};
+use armature_core::swipe_row::{self, SwipeRow};
 use armature_core::tabs::{self, Tabs};
+use armature_core::timeline::{self, Timeline};
 use armature_core::toggle::{self, Toggle};
 use armature_core::token_input::{self, TokenInput};
 use armature_core::toolbar::{self, Toolbar};
+use armature_core::tooltip::{self, Tooltip};
 use armature_core::tree::tree_from_paths;
 use armature_core::tree_view::{self, TreeView};
+use armature_core::virtual_list::{self, VirtualList};
 use armature_leptos::{Part, Root, Source, ValueChange, agent, use_primitive};
 use leptos::prelude::*;
 
@@ -79,6 +88,169 @@ fn OtpCells() -> impl IntoView {
     }
 }
 
+/// A colour picker's square, strip and hex field, painted from its colour.
+#[component]
+fn ColorParts() -> impl IntoView {
+    let picker = use_primitive::<ColorPicker>();
+    let percent = |fraction: f64| format!("{}%", fraction * 100.0);
+    view! {
+        <Part part=color_picker::Part::Area>
+            <div class="color-pad" style:background-color=move || picker.with(|p| p.hue_color().to_hex())></div>
+            <div
+                class="color-dot"
+                style:left=move || percent(picker.with(|p| p.area_position().0))
+                style:top=move || percent(picker.with(|p| p.area_position().1))
+            >
+                <Part part=color_picker::Part::AreaThumb label="Saturation and brightness" />
+            </div>
+        </Part>
+        <Part part=color_picker::Part::Hue>
+            <div class="color-dot" style:left=move || percent(picker.with(|p| p.hue_position())) style:top="50%">
+                <Part part=color_picker::Part::HueThumb label="Hue" />
+            </div>
+        </Part>
+        <div class="color-row">
+            <span id="swatch" class="swatch" style:background-color=move || picker.with(|p| p.color().to_hex())></span>
+            <Part part=color_picker::Part::Input />
+        </div>
+    }
+}
+
+/// A row that slides aside to show its actions.
+#[component]
+fn SwipeParts() -> impl IntoView {
+    let row = use_primitive::<SwipeRow>();
+    view! {
+        <div class="swipe">
+            <div class="swipe-actions">
+                <Part part=swipe_row::Part::Action item="archive">"Archive"</Part>
+                <Part part=swipe_row::Part::Action item="delete">"Delete"</Part>
+            </div>
+            <div class="swipe-slide" style:transform=move || format!("translateX(-{}px)", row.with(|r| r.offset()))>
+                <Part part=swipe_row::Part::Row>"Swipe me left"</Part>
+            </div>
+        </div>
+    }
+}
+
+/// A long list that renders only the rows in view.
+#[component]
+fn VirtualRows() -> impl IntoView {
+    let list = use_primitive::<VirtualList>();
+    view! {
+        <Part part=virtual_list::Part::Viewport>
+            <div class="virtual-space" style:height=move || format!("{}px", list.with(|l| l.total_size()))>
+                <For each=move || list.with(|l| l.rows()) key=|row| row.index let:row>
+                    <div class="virtual-row" style:top=format!("{}px", row.offset)>
+                        <Part part=virtual_list::Part::Row item=row.key.clone()>
+                            "Row "
+                            {row.index}
+                        </Part>
+                    </div>
+                </For>
+            </div>
+        </Part>
+    }
+}
+
+/// A day's track with spans drawn, moved and resized on it.
+#[component]
+fn TimelineParts() -> impl IntoView {
+    let timeline = use_primitive::<Timeline>();
+    let spans = move || {
+        timeline.with(|t| {
+            let lanes = t.lanes();
+            t.spans()
+                .iter()
+                .zip(lanes)
+                .map(|((key, span), lane)| (key.clone(), t.position_of(*span), lane))
+                .collect::<Vec<_>>()
+        })
+    };
+    view! {
+        <Part part=timeline::Part::Track>
+            <For each=spans key=|(key, position, lane)| (key.clone(), position.0.to_bits(), position.1.to_bits(), *lane) let:entry>
+                <div
+                    class="span-slot"
+                    style:left=format!("{}%", entry.1.0 * 100.0)
+                    style:width=format!("{}%", (entry.1.1 - entry.1.0) * 100.0)
+                    style:top=format!("{}px", entry.2 * 22)
+                >
+                    <Part part=timeline::Part::Span item=entry.0.clone()>
+                        {entry.0.clone()}
+                        <Part part=timeline::Part::SpanEnd item=entry.0.clone() />
+                    </Part>
+                </div>
+            </For>
+        </Part>
+    }
+}
+
+/// A grid of cells showing its own text.
+#[component]
+fn GridCells() -> impl IntoView {
+    let grid = use_primitive::<DataGrid>();
+    let cells =
+        (0..3).flat_map(|row| (0..3).map(move |col| armature_core::grid::Cell { row, col }));
+    view! {
+        <Part part=data_grid::Part::Root>
+            {cells
+                .map(|cell| {
+                    view! {
+                        <Part part=data_grid::Part::Cell item=format!("{},{}", cell.row, cell.col)>
+                            {move || grid.with(|g| g.text_of(cell).to_string())}
+                        </Part>
+                    }
+                })
+                .collect_view()}
+        </Part>
+    }
+}
+
+/// Nodes on a surface, placed from the canvas's own view of them.
+#[component]
+fn CanvasParts() -> impl IntoView {
+    let canvas = use_primitive::<Canvas>();
+    let place = move |key: &'static str| {
+        move || {
+            let rect = canvas.with(|c| c.screen_rect(key)).unwrap_or_default();
+            format!(
+                "left:{}px;top:{}px;width:{}px;height:{}px",
+                rect.x, rect.y, rect.width, rect.height
+            )
+        }
+    };
+    let lasso = move || {
+        canvas.with(|c| c.lasso()).map(|rect| {
+            format!(
+                "left:{}px;top:{}px;width:{}px;height:{}px",
+                rect.x, rect.y, rect.width, rect.height
+            )
+        })
+    };
+    view! {
+        <Part part=canvas::Part::Surface>
+            {["a", "b", "c"]
+                .map(|key| {
+                    view! {
+                        <div class="node-slot" style=place(key)>
+                            <Part part=canvas::Part::Node item=key>
+                                {key}
+                                <Part part=canvas::Part::PortIn item=key label=format!("Into {key}")>"●"</Part>
+                                <Part part=canvas::Part::PortOut item=key label=format!("Out of {key}")>"●"</Part>
+                                <Part part=canvas::Part::Resize item=key />
+                            </Part>
+                        </div>
+                    }
+                })
+                .collect_view()}
+            <div class="lasso" style=move || lasso().unwrap_or("display:none".into())></div>
+        </Part>
+        <p id="links">{move || canvas.with(|c| c.connections().iter().map(|l| format!("{}>{}", l.from, l.to)).collect::<Vec<_>>().join(" "))}</p>
+        <p id="canvas-selected">{move || canvas.with(|c| c.selected().join(","))}</p>
+    }
+}
+
 /// The two panels of a resizable box, sized by its divider.
 #[component]
 fn Panels() -> impl IntoView {
@@ -109,6 +281,22 @@ fn App() -> impl IntoView {
     let (tags, on_tags) = follow();
     let (split, on_split) = follow();
     let start = Date::parse("2026-11-17").expect("a real date");
+    let (color, on_color) = follow();
+    let (swiped, on_swiped) = follow();
+    let (row, on_row) = follow();
+    let (day_plan, on_day_plan) = follow();
+    let (cells, on_cells) = follow();
+    let (layout, on_layout) = follow();
+    let sheet = ["a1", "b1", "c1", "a2", "b2", "c2", "a3", "b3", "c3"]
+        .chunks(3)
+        .map(|row| row.iter().map(|text| text.to_string()).collect())
+        .collect::<Vec<Vec<String>>>();
+    let nodes = [("a", 10.0, 10.0), ("b", 150.0, 10.0), ("c", 10.0, 100.0)]
+        .map(|(key, x, y)| Node {
+            key: key.into(),
+            rect: Rect::new(x, y, 90.0, 50.0),
+        })
+        .to_vec();
 
     let access = RwSignal::new(Vec::<String>::new());
     let on_access = Callback::new(move |change: ValueChange| {
@@ -344,6 +532,67 @@ fn App() -> impl IntoView {
                     <Part part=resizable::Part::Root>
                         <Panels />
                     </Part>
+                </Root>
+            </Section>
+
+            <Section title="Popover">
+                <Root machine=Popover::default() label="Share">
+                    <Part part=popover::Part::Trigger>"Share"</Part>
+                    <Part part=popover::Part::Content>
+                        <Part part=popover::Part::Arrow />
+                        <Part part=popover::Part::Title>"Share this page"</Part>
+                        <Part part=popover::Part::Description>"Anyone with the link can view."</Part>
+                        <Part part=popover::Part::Close label="Close">"×"</Part>
+                    </Part>
+                </Root>
+            </Section>
+
+            <Section title="Tooltip">
+                <Root machine=Tooltip::default() label="Help">
+                    <Part part=tooltip::Part::Trigger>"Hover or focus me"</Part>
+                    <Part part=tooltip::Part::Content>"Saves your work"</Part>
+                </Root>
+            </Section>
+
+            <Section title="Colour">
+                <p id="color-value">"Colour: " {move || color.get().join("")}</p>
+                <Root machine=ColorPicker::default() label="Colour" on_value_change=on_color>
+                    <ColorParts />
+                </Root>
+            </Section>
+
+            <Section title="Swipe row">
+                <p id="swipe-value">"Ran: " {move || swiped.get().join("")}</p>
+                <Root machine=SwipeRow::default() label="Message" on_value_change=on_swiped>
+                    <SwipeParts />
+                </Root>
+            </Section>
+
+            <Section title="Virtual list">
+                <p id="row-value">"Row: " {move || row.get().join("")}</p>
+                <Root machine=VirtualList::new(10000, 24.0) label="Rows" on_value_change=on_row>
+                    <VirtualRows />
+                </Root>
+            </Section>
+
+            <Section title="Timeline">
+                <p id="plan-value">"Plan: " {move || day_plan.get().join(" ")}</p>
+                <Root machine=Timeline::default() label="Day" on_value_change=on_day_plan>
+                    <TimelineParts />
+                </Root>
+            </Section>
+
+            <Section title="Data grid">
+                <p id="cells-value">"Cells: " {move || cells.get().join(" ")}</p>
+                <Root machine=DataGrid::new(sheet, Dir::Ltr) label="Sheet" on_value_change=on_cells>
+                    <GridCells />
+                </Root>
+            </Section>
+
+            <Section title="Canvas">
+                <p id="layout-value">{move || layout.get().join(" ")}</p>
+                <Root machine=Canvas::new(nodes) label="Board" on_value_change=on_layout>
+                    <CanvasParts />
                 </Root>
             </Section>
 
