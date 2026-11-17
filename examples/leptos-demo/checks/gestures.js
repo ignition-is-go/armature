@@ -99,6 +99,9 @@ async () => {
     key(document.activeElement, 'ArrowDown'); await frame(); key(document.activeElement, 'ArrowDown'); await frame(); key(document.activeElement, 'ArrowDown'); await frame();
     key(document.activeElement, 'Enter'); await frame();
     r.keyboard = `${text('row-value')} focus=${document.activeElement.dataset.value} scrollTop=${viewport.scrollTop}`;
+    const ref = window.armature.snapshot().find(s => s.label === 'Rows').ref;
+    window.armature.act(ref, 'scroll_to', '9000'); await frame();
+    r.agentScroll = `scrollTop=${viewport.scrollTop} row9000Rendered=${!!q('[role=option][data-value="9000"]')}`;
     return r;
   });
   await step('timeline', async () => {

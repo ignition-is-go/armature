@@ -116,7 +116,8 @@
       "rendered": 9,
       "scrollHeight": 240008,
       "afterScroll": "12 rows, first=4997",
-      "keyboard": "Row: 5005 focus=5005 scrollTop=120016"
+      "keyboard": "Row: 5005 focus=5005 scrollTop=120016",
+      "agentScroll": "scrollTop=215948 row9000Rendered=true"
     },
     "timeline": {
       "drawn": "Plan: span-1:9-13",

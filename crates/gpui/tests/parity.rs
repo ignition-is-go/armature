@@ -205,6 +205,24 @@ fn a_long_list_renders_only_what_is_in_view_and_keys_scroll_it(cx: &mut TestAppC
     assert!(rendered(cx).len() < 12);
     cx.simulate_keystrokes("enter");
     assert_eq!(rows.update(cx, |m, _| m.value()), ["9999"]);
+
+    let reference = cx.update(|_, cx| armature_gpui::agent::snapshot(cx)[0].0.clone());
+    cx.update(|_, cx| {
+        armature_gpui::agent::act(cx, &reference, "scroll_to", Some("5000")).unwrap()
+    });
+    cx.run_until_parked();
+    assert!(rendered(cx).contains(&5000));
+    let scrolled = rows.update(cx, |m, _| m.primitive().wanted_scroll().unwrap());
+    cx.simulate_keystrokes("down");
+    cx.run_until_parked();
+    assert!(
+        rendered(cx).contains(&5001),
+        "the box really scrolled, so the next row is in view"
+    );
+    assert_eq!(
+        rows.update(cx, |m, _| m.primitive().wanted_scroll().unwrap()),
+        scrolled
+    );
 }
 
 #[gpui::test]

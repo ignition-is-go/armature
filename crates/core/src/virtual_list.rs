@@ -153,6 +153,10 @@ impl Primitive for VirtualList {
         part == Part::Viewport
     }
 
+    fn wanted_scroll(&self) -> Option<f64> {
+        Some(self.offset)
+    }
+
     fn upsert_item(&mut self, _: Item) {}
     fn remove_item(&mut self, _: &str) {}
     fn set_order(&mut self, _: &[(String, String)]) {}

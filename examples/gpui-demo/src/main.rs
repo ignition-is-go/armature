@@ -1,7 +1,10 @@
 use armature_core::accordion::{self, Accordion};
 use armature_core::calendar::{self, Calendar};
+use armature_core::canvas::{self, Canvas, Node};
+use armature_core::color_picker::{self, ColorPicker};
 use armature_core::command::{self, Command};
 use armature_core::date::Date;
+use armature_core::geometry::Rect;
 use armature_core::keys::Dir;
 use armature_core::listbox::{self, Listbox};
 use armature_core::number::NumberRange;
@@ -18,6 +21,7 @@ use armature_core::toggle::{self, Toggle};
 use armature_core::toolbar::{self, Toolbar};
 use armature_core::tree::tree_from_paths;
 use armature_core::tree_view::{self, TreeView};
+use armature_core::virtual_list::{self, VirtualList};
 use armature_gpui::{Machine, PartElement, Source, part};
 use gpui::prelude::*;
 use gpui::{
@@ -72,6 +76,9 @@ struct Demo {
     formatting: Entity<Machine<Toolbar>>,
     panels: Entity<Machine<Resizable>>,
     pressed: Entity<String>,
+    colour: Entity<Machine<ColorPicker>>,
+    rows: Entity<Machine<VirtualList>>,
+    board: Entity<Machine<Canvas>>,
 }
 
 impl Demo {
@@ -171,6 +178,17 @@ impl Demo {
                 )
             }),
             panels: cx.new(|cx| Machine::new(Resizable::default(), "Panels", [], cx)),
+            colour: cx.new(|cx| Machine::new(ColorPicker::default(), "Colour", [], cx)),
+            rows: cx.new(|cx| Machine::new(VirtualList::new(10_000, 24.0), "Rows", [], cx)),
+            board: cx.new(|cx| {
+                let nodes = [("a", 10.0, 10.0), ("b", 150.0, 10.0), ("c", 10.0, 100.0)]
+                    .map(|(key, x, y)| Node {
+                        key: key.into(),
+                        rect: Rect::new(x, y, 90.0, 50.0),
+                    })
+                    .to_vec();
+                Machine::new(Canvas::new(nodes), "Board", [], cx)
+            }),
             pressed,
             groceries: cx.new(|cx| {
                 Machine::new(
@@ -646,6 +664,154 @@ impl Demo {
     }
 }
 
+impl Demo {
+    fn advanced(&self, cx: &App) -> Div {
+        let picker = self.colour.read(cx).primitive();
+        let hex = |color: armature_core::color::Rgb| {
+            rgb(((color.r as u32) << 16) | ((color.g as u32) << 8) | color.b as u32)
+        };
+        let (across, down) = picker.area_position();
+        let dot = |kind, left: f32, top: f32| {
+            part(&self.colour, kind, None, cx)
+                .absolute()
+                .left(px(left - 7.))
+                .top(px(top - 7.))
+                .size(px(14.))
+                .rounded_full()
+                .bg(rgb(WHITE))
+                .border_2()
+                .border_color(rgb(INK))
+                .focus(|style| style.border_color(rgb(ACCENT)))
+        };
+        let (pad_w, pad_h) = (200., 110.);
+        let field = self
+            .colour
+            .read(cx)
+            .text(color_picker::Part::Input, None)
+            .unwrap_or_default();
+
+        let visible = self.rows.read(cx).primitive().rows();
+        let total = self.rows.read(cx).primitive().total_size() as f32;
+        let row = |row: armature_core::virtual_list::VirtualRow| {
+            let semantics = self
+                .rows
+                .read(cx)
+                .semantics(virtual_list::Part::Row, Some(&row.key));
+            let tick = if semantics.selected == Some(true) {
+                "  ✓"
+            } else {
+                ""
+            };
+            part(&self.rows, virtual_list::Part::Row, Some(&row.key), cx)
+                .absolute()
+                .top(px(row.offset as f32))
+                .h(px(24.))
+                .w_full()
+                .px_2()
+                .when(semantics.active, |el| el.bg(rgb(WASH)))
+                .child(format!("Row {}{tick}", row.index))
+        };
+
+        let board = self.board.read(cx).primitive();
+        let node = |key: &'static str| {
+            let place = board.screen_rect(key).unwrap_or_default();
+            let chosen = board.selected().iter().any(|selected| selected == key);
+            part(&self.board, canvas::Part::Node, Some(key), cx)
+                .absolute()
+                .left(px(place.x as f32))
+                .top(px(place.y as f32))
+                .w(px(place.width as f32))
+                .h(px(place.height as f32))
+                .rounded_md()
+                .border_1()
+                .border_color(rgb(if chosen { ACCENT } else { LINE }))
+                .bg(rgb(if chosen { WASH } else { WHITE }))
+                .p_1()
+                .child(key)
+        };
+        let links: Vec<String> = board
+            .connections()
+            .iter()
+            .map(|link| format!("{} > {}", link.from, link.to))
+            .collect();
+
+        div()
+            .flex()
+            .flex_col()
+            .gap_4()
+            .child(
+                section("COLOUR")
+                    .child(format!("Colour: {}", self.colour.read(cx).value().join("")))
+                    .child(
+                        part(&self.colour, color_picker::Part::Area, None, cx)
+                            .relative()
+                            .w(px(pad_w))
+                            .h(px(pad_h))
+                            .rounded_md()
+                            .bg(hex(picker.hue_color()))
+                            .child(dot(
+                                color_picker::Part::AreaThumb,
+                                pad_w * across as f32,
+                                pad_h * down as f32,
+                            )),
+                    )
+                    .child(
+                        part(&self.colour, color_picker::Part::Hue, None, cx)
+                            .relative()
+                            .w(px(pad_w))
+                            .h(px(10.))
+                            .rounded_md()
+                            .bg(rgb(LINE))
+                            .child(dot(
+                                color_picker::Part::HueThumb,
+                                pad_w * picker.hue_position() as f32,
+                                5.,
+                            )),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .gap_2()
+                            .items_center()
+                            .child(div().size(px(26.)).rounded_md().bg(hex(picker.color())))
+                            .child(
+                                boxed(part(&self.colour, color_picker::Part::Input, None, cx))
+                                    .w(px(90.))
+                                    .px_2()
+                                    .child(field),
+                            ),
+                    ),
+            )
+            .child(
+                section("VIRTUAL LIST")
+                    .child(format!("Row: {}", self.rows.read(cx).value().join("")))
+                    .child(
+                        boxed(part(&self.rows, virtual_list::Part::Viewport, None, cx))
+                            .w(px(pad_w))
+                            .h(px(120.))
+                            .child(
+                                div()
+                                    .relative()
+                                    .h(px(total))
+                                    .children(visible.into_iter().map(row)),
+                            ),
+                    ),
+            )
+            .child(
+                section("CANVAS")
+                    .child(format!("Links: {}", links.join(", ")))
+                    .child(
+                        boxed(part(&self.board, canvas::Part::Surface, None, cx))
+                            .relative()
+                            .w(px(260.))
+                            .h(px(170.))
+                            .overflow_hidden()
+                            .children(["a", "b", "c"].map(node)),
+                    ),
+            )
+    }
+}
+
 impl Render for Demo {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let days: Vec<String> = self
@@ -659,6 +825,20 @@ impl Render for Demo {
             .collect();
         self.date
             .update(cx, |date, cx| date.track(calendar::Part::Day, days, cx));
+        let shown: Vec<String> = self
+            .rows
+            .read(cx)
+            .primitive()
+            .rows()
+            .into_iter()
+            .map(|row| row.key)
+            .collect();
+        self.rows.update(cx, |rows, cx| {
+            rows.track(virtual_list::Part::Row, shown, cx)
+        });
+        let nodes = ["a", "b", "c"].map(String::from);
+        self.board
+            .update(cx, |board, cx| board.track(canvas::Part::Node, nodes, cx));
         div()
             .size_full()
             .bg(rgb(WHITE))
@@ -671,6 +851,7 @@ impl Render for Demo {
             .child(self.classic(cx))
             .child(self.newer(cx))
             .child(self.latest(cx))
+            .child(self.advanced(cx))
     }
 }
 
@@ -680,7 +861,7 @@ fn main() {
             KeyBinding::new("tab", FocusNext, None),
             KeyBinding::new("shift-tab", FocusPrev, None),
         ]);
-        let bounds = Bounds::centered(None, size(px(900.), px(900.)), cx);
+        let bounds = Bounds::centered(None, size(px(1200.), px(900.)), cx);
         cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),

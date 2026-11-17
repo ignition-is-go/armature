@@ -112,6 +112,11 @@ impl<P: Primitive> Machine<P> {
                         });
                         state.gate = gate;
                         state.remember(before, Source::Agent, cx);
+                        // An agent action cannot ask for a scroll, so the part is
+                        // brought to wherever the primitive now wants it.
+                        if let Some(offset) = state.machine.wanted_scroll() {
+                            state.scroll.set_offset(point(px(0.), px(-(offset as f32))));
+                        }
                         cx.notify();
                         result.map(|()| state.machine.value())
                     })

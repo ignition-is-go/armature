@@ -436,7 +436,16 @@ where
             let before = next.value();
             next.act(action, item, &mut |change| allows(on_value_change, change))?;
             let value = next.value();
+            let wanted = next.wanted_scroll();
             machine.set(next);
+            // An agent action cannot ask for a scroll, so the part is brought to
+            // wherever the primitive now wants it.
+            let scrolling = P::parts().iter().copied().find(|part| P::scrolls(*part));
+            if let (Some(offset), Some(part)) = (wanted, scrolling)
+                && let Some(element) = ctx.element_of(part, None)
+            {
+                element.set_scroll_top(offset.round() as i32);
+            }
             agent::record(
                 label.get_value(),
                 before,

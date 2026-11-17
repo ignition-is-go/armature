@@ -290,6 +290,12 @@ pub trait Primitive: Clone + 'static {
         false
     }
 
+    /// Where the primitive wants its scrolling part scrolled to. The adapter brings the
+    /// part there after an agent action, which has no other way to ask.
+    fn wanted_scroll(&self) -> Option<f64> {
+        None
+    }
+
     /// How a part relates to others, for assistive technology. A relation between
     /// parts that take an item joins the two that share an item.
     fn relations(_part: Self::Part) -> Relations<Self::Part> {
