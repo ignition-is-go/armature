@@ -10,6 +10,7 @@ pub mod checkbox;
 pub mod collapsible;
 pub mod color;
 pub mod color_picker;
+pub mod combobox;
 pub mod command;
 pub mod connect;
 pub mod data_grid;
