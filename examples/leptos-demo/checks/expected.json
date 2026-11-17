@@ -41,9 +41,9 @@
     "calendar": {
       "stop": "2026-11-17",
       "arrow": "2026-11-18",
-      "crossedIntoDecember": "2026-11 focus=2026-12-02",
-      "chosen": "Day:  selected=true",
-      "enterOnNextMonth": "2026-12 Day:  label=Next month"
+      "crossedIntoDecember": "2026-12 focus=2026-12-02",
+      "chosen": "Day: 2026-12-02 selected=true",
+      "enterOnNextMonth": "2027-01 Day: 2026-12-02 label=Next month"
     },
     "toolbar": {
       "moved": "link",
@@ -152,7 +152,12 @@
     "agentOpen": "shown=true expanded=true",
     "fixed": "escape=true outside=true",
     "fixedClose": "shown=false",
-    "warm": "early=false first=true secondAtOnce=true firstGone=true"
+    "warm": "early=false first=true secondAtOnce=true firstGone=true",
+    "lockedMenu": "expanded=false disabled=true",
+    "modalPopover": "shown=true modal=true",
+    "modalPopoverParts": "Close",
+    "modalPopoverClosed": "shown=false",
+    "appleKeys": "elsewhere=Apple cmdDown=Cherry ctrlP=Blueberry cmdUp=Apple"
   },
   "sheet": {
     "visible": true,
@@ -238,10 +243,10 @@
       "agent": "[\"write\",\"delete\"]"
     },
     "outline": {
-      "start": "src@null docs@null README.md@null",
-      "movedUp": "src@null docs@null README.md@null | Moved:  | focus=write",
-      "nested": "src@null docs@null README.md@null | Moved: ",
-      "dragged": "src@null docs@null README.md@null | Moved: "
+      "start": "src@1 docs@1 README.md@1",
+      "movedUp": "src@1 README.md@1 docs@1 | Moved: README.md>#1 | focus=README.md",
+      "nested": "src@1 src/main.rs@2 src/ui@2 README.md@2 docs@1 | Moved: README.md>src#2",
+      "dragged": "docs@1 src@1 src/main.rs@2 src/ui@2 README.md@2 | Moved: docs>#0"
     },
     "findable": {
       "closed": "until-found/block until-found/block",

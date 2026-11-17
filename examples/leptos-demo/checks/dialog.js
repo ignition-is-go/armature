@@ -55,5 +55,34 @@ async () => {
   move(italic, 'pointerenter'); await frame();
   out.warm = `early=${early} first=${first} secondAtOnce=${seen(italic)} firstGone=${gone}`;
   move(italic, 'pointerleave'); await frame();
+  // A disabled menu trigger never opens by hand.
+  const locked = document.querySelector('[data-armature-part="Trigger"][aria-label="Locked actions"]');
+  locked.scrollIntoView(); locked.focus(); locked.click(); await frame();
+  key('ArrowDown'); await frame();
+  out.lockedMenu = `expanded=${locked.getAttribute('aria-expanded')} disabled=${locked.getAttribute('aria-disabled') ?? locked.disabled}`;
+  // A modal popover is marked modal.
+  const details = document.querySelector('[data-armature-part="Trigger"][aria-label="Modal details"]');
+  const panel = document.getElementById(details.getAttribute('aria-controls'));
+  details.focus(); details.click(); await frame();
+  out.modalPopover = `shown=${getComputedStyle(panel).display !== 'none'} modal=${panel.getAttribute('aria-modal')}`;
+  out.modalPopoverParts = [...panel.querySelectorAll('[data-armature-part]')].map(el => el.getAttribute('data-armature-part')).join(',');
+  panel.querySelector('[data-armature-part="Close"]').click(); await frame();
+  out.modalPopoverClosed = `shown=${getComputedStyle(panel).display !== 'none'}`;
+  // Apple key conventions, with the page presenting as a Mac.
+  const real = Object.getOwnPropertyDescriptor(Navigator.prototype, 'platform');
+  const options = [...document.querySelectorAll('[aria-label="Fruit"] [role=option], [role=listbox][aria-label="Fruit"] [role=option]')];
+  const at = () => document.activeElement.textContent.trim();
+  options[0].scrollIntoView(); options[0].focus(); await frame();
+  key('ArrowDown', { metaKey: true }); await frame();
+  const linux = at();
+  Object.defineProperty(Navigator.prototype, 'platform', { get: () => 'MacIntel', configurable: true });
+  options[0].focus(); await frame();
+  key('ArrowDown', { metaKey: true }); await frame();
+  const last = at();
+  key('p', { ctrlKey: true }); await frame();
+  const stepped = at();
+  key('ArrowUp', { metaKey: true }); await frame();
+  out.appleKeys = `elsewhere=${linux} cmdDown=${last} ctrlP=${stepped} cmdUp=${at()}`;
+  Object.defineProperty(Navigator.prototype, 'platform', real);
   return out;
 }

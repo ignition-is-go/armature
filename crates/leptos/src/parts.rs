@@ -487,6 +487,44 @@ pub fn Root<P>(
 where
     P: Primitive + Send + Sync,
 {
+    // Each root gets an owner of its own. Without one, its context would sit on
+    // the owner it shares with its siblings, and a later root of the same
+    // primitive would take over any part this one creates later, such as a menu's
+    // items when it opens.
+    let owner = Owner::current()
+        .expect("a Root is rendered inside a reactive owner")
+        .child();
+    let view = owner.with(move || {
+        root_view(
+            machine,
+            label,
+            on_value_change,
+            value,
+            agent_hidden,
+            agent_secret,
+            agent_confirm,
+            settings,
+            children,
+        )
+    });
+    leptos::tachys::reactive_graph::OwnedView::new_with_owner(view, owner)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn root_view<P>(
+    machine: P,
+    label: String,
+    on_value_change: Option<ChangeGate>,
+    value: Option<Signal<Vec<String>>>,
+    agent_hidden: bool,
+    agent_secret: bool,
+    agent_confirm: Option<String>,
+    settings: Option<Signal<Vec<(String, String)>>>,
+    children: Children,
+) -> AnyView
+where
+    P: Primitive + Send + Sync,
+{
     let machine = RwSignal::new(machine);
     let label = StoredValue::new(label);
     let instance = NEXT_INSTANCE.replace(NEXT_INSTANCE.get() + 1);

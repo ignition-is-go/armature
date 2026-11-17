@@ -592,5 +592,21 @@ pub fn More() -> impl IntoView {
             <p id="span-value">"Span: " {move || span.get().join("")}</p>
             <Root machine=Waterfall::new(trace, Dir::Ltr) label="Trace" on_value_change=on_span><TraceRows /></Root>
         </Section>
+
+        <Section title="Upstream options">
+            // A menu whose trigger is disabled never opens by hand.
+            <Root machine=Menu::new(entries()).disabled() label="Locked actions">
+                <Part part=menu::Part::Trigger>"Locked"</Part>
+                <Part part=menu::Part::Content><span>"Never shown"</span></Part>
+            </Root>
+            // A popover that keeps the page behind it out of reach.
+            <Root machine=armature_core::popover::Popover::default().modal() label="Modal details">
+                <Part part=armature_core::popover::Part::Trigger>"Details"</Part>
+                <Part part=armature_core::popover::Part::Content>
+                    <p>"Modal while open."</p>
+                    <Part part=armature_core::popover::Part::Close>"Done"</Part>
+                </Part>
+            </Root>
+        </Section>
     }
 }
