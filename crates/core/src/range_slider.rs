@@ -250,10 +250,21 @@ impl Primitive for RangeSlider {
                 } else {
                     None
                 };
-                let nearest = (0..self.values.len()).min_by(|a, b| {
-                    (self.values[*a] - value)
-                        .abs()
-                        .total_cmp(&(self.values[*b] - value).abs())
+                // Where grips sit on top of one another, a press beyond them takes the
+                // last of the stack and a press before them the first.
+                let distance = |at: usize| (self.values[at] - value).abs();
+                let nearest =
+                    (0..self.values.len()).min_by(|a, b| distance(*a).total_cmp(&distance(*b)));
+                let nearest = nearest.map(|first| {
+                    let stack = (first..self.values.len())
+                        .take_while(|at| self.values[*at] == self.values[first])
+                        .last()
+                        .unwrap_or(first);
+                    if value > self.values[first] {
+                        stack
+                    } else {
+                        first
+                    }
                 });
                 let Some(at) = pressed.or(nearest) else {
                     return Reaction::default();

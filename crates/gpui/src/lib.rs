@@ -496,6 +496,16 @@ impl<P: Primitive> Machine<P> {
         }
         let now_ms = self.now_ms();
         let key = key_from_keystroke(keystroke);
+        // Apple platforms have their own keys for the ends of a list and for
+        // stepping through one.
+        let held = keystroke.modifiers;
+        let meant = key.filter(|_| cfg!(target_os = "macos")).and_then(|key| {
+            armature_core::keys::apple_key(key, held.control, held.platform, held.shift || held.alt)
+        });
+        let (key, mods) = match meant {
+            Some(meant) => (Some(meant), Modifiers::default()),
+            None => (key, mods),
+        };
         if key.is_some_and(|key| self.dispatch(Input::Key { key, mods, now_ms }, window, cx)) {
             return true;
         }

@@ -25,7 +25,7 @@ pub struct Options {
     pub findable: bool,
 }
 
-const ACTIONS: &[&str] = &["open", "close", "toggle"];
+const ACTIONS: &[&str] = &["open", "close", "toggle", "open_all", "close_all"];
 
 /// Sections that expand and collapse. The value is the keys of the open sections.
 #[derive(Clone, Debug, Default)]
@@ -240,6 +240,46 @@ impl Primitive for Accordion {
     }
 
     fn act(&mut self, action: &str, item: Option<&str>, gate: Gate) -> Result<(), ActError> {
+        if let "open_all" | "close_all" = action {
+            // Every enabled section, as far as the options allow: one alone unless
+            // several may be open, and one left open where the last may not close.
+            let enabled: Vec<String> = self
+                .items
+                .iter()
+                .filter(|item| !item.disabled)
+                .map(|item| item.key.clone())
+                .collect();
+            let kept: Vec<String> = self
+                .open
+                .iter()
+                .filter(|key| !enabled.contains(key))
+                .cloned()
+                .collect();
+            let mut next = kept;
+            if action == "open_all" {
+                next.extend(
+                    enabled
+                        .iter()
+                        .take(if self.opts.multiple { usize::MAX } else { 1 })
+                        .cloned(),
+                );
+            } else if !self.opts.collapsible {
+                next.extend(self.open.first().cloned());
+            }
+            next.sort_by_key(|key| self.items.index_of(key));
+            next.dedup();
+            if next != self.open {
+                if !gate(&ValueChange {
+                    value: next.clone(),
+                    source: Source::Agent,
+                    reason: Reason::Action,
+                }) {
+                    return Err(ActError::Refused);
+                }
+                self.open = next;
+            }
+            return Ok(());
+        }
         let (action, open): (&'static str, Option<bool>) = match action {
             "open" => ("open", Some(true)),
             "close" => ("close", Some(false)),

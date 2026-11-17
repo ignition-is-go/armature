@@ -22,6 +22,8 @@ pub struct Options {
     /// Whether pressing the rating already given clears it.
     pub deselectable: bool,
     pub dir: Dir,
+    /// Whether it only shows a score. It is then a picture, and takes no input.
+    pub read_only: bool,
 }
 
 impl Default for Options {
@@ -31,6 +33,7 @@ impl Default for Options {
             halves: false,
             deselectable: true,
             dir: Dir::Ltr,
+            read_only: false,
         }
     }
 }
@@ -139,6 +142,10 @@ impl Primitive for Rating {
     fn semantics(&self, part: Part, item: Option<&str>) -> Semantics {
         match part {
             // One control with a number, so a half is as easy to reach as a whole.
+            Part::Root if self.opts.read_only => Semantics {
+                role: Some(Role::Image),
+                ..Default::default()
+            },
             Part::Root => Semantics {
                 role: Some(Role::Slider),
                 range: Some(ValueRange {
@@ -162,6 +169,9 @@ impl Primitive for Rating {
     }
 
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
+        if self.opts.read_only {
+            return Reaction::default();
+        }
         match input {
             Input::Hover { inside: false, .. } => {
                 self.hover = None;
@@ -194,6 +204,9 @@ impl Primitive for Rating {
         measure: Measure<Part>,
         gate: Gate,
     ) -> Reaction<Part> {
+        if self.opts.read_only {
+            return Reaction::default();
+        }
         let Some(given) = self.at(&pointer, measure) else {
             return Reaction::default();
         };

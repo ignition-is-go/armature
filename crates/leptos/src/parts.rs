@@ -1080,6 +1080,16 @@ where
             return;
         };
         let mods = modifiers(ev.shift_key(), ev.ctrl_key() || ev.meta_key(), ev.alt_key());
+        // Apple platforms have their own keys for the ends of a list and for
+        // stepping through one.
+        let others = ev.shift_key() || ev.alt_key();
+        let (key, mods) =
+            match armature_core::keys::apple_key(key, ev.ctrl_key(), ev.meta_key(), others)
+                .filter(|_| on_apple())
+            {
+                Some(meant) => (meant, Modifiers::default()),
+                None => (key, mods),
+            };
         let now_ms = js_sys::Date::now() as u64;
         if ctx.dispatch(Input::Key { key, mods, now_ms }) {
             ev.prevent_default();
@@ -1417,4 +1427,13 @@ fn running_animations(node: &web_sys::Element) -> Option<js_sys::Promise> {
         .filter_map(|animation| js_sys::Reflect::get(&animation, &"finished".into()).ok())
         .collect();
     Some(js_sys::Promise::all_settled(&finished))
+}
+
+/// Whether the page is running on an Apple platform, where some keys mean other
+/// things.
+fn on_apple() -> bool {
+    let platform = window().navigator().platform().unwrap_or_default();
+    ["Mac", "iPhone", "iPad", "iPod"]
+        .iter()
+        .any(|name| platform.starts_with(name))
 }

@@ -3,7 +3,7 @@ use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::items::Items;
 use crate::keys::{Dir, Key, Modifiers, Orientation};
 use crate::primitive::{Focusable, Input, Item, PartOf, Primitive, Reaction, Role, Semantics};
-use crate::roving;
+use crate::roving::{self, Nav};
 use crate::selection::{self, Mode};
 use crate::typeahead::Typeahead;
 
@@ -50,6 +50,28 @@ impl Listbox {
     }
 
     fn on_key(&mut self, key: Key, mods: Modifiers, now_ms: u64, gate: Gate) -> Reaction<Part> {
+        // PageDown and PageUp go ten items, stopping at the ends.
+        if let Key::PageDown | Key::PageUp = key {
+            let nav = if key == Key::PageDown {
+                Nav::Next
+            } else {
+                Nav::Prev
+            };
+            let mut focus = None;
+            for _ in 0..10 {
+                match self
+                    .items
+                    .step(focus.as_deref().or(self.highlighted.as_deref()), nav, false)
+                {
+                    Some(next) => focus = Some(next),
+                    None => break,
+                }
+            }
+            if let Some(key) = &focus {
+                self.highlighted = Some(key.clone());
+            }
+            return Reaction::item(Part::Option, true, focus);
+        }
         if let Some(nav) = roving::nav_for_key(key, self.opts.orientation, self.opts.dir) {
             let focus = self
                 .items
