@@ -36,7 +36,7 @@ gestures at once.
    - `drops(part)` asks for `DragOver` and `Files` when files are dragged onto a
      part. Return `Effect::PickFiles` to show the platform's file picker.
    - `set(name, value)` takes a setting the owner changes while the primitive runs.
-   - `hotkey()` names a key that reaches the primitive from anywhere, as
+   - `hotkeys()` names the keys that reach the primitive from anywhere, as
      `Input::Hotkey`. Return `Effect::RestoreFocus` to send focus back.
    - `wheels(part)` takes the wheel for a part, as `Input::Wheel`, in place of
      scrolling the page.
@@ -108,6 +108,9 @@ fn it_conforms() {
     crate::testing::assert_conforms(MyPrimitive::default, &items);
 }
 ```
+
+`items` is a `&[Item]` to fill the primitive with, such as three items with the
+middle one disabled. Pass `&[]` for a primitive that has no items.
 
 It has caught real faults in this crate: a disabled header that was still a tab stop,
 and Enter on a button doing something other than pressing it.

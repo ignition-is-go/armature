@@ -9,7 +9,7 @@ Each lives in `armature_core::<module>` and exports a `Part` enum.
 | Listbox | `listbox` | `Root`, `Option` | Selected keys. Single or multiple. |
 | Select | `select` | `Trigger`, `Content`, `Option` | The chosen key. `Content` is a popup. `Select::multiple()` takes several. |
 | Command palette | `command` | `Input`, `List`, `Option` | The option that was run. `.page(name, opener, options)` adds a page of options. |
-| Tabs | `tabs` | `List`, `Tab`, `Panel` | The current tab. With `manual`, arrows only move focus. |
+| Tabs | `tabs` | `List`, `Tab`, `Panel` | The current tab, which starts as the first enabled one. With `manual` (an `Options` field), arrows only move focus. |
 | Accordion | `accordion` | `Trigger`, `Panel` | The open sections. |
 | Radio group, segmented control, rating | `radio` | `Root`, `Option` | The chosen option. |
 | Switch | `toggle` | `Root` | `["on"]` or empty. |
@@ -22,7 +22,7 @@ Each lives in `armature_core::<module>` and exports a `Part` enum.
 | Sortable list | `sortable` | `Root`, `Item` | The keys in order. |
 | Calendar | `calendar` | `Grid`, `Day`, `PreviousMonth`, `NextMonth` | The day as `YYYY-MM-DD`. Draw days from `weeks()`. `Options::mode` chooses several days or a span, and `unavailable` rules days out. |
 | Resizable panels | `resizable` | `Root`, `Handle` | The first panel's share, in percent. |
-| Dialog | `dialog` | `Trigger`, `Backdrop`, `Content`, `Close` | `["open"]` or empty. |
+| Dialog | `dialog` | `Trigger`, `Backdrop`, `Content`, `Close` | `["open"]` or empty; `is_open()`. `Options` has `alert`, `dismissible` and `modal`. |
 | Popover | `popover` | `Trigger`, `Content`, `Title`, `Description`, `Arrow`, `Close` | None. `Content` is a popup. |
 | Tooltip | `tooltip` | `Trigger`, `Content` | None. Shows on hover after a delay, and on focus. |
 | Sheet and drawer | `sheet` | `Trigger`, `Backdrop`, `Content`, `Handle`, `Scroller` | The index of the height it rests at. Size it to `height()`. |
@@ -46,7 +46,7 @@ Each lives in `armature_core::<module>` and exports a `Part` enum.
 | Avatar | `avatar` | `Root`, `Image`, `Fallback` | None. Put the picture inside `Image`. Read `status()`. |
 | Pagination | `pagination` | `Root`, `First`, `Previous`, `Page`, `Next`, `Last` | The page, from 1. Draw the row from `range()`. |
 | Text field, password, multi-line, label and field | `text_field` | `Root`, `Label`, `Input`, `Description`, `Error`, `Clear`, `Reveal` | The text. A submit arrives with `Reason::Keyboard`. Fill `Error` from `error()`. |
-| Combobox and autocomplete | `combobox` | `Input`, `List`, `Option`, `Chip`, `Clear`, `Empty`, `Status` | The chosen keys, or the text with `custom`. Render every option: the primitive hides those that do not match. |
+| Combobox and autocomplete | `combobox` | `Input`, `List`, `Option`, `Chip`, `Clear`, `Empty`, `Status` | The chosen keys, or the text with `custom` (an `Options` field). Render every option: the primitive hides those that do not match. Typing arrives as `Input::Text` on `Input`; `results()` lists the matches and `is_open()` says whether the list shows. |
 | Menu | `menu` | `Trigger`, `Content`, `Item`, `Area` | The checked entries, with `group=key` for radios. Running an action offers `run:<key>`. Draw the entries of `shown()`. |
 | Menubar | `menubar` | `Root`, `Trigger`, `Content`, `Item` | As a menu, with entries keyed `menu/entry`. Draw each menu from `shown(menu)`. |
 | Navigation menu | `navigation_menu` | `Root`, `Trigger`, `Link`, `Panel` | The open panel. Following a link offers `link:<key>`. |
@@ -72,6 +72,18 @@ a calendar's day, a token.
 ## Leptos
 
 `Root` owns the state. Every `Part` inside it infers the primitive from the part enum.
+
+In your crate's `Cargo.toml`, with armature checked out beside it:
+
+```toml
+[dependencies]
+armature-core = { path = "../armature/crates/core" }
+armature-leptos = { path = "../armature/crates/leptos" }
+leptos = { version = "0.8", features = ["csr"] }
+```
+
+The snippets below also need `use leptos::prelude::*;` for `view!`, `Callback` and
+signals. `armature_leptos` re-exports `ValueChange`, `Source` and `Reason`.
 
 ```rust
 use armature_core::select::{self, Select};

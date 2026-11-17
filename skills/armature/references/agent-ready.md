@@ -57,6 +57,7 @@ Agent actions also go through the same change gate as a person's input, marked
 `Source::Agent`. Refuse there for rules that depend on the value:
 
 ```rust
+// use armature_leptos::{Source, ValueChange};
 Callback::new(move |change: ValueChange| {
     !(change.source == Source::Agent && change.value.iter().any(|v| v == "delete"))
 })

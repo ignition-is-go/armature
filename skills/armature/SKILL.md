@@ -17,7 +17,8 @@ Primitives ship unstyled. You supply the look and the children.
 
 ## Read first
 
-Read the source before you write. It is the reference.
+Start with `references/core-contract.md`: the types, import paths and signatures you
+need to drive any primitive. Then read the source for the details. It is the reference.
 
 1. `crates/core/src/primitive.rs` is the whole contract between primitives and adapters.
 2. The primitive you will use, in `crates/core/src`. Its `Part` enum lists what you
@@ -65,3 +66,7 @@ Both paths then continue to [references/agent-ready.md](references/agent-ready.m
    focus faults. For Leptos, run `trunk serve` in `examples/leptos-demo`. For GPUI, run
    `cargo run -p gpui-demo` and operate the window through its agent socket.
 6. Report each command with its result, and name anything you did not verify.
+
+In your own crate that depends on armature, steps 1 to 3 are your crate's own
+`cargo test`, `cargo clippy` and `cargo fmt --check`, with
+`--target wasm32-unknown-unknown` for a Leptos crate, and step 5 is your own app.
