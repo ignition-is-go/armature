@@ -16,13 +16,14 @@ use armature_core::primitive::{
     Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction,
     Role, Semantics,
 };
+use armature_core::text_edit::{Edit, TextEdit};
 use gpui::prelude::*;
 use gpui::{
-    A11ySubtreeBuilder, Anchor, AnyElement, App, Bounds, ClickEvent, Context, DispatchPhase, Div,
-    ElementId, Empty, Entity, EventEmitter, FocusHandle, GlobalElementId, InspectorElementId,
-    Interactivity, KeyDownEvent, LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, Pixels, Point, SharedString, Stateful, StyleRefinement, Toggled, Window,
-    anchored, canvas, deferred, div, point, px,
+    A11ySubtreeBuilder, Anchor, AnyElement, App, Bounds, ClickEvent, ClipboardItem, Context,
+    DispatchPhase, Div, ElementId, Empty, Entity, EventEmitter, FocusHandle, GlobalElementId,
+    InspectorElementId, Interactivity, KeyDownEvent, LayoutId, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, Pixels, Point, ScrollHandle, SharedString, Stateful,
+    StyleRefinement, Toggled, Window, anchored, canvas, deferred, div, point, px,
 };
 
 pub use armature_core::change::{Reason, Source};
@@ -47,6 +48,12 @@ pub struct Machine<P: Primitive> {
     bounds: HashMap<PartKey<P>, Bounds<Pixels>>,
     /// The part a pointer gesture is being sent to until the button is released.
     captured: Option<PartKey<P>>,
+    /// The caret and text of each part the person types into.
+    edits: HashMap<PartKey<P>, TextEdit>,
+    /// Scrolls the primitive's scrolling part, if it has one.
+    scroll: ScrollHandle,
+    /// The scroll offset and viewport length last reported to the primitive.
+    scrolled: (f64, f64),
     announcements: Vec<Announcement>,
     gate: Option<ChangeGate>,
     registration: u32,
@@ -126,6 +133,9 @@ impl<P: Primitive> Machine<P> {
             handles,
             bounds: HashMap::new(),
             captured: None,
+            edits: HashMap::new(),
+            scroll: ScrollHandle::new(),
+            scrolled: (0.0, 0.0),
             announcements: Vec::new(),
             gate: None,
             registration,
@@ -231,6 +241,114 @@ impl<P: Primitive> Machine<P> {
                     && self.machine.semantics(part, item.as_deref()).focusable == Focusable::TabStop
             })
             .map(|(_, handle)| handle.clone())
+    }
+
+    /// Where the caret sits in a part the person types into, counted in characters.
+    /// Draw it there; GPUI has no text field to do so.
+    pub fn caret(&self, part: P::Part, item: Option<&str>) -> usize {
+        let text = self.machine.text(part, item).unwrap_or_default();
+        let end = text.chars().count();
+        self.edits
+            .get(&(part, item.map(str::to_string)))
+            .map_or(end, |field| field.caret().min(end))
+    }
+
+    fn key_down(
+        &mut self,
+        (part, item): PartKey<P>,
+        takes_text: bool,
+        keystroke: &gpui::Keystroke,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let mods = modifiers(keystroke.modifiers);
+        if mods.ctrl && keystroke.key == "v" {
+            let pasted = cx
+                .read_from_clipboard()
+                .and_then(|clipboard| clipboard.text());
+            if let Some(text) = pasted {
+                return self.dispatch(Input::Paste { text }, window, cx);
+            }
+        }
+        if keystroke.key == "tab" && self.trap_tab(keystroke.modifiers.shift, window, cx) {
+            return true;
+        }
+        let now_ms = self.now_ms();
+        let key = key_from_keystroke(keystroke);
+        if key.is_some_and(|key| self.dispatch(Input::Key { key, mods, now_ms }, window, cx)) {
+            return true;
+        }
+        if !takes_text {
+            return false;
+        }
+
+        // GPUI has no text field element, so the edit is applied here.
+        let slot = (part, item.clone());
+        let text = self.machine.text(part, item.as_deref()).unwrap_or_default();
+        let mut field = self
+            .edits
+            .remove(&slot)
+            .unwrap_or_else(|| TextEdit::new(&text));
+        field.set_text(&text);
+        let typed = keystroke
+            .key_char
+            .as_deref()
+            .and_then(|typed| typed.chars().next());
+        let edit = match (keystroke.key.as_str(), typed, key) {
+            ("delete", _, _) => Some(Edit::Delete),
+            (_, Some(ch), _) if !mods.ctrl && !mods.alt => Some(Edit::Insert(ch)),
+            (_, _, Some(key)) => TextEdit::edit_for(key, mods),
+            _ => None,
+        };
+        let Some(edit) = edit else {
+            self.edits.insert(slot, field);
+            return false;
+        };
+        if field.apply(edit) {
+            let value = field.text().to_string();
+            self.dispatch(
+                Input::Text {
+                    part,
+                    item: item.clone(),
+                    value,
+                },
+                window,
+                cx,
+            );
+            // The primitive may have cleaned what was typed, such as dropping a letter
+            // from a code.
+            field.set_text(&self.machine.text(part, item.as_deref()).unwrap_or_default());
+        }
+        self.edits.insert(slot, field);
+        cx.notify();
+        true
+    }
+
+    /// Keeps Tab among this primitive's own parts while one of them is a shown modal.
+    /// The part that opens the modal sits outside it, so it is left out.
+    fn trap_tab(&mut self, backwards: bool, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let shown_modal = P::parts().iter().copied().find(|part| {
+            let semantics = self.machine.semantics(*part, None);
+            semantics.modal && !semantics.hidden
+        });
+        let Some(modal) = shown_modal else {
+            return false;
+        };
+        let stops: Vec<&FocusHandle> = P::parts()
+            .iter()
+            .filter(|part| P::relations(**part).controls != Some(modal))
+            .flat_map(|part| self.handles.iter().filter(move |((p, _), _)| p == part))
+            .filter(|((part, item), _)| {
+                let semantics = self.machine.semantics(*part, item.as_deref());
+                !semantics.hidden && semantics.focusable == Focusable::TabStop
+            })
+            .map(|(_, handle)| handle)
+            .collect();
+        let current = stops.iter().position(|handle| handle.is_focused(window));
+        if let Some(next) = armature_core::layers::trapped_focus(current, stops.len(), backwards) {
+            stops[next].clone().focus(window, cx);
+        }
+        true
     }
 
     fn now_ms(&self) -> u64 {
@@ -358,6 +476,12 @@ impl<P: Primitive> Machine<P> {
                     .detach();
                 }
                 Effect::CapturePointer => {}
+                Effect::ScrollTo { offset } => {
+                    self.scroll.set_offset(point(px(0.), px(-(*offset as f32))));
+                }
+                Effect::Copy { text } => {
+                    cx.write_to_clipboard(ClipboardItem::new_string(text.clone()));
+                }
             }
         }
         cx.notify();
@@ -435,6 +559,27 @@ pub fn part<K: PartOf>(
         });
     }
 
+    if K::Primitive::hovers(part) {
+        let hovered = (state.clone(), key.clone());
+        el = el.on_hover(move |inside: &bool, window, cx| {
+            let (state, (part, item)) = &hovered;
+            state.update(cx, |state, cx| {
+                let now_ms = state.now_ms();
+                let input = Input::Hover {
+                    part: *part,
+                    item: item.clone(),
+                    inside: *inside,
+                    now_ms,
+                };
+                state.dispatch(input, window, cx);
+            });
+        });
+    }
+    let scrolls = K::Primitive::scrolls(part);
+    if scrolls {
+        el = el.overflow_y_scroll().track_scroll(&machine.scroll);
+    }
+
     let tracks_pointer = K::Primitive::tracks_pointer(part);
     if tracks_pointer {
         let pressed = (state.clone(), key.clone());
@@ -505,7 +650,32 @@ pub fn part<K: PartOf>(
     let record: RecordBounds = {
         let (state, key) = (state.clone(), key.clone());
         Box::new(move |bounds, cx: &mut App| {
-            state.update(cx, |state, _| state.bounds.insert(key.clone(), bounds));
+            let scrolled = state.update(cx, |state, _| {
+                state.bounds.insert(key.clone(), bounds);
+                // Scrolling is read off the handle each frame.
+                let now = (
+                    -f32::from(state.scroll.offset().y) as f64,
+                    f32::from(bounds.size.height) as f64,
+                );
+                (scrolls && now != state.scrolled).then_some(now)
+            });
+            // The primitive hears of a change once this frame is done, since a frame
+            // being drawn cannot ask for another.
+            if let Some(now) = scrolled {
+                let (state, part) = (state.clone(), key.0);
+                cx.defer(move |cx| {
+                    state.update(cx, |state, cx| {
+                        state.scrolled = now;
+                        let input = Input::Scrolled {
+                            part,
+                            offset: now.0,
+                            viewport: now.1,
+                        };
+                        state.machine.send(input, &mut |_| true);
+                        cx.notify();
+                    });
+                });
+            }
         })
     };
 
@@ -530,34 +700,9 @@ pub fn part<K: PartOf>(
         .on_key_down({
             let (state, item) = (state.clone(), item.clone());
             move |event: &KeyDownEvent, window, cx| {
-                let keystroke = &event.keystroke;
-                let mods = modifiers(keystroke.modifiers);
+                let slot = (part, item.clone());
                 let handled = state.update(cx, |state, cx| {
-                    let now_ms = state.now_ms();
-                    let handled = key_from_keystroke(keystroke).is_some_and(|key| {
-                        state.dispatch(Input::Key { key, mods, now_ms }, window, cx)
-                    });
-                    if handled || !takes_text {
-                        return handled;
-                    }
-                    // GPUI has no text field element, so typing is applied here.
-                    let text = state
-                        .machine
-                        .text(part, item.as_deref())
-                        .unwrap_or_default();
-                    let Some(value) = edited(&text, keystroke) else {
-                        return false;
-                    };
-                    state.dispatch(
-                        Input::Text {
-                            part,
-                            item: item.clone(),
-                            value,
-                        },
-                        window,
-                        cx,
-                    );
-                    true
+                    state.key_down(slot, takes_text, &event.keystroke, window, cx)
                 });
                 if handled {
                     cx.stop_propagation();
@@ -584,27 +729,6 @@ pub fn part<K: PartOf>(
         layout,
         record,
     }
-}
-
-/// `text` after a keystroke in a text part: a typed character appended, or the last
-/// one removed by Backspace. `None` for a keystroke that does not edit.
-fn edited(text: &str, keystroke: &gpui::Keystroke) -> Option<String> {
-    let held = keystroke.modifiers;
-    if held.control || held.platform || held.alt {
-        return None;
-    }
-    if keystroke.key == "backspace" {
-        let mut shorter = text.to_string();
-        shorter.pop()?;
-        return Some(shorter);
-    }
-    let typed = match (keystroke.key_char.as_deref(), keystroke.key.as_str()) {
-        (Some(typed), _) => typed,
-        (None, "space") => " ",
-        (None, key) if key.chars().count() == 1 => key,
-        _ => return None,
-    };
-    Some(format!("{text}{typed}"))
 }
 
 enum Layout {
@@ -745,6 +869,7 @@ fn accessibility_role(role: Role) -> gpui::Role {
         Role::List => gpui::Role::List,
         Role::ListItem => gpui::Role::ListItem,
         Role::Separator => gpui::Role::Splitter,
+        Role::Tooltip => gpui::Role::Tooltip,
     }
 }
 
