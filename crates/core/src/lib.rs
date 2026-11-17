@@ -49,6 +49,7 @@ pub mod navigation_menu;
 pub mod number;
 pub mod number_input;
 pub mod otp_input;
+pub mod outline;
 pub mod pagination;
 pub mod panel_group;
 pub mod picker;

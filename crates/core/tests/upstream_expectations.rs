@@ -667,3 +667,60 @@ fn meter_readings() {
     );
     assert_eq!(meter.percent(), 0.0);
 }
+
+use armature_core::outline::{OutlineRow, Place, depth_range, moved_rows, place_of, subtree_end};
+
+fn outline(text: &str) -> Vec<OutlineRow> {
+    text.lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| OutlineRow {
+            key: line.trim().to_string(),
+            depth: (line.len() - line.trim_start().len()) / 2,
+        })
+        .collect()
+}
+
+// tree-reorder.test.ts, "the pure pieces"
+#[test]
+fn outline_reordering() {
+    let notes = outline("inbox\nprojects\n  site\n    copy\n  app\narchive\n");
+    assert_eq!(subtree_end(&notes, 1), 5);
+    assert_eq!(subtree_end(&notes, 0), 1);
+    assert_eq!(
+        place_of(&notes, 4),
+        Place {
+            parent: Some(1),
+            position: 1
+        }
+    );
+    assert_eq!(
+        place_of(&notes, 5),
+        Place {
+            parent: None,
+            position: 2
+        }
+    );
+    let row = |key: &str, depth| OutlineRow {
+        key: key.into(),
+        depth,
+    };
+    assert_eq!(
+        depth_range(Some(&row("a", 1)), Some(&row("b", 0)), None),
+        (0, 2)
+    );
+    assert_eq!(
+        depth_range(Some(&row("a", 1)), Some(&row("b", 2)), None),
+        (2, 2)
+    );
+    assert_eq!(depth_range(None, Some(&row("b", 0)), None), (0, 0));
+    assert_eq!(depth_range(Some(&row("a", 3)), None, Some(1)), (0, 1));
+    assert_eq!(
+        moved_rows(&notes, "site", Some("inbox"), 0).unwrap(),
+        outline("site\n  copy\ninbox\nprojects\n  app\narchive\n")
+    );
+    assert_eq!(
+        moved_rows(&notes, "app", Some("archive"), 1),
+        None,
+        "dropped where it was"
+    );
+}
