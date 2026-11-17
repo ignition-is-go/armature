@@ -47,6 +47,9 @@ pub struct Options {
     pub max_selected: Option<usize>,
     /// Whether the list opens as soon as the field takes focus.
     pub open_on_focus: bool,
+    /// Whether reaching the last option asks the owner for more, by offering
+    /// `more:<text>` to the gate.
+    pub load_more: bool,
 }
 
 const ACTIONS: &[&str] = &["select", "remove", "clear", "type", "open", "close"];
@@ -64,6 +67,8 @@ pub struct Combobox {
     active: Option<String>,
     on_clear: bool,
     loading: Loading,
+    /// Whether the highlight has just reached the last option.
+    at_end: bool,
 }
 
 impl Combobox {
@@ -97,6 +102,25 @@ impl Combobox {
                 .label
                 .to_lowercase()
                 .contains(&self.text.trim().to_lowercase())
+    }
+
+    /// The rest of the first option that begins with what was typed, to show after
+    /// the caret as a suggestion. Tab takes it.
+    pub fn completion(&self) -> Option<String> {
+        let typed = self.text.to_lowercase();
+        if typed.is_empty() {
+            return None;
+        }
+        let first = self
+            .items
+            .iter()
+            .find(|item| !item.disabled && item.label.to_lowercase().starts_with(&typed))?;
+        let rest: String = first
+            .label
+            .chars()
+            .skip(self.text.chars().count())
+            .collect();
+        (!rest.is_empty()).then_some(rest)
     }
 
     /// The options on show, in order.
@@ -203,6 +227,7 @@ impl Combobox {
             .and_then(|key| results.iter().position(|result| result == key));
         if let Some(next) = roving::step(&enabled, at, nav, true) {
             self.active = Some(results[next].clone());
+            self.at_end = next + 1 == results.len();
         }
         Reaction::handled()
     }
@@ -437,7 +462,34 @@ impl Primitive for Combobox {
                 key: Key::ArrowDown,
                 mods,
                 ..
-            } if !mods.alt || !self.open => self.step(Nav::Next),
+            } if !mods.alt || !self.open => {
+                let reaction = self.step(Nav::Next);
+                // The end of what is loaded is where more is asked for.
+                if self.opts.load_more
+                    && std::mem::take(&mut self.at_end)
+                    && self.loading != Loading::Loading
+                {
+                    gate(&ValueChange {
+                        value: vec![format!("more:{}", self.text)],
+                        source: Source::User,
+                        reason: Reason::Action,
+                    });
+                }
+                reaction
+            }
+            // Tab takes the suggested completion, then moves on as usual.
+            Input::Key { key: Key::Tab, .. } if self.open && self.completion().is_some() => {
+                let typed = self.text.to_lowercase();
+                let first = self
+                    .items
+                    .iter()
+                    .find(|item| !item.disabled && item.label.to_lowercase().starts_with(&typed))
+                    .map(|item| item.key.clone());
+                if let Some(key) = first {
+                    self.choose(&key, Source::User, Reason::Keyboard, gate);
+                }
+                Reaction::default()
+            }
             Input::Key {
                 key: Key::ArrowUp, ..
             } => self.step(Nav::Prev),
@@ -793,5 +845,50 @@ mod tests {
             );
         }
         assert_eq!(combobox.value(), ["apple", "banana"]);
+    }
+
+    #[test]
+    fn the_rest_of_the_first_match_is_suggested_and_tab_takes_it() {
+        let mut combobox = fruit(Options::default());
+        typed(&mut combobox, "ba");
+        assert_eq!(combobox.completion().as_deref(), Some("nana"));
+        let tab = key(&mut combobox, Key::Tab);
+        assert_eq!(combobox.value(), ["banana"]);
+        assert!(!tab.handled, "focus still moves on");
+        typed(&mut combobox, "ap");
+        assert_eq!(
+            combobox.completion().as_deref(),
+            Some("ple"),
+            "the disabled apricot is passed over"
+        );
+    }
+
+    #[test]
+    fn reaching_the_last_option_asks_for_more() {
+        let mut combobox = fruit(Options {
+            load_more: true,
+            ..Default::default()
+        });
+        typed(&mut combobox, "an");
+        let mut asked = Vec::new();
+        let mut down = |combobox: &mut Combobox| {
+            combobox.send(
+                Input::Key {
+                    key: Key::ArrowDown,
+                    mods: Modifiers::default(),
+                    now_ms: 0,
+                },
+                &mut |change| {
+                    asked.extend(change.value.iter().cloned());
+                    true
+                },
+            );
+        };
+        down(&mut combobox);
+        assert_eq!(
+            asked,
+            ["more:an"],
+            "banana is the only match, so the end is reached at once"
+        );
     }
 }

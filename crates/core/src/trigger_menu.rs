@@ -35,6 +35,8 @@ pub struct TriggerMenu {
     /// Where in the text a match was dismissed with Escape, so it stays closed
     /// until the person starts another.
     dismissed: Option<usize>,
+    /// What each command takes after it, by the command's key.
+    arguments: Vec<(String, Vec<String>)>,
 }
 
 impl TriggerMenu {
@@ -43,6 +45,41 @@ impl TriggerMenu {
             triggers: triggers.to_vec(),
             ..Default::default()
         }
+    }
+
+    /// Says what a command takes after it, such as an environment for `/deploy`.
+    pub fn arguments(mut self, key: &str, names: &[&str]) -> Self {
+        self.arguments.push((
+            key.to_string(),
+            names.iter().map(|name| name.to_string()).collect(),
+        ));
+        self
+    }
+
+    /// What the command last written still needs: the name of its next argument,
+    /// to show as a hint after the caret. `None` once it has them all.
+    pub fn argument_hint(&self) -> Option<&str> {
+        let complete = self.text.ends_with(char::is_whitespace);
+        let words: Vec<&str> = self.text.split_whitespace().collect();
+        // The command nearest the end, and how many words follow it.
+        let (at, names) = words.iter().enumerate().rev().find_map(|(at, word)| {
+            let entry = self.arguments.iter().find(|(key, _)| {
+                self.items.get(key).is_some_and(|item| {
+                    word.strip_prefix(|ch: char| self.triggers.contains(&ch))
+                        == Some(item.label.as_str())
+                        && key.starts_with(word.chars().next().unwrap_or(' '))
+                })
+            })?;
+            Some((at, &entry.1))
+        })?;
+        let given = words.len() - at - 1;
+        // A word still being typed is the argument in progress, not one given.
+        let given = if complete {
+            given
+        } else {
+            given.saturating_sub(1)
+        };
+        names.get(given).map(String::as_str)
     }
 
     /// The suggestion being asked for: where it starts, its character, and what has
@@ -452,5 +489,26 @@ mod tests {
             })
             .collect();
         crate::testing::assert_conforms(|| TriggerMenu::new(&['@', '/']), &items);
+    }
+
+    #[test]
+    fn a_command_says_what_it_still_needs() {
+        let mut menu = menu().arguments("/deploy", &["environment", "version"]);
+        typed(&mut menu, "/dep");
+        key(&mut menu, Key::Enter);
+        assert_eq!(menu.value(), ["/deploy "]);
+        assert_eq!(menu.argument_hint(), Some("environment"));
+        typed(&mut menu, "/deploy prod");
+        assert_eq!(
+            menu.argument_hint(),
+            Some("environment"),
+            "still being typed"
+        );
+        typed(&mut menu, "/deploy prod ");
+        assert_eq!(menu.argument_hint(), Some("version"));
+        typed(&mut menu, "/deploy prod 1.2 ");
+        assert_eq!(menu.argument_hint(), None);
+        typed(&mut menu, "hello @ada ");
+        assert_eq!(menu.argument_hint(), None, "a mention takes nothing");
     }
 }
