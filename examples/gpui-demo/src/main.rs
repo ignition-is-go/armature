@@ -1,6 +1,7 @@
 use armature_core::accordion::{self, Accordion};
 use armature_core::calendar::{self, Calendar};
 use armature_core::canvas::{self, Canvas, Node};
+use armature_core::checkbox::{self, CheckboxGroup};
 use armature_core::color_picker::{self, ColorPicker};
 use armature_core::command::{self, Command};
 use armature_core::date::Date;
@@ -9,6 +10,7 @@ use armature_core::geometry::Rect;
 use armature_core::hold_button::{self, HoldButton};
 use armature_core::keys::Dir;
 use armature_core::listbox::{self, Listbox};
+use armature_core::menu::{self, Entry, Kind as EntryKind, Menu};
 use armature_core::number::NumberRange;
 use armature_core::number_input::{self, NumberInput};
 use armature_core::primitive::{Item, PartOf, Primitive};
@@ -20,6 +22,7 @@ use armature_core::selection::Mode;
 use armature_core::slider::{self, Slider};
 use armature_core::sortable::{self, Sortable};
 use armature_core::tabs::{self, Tabs};
+use armature_core::text_field::{self, Kind as FieldKind, TextField};
 use armature_core::toggle::{self, Toggle};
 use armature_core::toolbar::{self, Toolbar};
 use armature_core::transfer_list::{self, TransferList};
@@ -88,6 +91,9 @@ struct Demo {
     sent: Entity<Vec<String>>,
     delete: Entity<Machine<HoldButton>>,
     permissions: Entity<Machine<TransferList>>,
+    actions: Entity<Machine<Menu>>,
+    alerts: Entity<Machine<CheckboxGroup>>,
+    email: Entity<Machine<TextField>>,
 }
 
 impl Demo {
@@ -228,6 +234,30 @@ impl Demo {
             permissions: cx.new(|cx| {
                 let keys = ["Read", "Write", "Share", "Delete"];
                 Machine::new(TransferList::new(&keys), "Permissions", all(&keys), cx)
+            }),
+            actions: cx.new(|cx| {
+                let entries = vec![
+                    Entry::action("new", "New file"),
+                    Entry::action("wrap", "Word wrap").of(EntryKind::Checkbox),
+                    Entry::action("share", "Share").of(EntryKind::Submenu),
+                    Entry::action("email", "Email").inside("share"),
+                    Entry::action("link", "Copy link").inside("share"),
+                ];
+                Machine::new(Menu::new(entries), "Actions", [], cx)
+            }),
+            alerts: cx.new(|cx| {
+                Machine::new(
+                    CheckboxGroup::default(),
+                    "Alerts",
+                    all(&["Email", "SMS", "Push"]),
+                    cx,
+                )
+            }),
+            email: cx.new(|cx| {
+                let field = TextField::new(FieldKind::Text).validate(|text| {
+                    (!text.contains('@')).then(|| "Enter an email address.".to_string())
+                });
+                Machine::new(field, "Email", [], cx)
             }),
             sent,
             pressed,
@@ -958,6 +988,103 @@ impl Demo {
     }
 }
 
+impl Demo {
+    fn forms(&self, cx: &App) -> Div {
+        let menu = self.actions.read(cx).primitive();
+        let entries: Vec<(String, String)> = menu
+            .shown()
+            .iter()
+            .map(|entry| (entry.key.clone(), entry.label.clone()))
+            .collect();
+        let entry = |(key, label): &(String, String)| {
+            let semantics = self.actions.read(cx).semantics(menu::Part::Item, Some(key));
+            let tick = if semantics.checked == Some(true) {
+                "  ✓"
+            } else {
+                ""
+            };
+            part(&self.actions, menu::Part::Item, Some(key), cx)
+                .px_2()
+                .py_1()
+                .rounded_sm()
+                .when(semantics.active, |el| el.bg(rgb(WASH)))
+                .child(format!("{label}{tick}"))
+        };
+        let check = |kind, key: Option<&'static str>, label: &'static str| {
+            let semantics = self.alerts.read(cx).semantics(kind, key);
+            let mark = match (semantics.mixed, semantics.checked) {
+                (true, _) => "[-] ",
+                (_, Some(true)) => "[x] ",
+                _ => "[ ] ",
+            };
+            part(&self.alerts, kind, key, cx)
+                .px_1()
+                .border_1()
+                .border_color(rgb(WHITE))
+                .focus(|style| style.border_color(rgb(ACCENT)))
+                .child(format!("{mark}{label}"))
+        };
+        let field = self.email.read(cx);
+        let typed = field
+            .text(text_field::Part::Input, None)
+            .unwrap_or_default();
+        let problem = field.primitive().error().unwrap_or_default();
+        div()
+            .flex()
+            .flex_col()
+            .gap_4()
+            .child(
+                section("MENU")
+                    .child(format!(
+                        "Menu: {}",
+                        self.actions.read(cx).value().join(", ")
+                    ))
+                    .child(
+                        boxed(part(&self.actions, menu::Part::Trigger, None, cx))
+                            .px_2()
+                            .child("Actions"),
+                    )
+                    .child(
+                        boxed(part(&self.actions, menu::Part::Content, None, cx))
+                            .bg(rgb(WHITE))
+                            .w(px(150.))
+                            .p_1()
+                            .children(entries.iter().map(entry)),
+                    ),
+            )
+            .child(
+                section("CHECKBOX GROUP")
+                    .child(format!(
+                        "Alerts: {}",
+                        self.alerts.read(cx).value().join(", ")
+                    ))
+                    .child(
+                        part(&self.alerts, checkbox::GroupPart::Root, None, cx)
+                            .child(check(checkbox::GroupPart::All, None, "All"))
+                            .child(check(checkbox::GroupPart::Option, Some("Email"), "Email"))
+                            .child(check(checkbox::GroupPart::Option, Some("SMS"), "SMS"))
+                            .child(check(checkbox::GroupPart::Option, Some("Push"), "Push")),
+                    ),
+            )
+            .child(
+                section("TEXT FIELD")
+                    .child(format!("Email: {}", field.value().join("")))
+                    .child(
+                        boxed(part(&self.email, text_field::Part::Input, None, cx))
+                            .w(px(200.))
+                            .h(px(26.))
+                            .px_2()
+                            .child(typed),
+                    )
+                    .child(
+                        part(&self.email, text_field::Part::Error, None, cx)
+                            .text_color(rgb(0xb3261e))
+                            .child(problem),
+                    ),
+            )
+    }
+}
+
 impl Render for Demo {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let days: Vec<String> = self
@@ -982,6 +1109,17 @@ impl Render for Demo {
         self.rows.update(cx, |rows, cx| {
             rows.track(virtual_list::Part::Row, shown, cx)
         });
+        let entries: Vec<String> = self
+            .actions
+            .read(cx)
+            .primitive()
+            .shown()
+            .iter()
+            .map(|entry| entry.key.clone())
+            .collect();
+        self.actions.update(cx, |actions, cx| {
+            actions.track(menu::Part::Item, entries, cx)
+        });
         let nodes = ["a", "b", "c"].map(String::from);
         self.board
             .update(cx, |board, cx| board.track(canvas::Part::Node, nodes, cx));
@@ -1003,6 +1141,7 @@ impl Render for Demo {
             .child(self.editing(cx))
             .child(live_region(&self.groceries, cx))
             .child(live_region(&self.permissions, cx))
+            .child(self.forms(cx))
     }
 }
 
