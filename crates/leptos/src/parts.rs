@@ -371,6 +371,20 @@ fn aria_role(role: Role) -> &'static str {
         Role::ListItem => "listitem",
         Role::Separator => "separator",
         Role::Tooltip => "tooltip",
+        Role::Checkbox => "checkbox",
+        Role::Menu => "menu",
+        Role::MenuItem => "menuitem",
+        Role::MenuItemCheckbox => "menuitemcheckbox",
+        Role::MenuItemRadio => "menuitemradio",
+        Role::MenuBar => "menubar",
+        Role::Meter => "meter",
+        Role::ProgressBar => "progressbar",
+        Role::Navigation => "navigation",
+        Role::Link => "link",
+        Role::Image => "img",
+        Role::Status => "status",
+        Role::Alert => "alert",
+        Role::ScrollBar => "scrollbar",
     }
 }
 
@@ -878,7 +892,17 @@ where
         let attributes = [
             ("aria-selected", flag(state.selected)),
             ("aria-expanded", flag(state.expanded)),
-            ("aria-checked", flag(state.checked)),
+            (
+                "aria-checked",
+                if state.mixed {
+                    Some("mixed".to_string())
+                } else {
+                    flag(state.checked)
+                },
+            ),
+            ("aria-pressed", flag(state.pressed)),
+            ("aria-current", state.current.then(|| "true".to_string())),
+            ("aria-invalid", state.invalid.then(|| "true".to_string())),
             ("aria-multiselectable", flag(state.multiselectable)),
             ("aria-disabled", state.disabled.then(|| "true".to_string())),
             ("aria-level", state.level.map(|level| level.to_string())),
@@ -932,7 +956,7 @@ where
         };
         return view! {
             <input
-                type="text"
+                type=move || if semantics.get().obscured { "password" } else { "text" }
                 role=(role == Some(Role::SpinButton)).then_some("spinbutton")
                 aria-label=label_text
                 aria-valuenow=move || range().map(|r| r.now.to_string())

@@ -218,6 +218,25 @@ pub enum Role {
     /// A draggable divider between two panels.
     Separator,
     Tooltip,
+    Checkbox,
+    Menu,
+    MenuItem,
+    MenuItemCheckbox,
+    MenuItemRadio,
+    MenuBar,
+    /// A reading within a known range, such as disk space used.
+    Meter,
+    /// How far a task has come.
+    ProgressBar,
+    /// A set of links for getting around.
+    Navigation,
+    Link,
+    Image,
+    /// Text that changes and is read out when there is a pause.
+    Status,
+    /// Text that is read out at once.
+    Alert,
+    ScrollBar,
 }
 
 /// A number within limits, as a slider or stepper reports it.
@@ -246,6 +265,17 @@ pub struct Semantics {
     pub selected: Option<bool>,
     pub expanded: Option<bool>,
     pub checked: Option<bool>,
+    /// Checked in part, as a checkbox over a group with only some checked is.
+    pub mixed: bool,
+    /// Whether a button that stays down is down.
+    pub pressed: Option<bool>,
+    /// The one among its siblings that shows where the person is, such as the
+    /// current page.
+    pub current: bool,
+    /// Its value was refused.
+    pub invalid: bool,
+    /// Its text must not be shown as typed.
+    pub obscured: bool,
     /// Depth in a tree, starting at 1.
     pub level: Option<u32>,
     pub range: Option<ValueRange>,

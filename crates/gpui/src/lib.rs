@@ -659,7 +659,9 @@ pub fn part<K: PartOf>(
     if let Some(expanded) = semantics.expanded {
         el = el.aria_expanded(expanded);
     }
-    if let Some(checked) = semantics.checked {
+    if semantics.mixed {
+        el = el.aria_toggled(Toggled::Mixed);
+    } else if let Some(checked) = semantics.checked.or(semantics.pressed) {
         el = el.aria_toggled(if checked {
             Toggled::True
         } else {
@@ -1061,6 +1063,20 @@ fn accessibility_role(role: Role) -> gpui::Role {
         Role::ListItem => gpui::Role::ListItem,
         Role::Separator => gpui::Role::Splitter,
         Role::Tooltip => gpui::Role::Tooltip,
+        Role::Checkbox => gpui::Role::CheckBox,
+        Role::Menu => gpui::Role::Menu,
+        Role::MenuItem => gpui::Role::MenuItem,
+        Role::MenuItemCheckbox => gpui::Role::MenuItemCheckBox,
+        Role::MenuItemRadio => gpui::Role::MenuItemRadio,
+        Role::MenuBar => gpui::Role::MenuBar,
+        Role::Meter => gpui::Role::Meter,
+        Role::ProgressBar => gpui::Role::ProgressIndicator,
+        Role::Navigation => gpui::Role::Navigation,
+        Role::Link => gpui::Role::Link,
+        Role::Image => gpui::Role::Image,
+        Role::Status => gpui::Role::Status,
+        Role::Alert => gpui::Role::Alert,
+        Role::ScrollBar => gpui::Role::ScrollBar,
     }
 }
 

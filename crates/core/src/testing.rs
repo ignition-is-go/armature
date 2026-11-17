@@ -306,7 +306,8 @@ pub fn check<P: Primitive>(make: impl Fn() -> P, items: &[Item]) -> Vec<Violatio
     // The agent's side.
     let actions = build(true).snapshot("").actions;
     match build(true).act("no such action", None, &mut |_| true) {
-        Err(ActError::UnknownAction { valid, .. }) if valid == actions && !valid.is_empty() => {}
+        // A read-only primitive, such as a meter, has no actions to name.
+        Err(ActError::UnknownAction { valid, .. }) if valid == actions => {}
         other => fail(
             "an unknown action names the valid ones",
             format!("got {other:?}"),
