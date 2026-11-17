@@ -1,3 +1,5 @@
+mod more;
+
 use armature_core::accordion::{self, Accordion};
 use armature_core::calendar::{self, Calendar};
 use armature_core::canvas::{self, Canvas, Node};
@@ -43,7 +45,7 @@ use armature_leptos::{
 use leptos::prelude::*;
 
 /// A signal that follows a component's value, and the gate that feeds it.
-fn follow() -> (RwSignal<Vec<String>>, Callback<ValueChange, bool>) {
+pub(crate) fn follow() -> (RwSignal<Vec<String>>, Callback<ValueChange, bool>) {
     let value = RwSignal::new(Vec::<String>::new());
     let gate = Callback::new(move |change: ValueChange| {
         value.set(change.value);
@@ -53,7 +55,7 @@ fn follow() -> (RwSignal<Vec<String>>, Callback<ValueChange, bool>) {
 }
 
 #[component]
-fn Section(title: &'static str, children: Children) -> impl IntoView {
+pub(crate) fn Section(title: &'static str, children: Children) -> impl IntoView {
     view! {
         <section>
             <h3>{title}</h3>
@@ -855,6 +857,7 @@ fn App() -> impl IntoView {
             <Section title="Theme">
                 <ThemeChoice />
             </Section>
+            <more::More />
         </main>
     }
 }

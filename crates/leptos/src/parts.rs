@@ -816,12 +816,39 @@ where
                 .is_some_and(|owner| {
                     owner.get_attribute("data-armature").as_deref() == Some(instance.as_str())
                 });
-            if !stays {
-                ctx.dispatch(Input::Blur {
-                    part,
-                    item: item.clone(),
-                });
+            if stays {
+                return;
             }
+            let leave = {
+                let item = item.clone();
+                move || {
+                    ctx.dispatch(Input::Blur {
+                        part,
+                        item: item.clone(),
+                    });
+                }
+            };
+            if ev.related_target().is_some() {
+                leave();
+                return;
+            }
+            // With nowhere named, focus may only have dropped because the focused
+            // part was re-rendered, and is about to be put back. Look again once it
+            // has had the chance.
+            let instance = instance.clone();
+            request_animation_frame(move || {
+                request_animation_frame(move || {
+                    let owner = document()
+                        .active_element()
+                        .and_then(|now| now.closest("[data-armature]").ok().flatten());
+                    let inside = owner.is_some_and(|owner| {
+                        owner.get_attribute("data-armature").as_deref() == Some(instance.as_str())
+                    });
+                    if !inside {
+                        leave();
+                    }
+                });
+            });
         }
     };
     // Find-in-page may search a hidden part that allows it, and says when it matched.
@@ -987,9 +1014,13 @@ where
 
     // State that changes often is written straight onto the element. The view layer
     // caps how many attributes one element may declare.
+    // A part the person types into is an input, not a div.
+    let field = NodeRef::<leptos::html::Input>::new();
     Effect::new(move |_| {
         let state = semantics.get();
-        let Some(element) = element.get() else { return };
+        let node = element.get().map(|node| web_sys::Element::clone(&node));
+        let node = node.or_else(|| field.get().map(|node| web_sys::Element::clone(&node)));
+        let Some(element) = node else { return };
         let flag = |on: Option<bool>| on.map(|on| on.to_string());
         let number = |value: Option<f64>| value.map(|value| value.to_string());
         let attributes = [
@@ -1059,6 +1090,7 @@ where
         };
         return view! {
             <input
+                node_ref=field
                 type=move || if semantics.get().obscured { "password" } else { "text" }
                 role=(role == Some(Role::SpinButton)).then_some("spinbutton")
                 aria-label=label_text

@@ -65,7 +65,7 @@
     },
     "resizable": {
       "aria": "50 vertical",
-      "dragged": "Split: 24.8 panel=25%",
+      "dragged": "Split: 25 panel=25%",
       "end": "Split: 90"
     },
     "relations": {
@@ -254,6 +254,95 @@
     "layers": {
       "staysOpenUnderADialog": true,
       "closesOnceTheDialogIsGone": true
+    }
+  },
+  "components": {
+    "button": "Saves: 2",
+    "checkbox": {
+      "single": "Agreed: on checked=true enterLeftAlone=true",
+      "some": "Alerts: sms all=mixed",
+      "everything": "Alerts: email, sms all=true email=true"
+    },
+    "toggles": {
+      "moved": "Align: left focus=center pressed=true,false,false",
+      "pressed": "Align: center tabStops=1"
+    },
+    "pagination": {
+      "start": "‹ 1 2 3 4 5 … 10 › prev=true",
+      "five": "Page: 5 | ‹ 1 … 4 5 6 … 10 › | current=5",
+      "next": "Page: 6"
+    },
+    "textField": {
+      "typing": "error=false invalid=null",
+      "left": "error=true invalid=true labelled=Email",
+      "fixed": "Email: ada@example.com error=false",
+      "password": "password > text pressed=true"
+    },
+    "avatar": "image=true fallback=false",
+    "menu": {
+      "opened": "items=new,wrap,share focus=new expanded=true",
+      "checkbox": "Menu: wrap open=true",
+      "submenu": "items=email,link focus=email",
+      "back": "items=new,wrap,share focus=share",
+      "ran": "Menu: run:new open=false focus=Trigger"
+    },
+    "menubar": {
+      "opened": "focus=file/new file=true",
+      "across": "focus=view/zoom view=true file=false",
+      "popupUnderItsOwnTitle": true,
+      "ran": "Bar: run:view/zoom focus=view"
+    },
+    "combobox": {
+      "narrowed": "apple,apricot active=apple said=\"2 results\"",
+      "chosen": "Fruit: apricot field=\"Apricot\" open=false",
+      "nothing": "empty=true",
+      "reverts": "field=\"Apricot\""
+    },
+    "navigation": {
+      "opened": "Open: products panel=true",
+      "link": "focus=pricing current=true",
+      "closed": "panel=false"
+    },
+    "toasts": {
+      "shown": "Showing: 1 title=Saved said=\"Saved\"",
+      "timedOut": "Showing: 0",
+      "dismissed": "Showing: 0"
+    },
+    "dateInput": {
+      "moved": "focus=Month year=2026",
+      "typed": "When: 2026-02-28 fields=2026-02-28",
+      "stepped": "When: 2026-02-01"
+    },
+    "datePicker": {
+      "opened": "days=true",
+      "picked": "Due: 2026-11-20 fields=2026-11-20 open=false focus=Trigger"
+    },
+    "mentions": {
+      "suggested": "@alan open=true",
+      "inserted": "Note: ping @alan | field=\"ping @alan \" open=false"
+    },
+    "carousel": {
+      "next": "Slide: two prev=null",
+      "dragged": "Slide: three next=true"
+    },
+    "scrollArea": {
+      "start": "top=0px tall=true",
+      "thumbReachesTheEnd": true,
+      "dragScrollsBack": true
+    },
+    "cropper": {
+      "resized": "Crop: 0,0,400,600",
+      "moved": "Crop: 200,0,400,600"
+    },
+    "files": {
+      "over": true,
+      "dropped": "Files: photo.png | said=\"1 file added. 1 file not accepted.\"",
+      "removed": "Files: "
+    },
+    "waterfall": {
+      "start": "page@1 api@2 db@3 | api bar 25% 50%",
+      "collapsed": "page@1 api@2",
+      "selected": "Span: api"
     }
   }
 }
