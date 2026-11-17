@@ -7,9 +7,9 @@ Each lives in `armature_core::<module>` and exports a `Part` enum.
 | Primitive | Module | Parts | Value |
 | --- | --- | --- | --- |
 | Listbox | `listbox` | `Root`, `Option` | Selected keys. Single or multiple. |
-| Select | `select` | `Trigger`, `Content`, `Option` | The chosen key. `Content` is a popup. |
-| Command palette | `command` | `Input`, `List`, `Option` | The option that was run. |
-| Tabs | `tabs` | `List`, `Tab`, `Panel` | The current tab. |
+| Select | `select` | `Trigger`, `Content`, `Option` | The chosen key. `Content` is a popup. `Select::multiple()` takes several. |
+| Command palette | `command` | `Input`, `List`, `Option` | The option that was run. `.page(name, opener, options)` adds a page of options. |
+| Tabs | `tabs` | `List`, `Tab`, `Panel` | The current tab. With `manual`, arrows only move focus. |
 | Accordion | `accordion` | `Trigger`, `Panel` | The open sections. |
 | Radio group, segmented control, rating | `radio` | `Root`, `Option` | The chosen option. |
 | Switch | `toggle` | `Root` | `["on"]` or empty. |
@@ -20,12 +20,12 @@ Each lives in `armature_core::<module>` and exports a `Part` enum.
 | Token input | `token_input` | `Root`, `Input`, `Token` | The tokens. |
 | Tree | `tree_view` | `Root`, `Node` | The selected node. Draw nodes from `rows()`. Dragging a node, or Alt with an arrow, moves it. The move is offered to the gate as `key>parent#index` with `Reason::Edit`. `landing()` says where a dragged node would drop. |
 | Sortable list | `sortable` | `Root`, `Item` | The keys in order. |
-| Calendar | `calendar` | `Grid`, `Day`, `PreviousMonth`, `NextMonth` | The day as `YYYY-MM-DD`. Draw days from `weeks()`. |
+| Calendar | `calendar` | `Grid`, `Day`, `PreviousMonth`, `NextMonth` | The day as `YYYY-MM-DD`. Draw days from `weeks()`. `Options::mode` chooses several days or a span, and `unavailable` rules days out. |
 | Resizable panels | `resizable` | `Root`, `Handle` | The first panel's share, in percent. |
 | Dialog | `dialog` | `Trigger`, `Backdrop`, `Content`, `Close` | `["open"]` or empty. |
 | Popover | `popover` | `Trigger`, `Content`, `Title`, `Description`, `Arrow`, `Close` | None. `Content` is a popup. |
 | Tooltip | `tooltip` | `Trigger`, `Content` | None. Shows on hover after a delay, and on focus. |
-| Sheet | `sheet` | `Trigger`, `Backdrop`, `Content`, `Handle` | The index of the height it rests at. Size it to `height()`. |
+| Sheet and drawer | `sheet` | `Trigger`, `Backdrop`, `Content`, `Handle`, `Scroller` | The index of the height it rests at. Size it to `height()`. |
 | Colour picker | `color_picker` | `Area`, `AreaThumb`, `Hue`, `HueThumb`, `Input` | The colour as `#rrggbb`. |
 | Swipe row | `swipe_row` | `Row`, `Action` | None. A pressed action is offered to the gate. Move the row by `offset()`. |
 | Virtual list | `virtual_list` | `Viewport`, `Row` | The selected row's index. Draw rows from `rows()`. |
@@ -59,6 +59,9 @@ Each lives in `armature_core::<module>` and exports a `Part` enum.
 | Scroll area | `scroll_area` | `Root`, `Viewport`, `Scrollbar`, `Thumb` | None. Place the grip with `thumb(track_length)`. `ScrollArea::horizontal()` scrolls sideways. |
 | Image cropper | `image_cropper` | `Area`, `Selection`, `Handle` | `x,y,width,height` in the picture's pixels. Place the selection with `fractions()`. Key handles by compass point. |
 | File input | `file_input` | `Dropzone`, `Trigger`, `List`, `File`, `Remove` | The file names. Draw from `files()`, and `rejected()` says what was turned away. |
+| Event list (timeline, feed) | `event_list` | `Root`, `Event` | None. `set("current", key)` marks the step in progress, and `status(key)` says done, current or upcoming. With `feed`, PageUp and PageDown move between articles. |
+| Range slider | `range_slider` | `Track`, `Thumb` | Each grip's number, lowest first. Key grips `0`, `1`. Place them with `fractions()`. |
+| Panel group | `panel_group` | `Root`, `Panel`, `Handle` | Each panel's share in percent. Key panels and the divider after each `0`, `1`. |
 | Waterfall | `waterfall` | `Root`, `Row`, `Bar`, `Axis` | The selected span. Draw from `rows()`, `bar(key)` and `ticks(most)`. |
 
 A part marked as an item part (`Primitive::is_item`) is rendered once per item and takes

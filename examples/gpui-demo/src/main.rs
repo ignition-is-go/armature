@@ -16,13 +16,16 @@ use armature_core::number_input::{self, NumberInput};
 use armature_core::primitive::{Item, PartOf, Primitive};
 use armature_core::prompt::{self, Prompt};
 use armature_core::radio::{self, Radio};
+use armature_core::range_slider::{self, RangeSlider};
 use armature_core::resizable::{self, Resizable};
+use armature_core::scroll_area::{self, ScrollArea};
 use armature_core::select::{self, Select};
 use armature_core::selection::Mode;
 use armature_core::slider::{self, Slider};
 use armature_core::sortable::{self, Sortable};
 use armature_core::tabs::{self, Tabs};
 use armature_core::text_field::{self, Kind as FieldKind, TextField};
+use armature_core::toast::{self, Toast, Toaster};
 use armature_core::toggle::{self, Toggle};
 use armature_core::toolbar::{self, Toolbar};
 use armature_core::transfer_list::{self, TransferList};
@@ -94,6 +97,9 @@ struct Demo {
     actions: Entity<Machine<Menu>>,
     alerts: Entity<Machine<CheckboxGroup>>,
     email: Entity<Machine<TextField>>,
+    price: Entity<Machine<RangeSlider>>,
+    strip: Entity<Machine<ScrollArea>>,
+    notices: Entity<Machine<Toaster>>,
 }
 
 impl Demo {
@@ -258,6 +264,15 @@ impl Demo {
                     (!text.contains('@')).then(|| "Enter an email address.".to_string())
                 });
                 Machine::new(field, "Email", [], cx)
+            }),
+            price: cx.new(|cx| Machine::new(RangeSlider::default(), "Price", [], cx)),
+            strip: cx.new(|cx| Machine::new(ScrollArea::horizontal(), "Days", [], cx)),
+            notices: cx.new(|cx| {
+                let mut toaster = Toaster::default();
+                toaster.set_value(vec![
+                    Toast::new("a", "Saved").action("Undo").lasting(0).encode(),
+                ]);
+                Machine::new(toaster, "Notifications", [], cx)
             }),
             sent,
             pressed,
@@ -1045,6 +1060,13 @@ impl Demo {
                             .child("Actions"),
                     )
                     .child(
+                        boxed(part(&self.actions, menu::Part::Area, None, cx))
+                            .px_2()
+                            .py_1()
+                            .text_color(rgb(MUTED))
+                            .child("or right-click here"),
+                    )
+                    .child(
                         boxed(part(&self.actions, menu::Part::Content, None, cx))
                             .bg(rgb(WHITE))
                             .w(px(150.))
@@ -1085,6 +1107,115 @@ impl Demo {
     }
 }
 
+impl Demo {
+    fn extras(&self, cx: &App) -> Div {
+        let price = self.price.read(cx);
+        let spots = price.primitive().fractions();
+        let thumb = |at: usize| {
+            part(
+                &self.price,
+                range_slider::Part::Thumb,
+                Some(&at.to_string()),
+                cx,
+            )
+            .absolute()
+            .left(px(TRACK * spots[at] as f32 - 8.))
+            .top(px(-5.))
+            .size(px(16.))
+            .rounded_full()
+            .bg(rgb(WHITE))
+            .border_2()
+            .border_color(rgb(ACCENT))
+        };
+        let area = self.strip.read(cx).primitive();
+        let (start, length) = area.thumb(200.0);
+        let shown: Vec<Toast> = self.notices.read(cx).primitive().visible().to_vec();
+        let notice = |toast: &Toast| {
+            div()
+                .flex()
+                .gap_2()
+                .child(
+                    part(&self.notices, toast::Part::Toast, Some(&toast.id), cx)
+                        .child(toast.title.clone()),
+                )
+                .child(
+                    boxed(part(
+                        &self.notices,
+                        toast::Part::Action,
+                        Some(&toast.id),
+                        cx,
+                    ))
+                    .px_1()
+                    .child(toast.action.clone()),
+                )
+                .child(
+                    boxed(part(&self.notices, toast::Part::Close, Some(&toast.id), cx))
+                        .px_1()
+                        .child("×"),
+                )
+        };
+        div()
+            .flex()
+            .flex_col()
+            .gap_4()
+            .child(
+                section("RANGE SLIDER")
+                    .child(format!("Price: {}", price.value().join(" to ")))
+                    .child(
+                        part(&self.price, range_slider::Part::Track, None, cx)
+                            .relative()
+                            .w(px(TRACK))
+                            .h(px(6.))
+                            .my_2()
+                            .rounded_md()
+                            .bg(rgb(LINE))
+                            .child(thumb(0))
+                            .child(thumb(1)),
+                    ),
+            )
+            .child(
+                section("SIDEWAYS SCROLL").child(
+                    div()
+                        .w(px(200.))
+                        .child(
+                            part(&self.strip, scroll_area::Part::Viewport, None, cx)
+                                .w(px(200.))
+                                .child(
+                                    div().flex().flex_none().w(px(1300.)).gap_3().children(
+                                        (1..=20).map(|day| {
+                                            div().flex_none().child(format!("Day {day}"))
+                                        }),
+                                    ),
+                                ),
+                        )
+                        .child(
+                            part(&self.strip, scroll_area::Part::Scrollbar, None, cx)
+                                .relative()
+                                .w(px(200.))
+                                .h(px(8.))
+                                .bg(rgb(WASH))
+                                .child(
+                                    part(&self.strip, scroll_area::Part::Thumb, None, cx)
+                                        .absolute()
+                                        .left(px(start as f32))
+                                        .w(px(length as f32))
+                                        .h(px(8.))
+                                        .bg(rgb(MUTED)),
+                                ),
+                        ),
+                ),
+            )
+            .child(
+                section("TOASTS (F6)")
+                    .child(format!("Showing: {}", shown.len()))
+                    .child(
+                        part(&self.notices, toast::Part::Region, None, cx)
+                            .children(shown.iter().map(notice)),
+                    ),
+            )
+    }
+}
+
 impl Render for Demo {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let days: Vec<String> = self
@@ -1120,6 +1251,26 @@ impl Render for Demo {
         self.actions.update(cx, |actions, cx| {
             actions.track(menu::Part::Item, entries, cx)
         });
+        let ids: Vec<String> = self
+            .notices
+            .read(cx)
+            .primitive()
+            .visible()
+            .iter()
+            .map(|toast| toast.id.clone())
+            .collect();
+        self.notices.update(cx, |notices, cx| {
+            for kind in [toast::Part::Toast, toast::Part::Action, toast::Part::Close] {
+                notices.track(kind, ids.clone(), cx);
+            }
+        });
+        self.price.update(cx, |price, cx| {
+            price.track(
+                range_slider::Part::Thumb,
+                ["0".to_string(), "1".to_string()],
+                cx,
+            )
+        });
         let nodes = ["a", "b", "c"].map(String::from);
         self.board
             .update(cx, |board, cx| board.track(canvas::Part::Node, nodes, cx));
@@ -1142,6 +1293,8 @@ impl Render for Demo {
             .child(live_region(&self.groceries, cx))
             .child(live_region(&self.permissions, cx))
             .child(self.forms(cx))
+            .child(self.extras(cx))
+            .child(live_region(&self.notices, cx))
     }
 }
 
