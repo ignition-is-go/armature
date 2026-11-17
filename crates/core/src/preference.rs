@@ -128,6 +128,64 @@ impl PointerKind {
     }
 }
 
+/// A stored choice to apply to the page as it loads.
+#[derive(Clone, Copy, Debug)]
+pub struct StoredAttribute<'a> {
+    /// The key the choice is stored under.
+    pub key: &'a str,
+    /// The attribute on the root element that carries it.
+    pub attribute: &'a str,
+    pub fallback: &'a str,
+    /// The values allowed. Anything else stored is ignored.
+    pub options: &'a [&'a str],
+}
+
+/// A script for a web page's `<head>` that puts stored choices on the root element
+/// before anything is painted, so the page never flashes the default first. It reads
+/// `localStorage`, then a cookie of the same name. A colour scheme stored as
+/// `system` is resolved to what the operating system prefers.
+pub fn preferences_script(choices: &[StoredAttribute]) -> String {
+    // Keys and values go through a JSON-style quote so nothing in them can end the string.
+    let quote = |text: &str| -> String {
+        let mut quoted = String::from("\"");
+        for ch in text.chars() {
+            match ch {
+                '"' | '\\' => {
+                    quoted.push('\\');
+                    quoted.push(ch);
+                }
+                '<' => quoted.push_str("\\u003c"),
+                '\n' => quoted.push_str("\\n"),
+                other => quoted.push(other),
+            }
+        }
+        quoted.push('"');
+        quoted
+    };
+    let entries: Vec<String> = choices
+        .iter()
+        .map(|choice| {
+            let options: Vec<String> = choice.options.iter().map(|option| quote(option)).collect();
+            format!(
+                "[{},{},{},[{}]]",
+                quote(choice.key),
+                quote(choice.attribute),
+                quote(choice.fallback),
+                options.join(",")
+            )
+        })
+        .collect();
+    format!(
+        "(function(){{var r=document.documentElement;[{}].forEach(function(c){{var v=null;\
+try{{v=localStorage.getItem(c[0])}}catch(e){{}}\
+if(v===null){{var m=document.cookie.match(new RegExp(\"(?:^|; )\"+c[0]+\"=([^;]*)\"));if(m)v=decodeURIComponent(m[1])}}\
+if(c[3].indexOf(v)<0)v=c[2];\
+if(v===\"system\")v=matchMedia(\"(prefers-color-scheme: dark)\").matches?\"dark\":\"light\";\
+r.setAttribute(c[1],v)}})}})();",
+        entries.join(",")
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -173,5 +231,25 @@ mod tests {
         assert!(PointerKind::Mouse.hovers());
         assert!(!PointerKind::Touch.hovers());
         assert!(PointerKind::Touch.min_target() > PointerKind::Pen.min_target());
+    }
+
+    #[test]
+    fn the_script_names_each_choice_and_cannot_be_broken_out_of() {
+        let script = preferences_script(&[StoredAttribute {
+            key: "theme",
+            attribute: "data-theme",
+            fallback: "system",
+            options: &ColorScheme::OPTIONS,
+        }]);
+        assert!(script.contains(r#"["theme","data-theme","system",["light","dark","system"]]"#));
+        assert!(script.starts_with("(function(){") && script.ends_with("})();"));
+        let hostile = preferences_script(&[StoredAttribute {
+            key: "a\"</script>",
+            attribute: "x",
+            fallback: "y",
+            options: &[],
+        }]);
+        assert!(!hostile.contains("</script>"));
+        assert!(hostile.contains(r#""a\"\u003c/script>""#));
     }
 }

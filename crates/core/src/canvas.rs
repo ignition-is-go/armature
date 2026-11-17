@@ -9,6 +9,7 @@ use crate::primitive::{
     Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction,
     Role, Semantics,
 };
+use crate::spatial::{Direction, nearest_in_direction};
 use crate::undo::UndoStack;
 use crate::viewport::Viewport;
 
@@ -375,6 +376,40 @@ impl Primitive for Canvas {
                     handled: had_selection,
                     ..Default::default()
                 }
+            }
+            // Alt with an arrow moves the selection to the nearest node that way.
+            Input::Key { key, mods, .. } if mods.alt => {
+                let direction = match key {
+                    Key::ArrowUp => Direction::Up,
+                    Key::ArrowDown => Direction::Down,
+                    Key::ArrowLeft => Direction::Left,
+                    Key::ArrowRight => Direction::Right,
+                    _ => return Reaction::default(),
+                };
+                let Some(from) = self
+                    .selected
+                    .first()
+                    .or(self.nodes.first().map(|node| &node.key))
+                    .cloned()
+                else {
+                    return Reaction::default();
+                };
+                let origin = self
+                    .nodes
+                    .iter()
+                    .find(|node| node.key == from)
+                    .map(|node| node.rect)
+                    .unwrap_or_default();
+                let others: Vec<(String, Rect)> = self
+                    .nodes
+                    .iter()
+                    .filter(|node| node.key != from)
+                    .map(|node| (node.key.clone(), node.rect))
+                    .collect();
+                if let Some(next) = nearest_in_direction(&others, origin, direction) {
+                    self.selected = vec![next];
+                }
+                Reaction::handled()
             }
             Input::Key { key, mods, .. } => {
                 let Some(delta) = key_delta(key, mods, 1.0, 10.0) else {
@@ -951,6 +986,35 @@ mod tests {
         );
         assert!(key(&mut canvas, Key::Escape, NONE).handled);
         assert!(canvas.selected().is_empty());
+    }
+
+    #[test]
+    fn alt_with_an_arrow_moves_the_selection_to_the_nearest_node_that_way() {
+        let mut canvas = canvas();
+        canvas.act("select", Some("a"), &mut |_| true).unwrap();
+        let alt = Modifiers { alt: true, ..NONE };
+        let key = |canvas: &mut Canvas, key| {
+            canvas.send(
+                Input::Key {
+                    key,
+                    mods: alt,
+                    now_ms: 0,
+                },
+                &mut |_| true,
+            )
+        };
+        key(&mut canvas, Key::ArrowRight);
+        assert_eq!(canvas.selected(), ["b"]);
+        key(&mut canvas, Key::ArrowRight);
+        assert_eq!(canvas.selected(), ["b"], "nothing further that way");
+        key(&mut canvas, Key::ArrowLeft);
+        key(&mut canvas, Key::ArrowDown);
+        assert_eq!(canvas.selected(), ["c"]);
+        assert_eq!(
+            rect_of(&canvas, "c").y,
+            200.0,
+            "the nodes themselves did not move"
+        );
     }
 
     #[test]

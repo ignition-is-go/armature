@@ -337,10 +337,16 @@ pub fn slot_target(
             .map(|at| tree.nodes[at].key.as_str())
             .collect(),
     };
-    let before = above
-        .iter()
-        .filter(|row| siblings.contains(&row.key.as_str()))
-        .count();
+    // A closed parent shows none of its children, so the row goes after them all.
+    let closed = parent.is_some() && !rows.iter().any(|row| siblings.contains(&row.key.as_str()));
+    let before = if closed {
+        siblings.len()
+    } else {
+        above
+            .iter()
+            .filter(|row| siblings.contains(&row.key.as_str()))
+            .count()
+    };
     (parent.map(|parent| parent.key.clone()), before)
 }
 
@@ -373,7 +379,7 @@ pub fn place_node(
             .iter_mut()
             .find_map(|item| take(&mut item.children, key))
     }
-    fn children_of<'a>(items: &'a mut Vec<TreeItem>, key: &str) -> Option<&'a mut Vec<TreeItem>> {
+    fn children_of<'a>(items: &'a mut [TreeItem], key: &str) -> Option<&'a mut Vec<TreeItem>> {
         for item in items.iter_mut() {
             if item.key == key {
                 return Some(&mut item.children);

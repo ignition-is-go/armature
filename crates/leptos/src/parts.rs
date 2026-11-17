@@ -330,6 +330,7 @@ fn key_from_dom(key: &str) -> Option<Key> {
         "Escape" => Key::Escape,
         "Tab" => Key::Tab,
         "Backspace" => Key::Backspace,
+        "F2" => Key::F2,
         other => {
             let mut chars = other.chars();
             match (chars.next(), chars.next()) {
@@ -643,6 +644,44 @@ where
             }
         }
     };
+    let on_blur = {
+        let item = item.clone();
+        let instance = ctx.instance.to_string();
+        move |ev: leptos::ev::FocusEvent| {
+            // Focus moving to another part of the same component is not leaving it.
+            let next = ev
+                .related_target()
+                .and_then(|target| target.dyn_into::<web_sys::Element>().ok());
+            let stays = next
+                .and_then(|next| next.closest("[data-armature]").ok().flatten())
+                .is_some_and(|owner| {
+                    owner.get_attribute("data-armature").as_deref() == Some(instance.as_str())
+                });
+            if !stays {
+                ctx.dispatch(Input::Blur {
+                    part,
+                    item: item.clone(),
+                });
+            }
+        }
+    };
+    // Find-in-page may search a hidden part that allows it, and says when it matched.
+    {
+        let item = item.clone();
+        Effect::new(move |_| {
+            let Some(element) = element.get() else { return };
+            let item = item.clone();
+            let found = Closure::<dyn Fn()>::new(move || {
+                ctx.dispatch(Input::Found {
+                    part,
+                    item: item.clone(),
+                });
+            });
+            let _ = element
+                .add_event_listener_with_callback("beforematch", found.as_ref().unchecked_ref());
+            found.forget();
+        });
+    }
     let on_keydown = move |ev: leptos::ev::KeyboardEvent| {
         // Keys pressed while an input method is composing belong to it.
         if !interactive() || ev.is_composing() {
@@ -815,6 +854,7 @@ where
                 data-value=item
                 on:input=on_input
                 on:focus=on_focus
+                on:blur=on_blur
                 on:keydown=on_keydown
             />
         }
@@ -827,8 +867,14 @@ where
             id=own_id
             role=move || semantics.get().role.map(aria_role)
             aria-label=label_text
-            hidden=move || semantics.get().hidden
-            style:display=move || semantics.get().hidden.then_some("none")
+            hidden=move || {
+                let state = semantics.get();
+                state.hidden.then_some(if state.findable { "until-found" } else { "" })
+            }
+            style:display=move || {
+                let state = semantics.get();
+                (state.hidden && !state.findable).then_some("none")
+            }
             style:position=placement.map(|_| "fixed")
             style:touch-action=tracks_pointer.then_some("none")
             tabindex=tabindex
@@ -839,6 +885,7 @@ where
             on:click=on_click
             on:pointerdown=on_pointerdown
             on:focus=on_focus
+            on:blur=on_blur
             on:keydown=on_keydown
             on:pointerenter=move |ev| on_enter(true, ev)
             on:pointerleave=move |ev| on_leave(false, ev)

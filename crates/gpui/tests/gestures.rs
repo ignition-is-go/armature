@@ -217,7 +217,7 @@ fn dragging_a_row_reorders_the_list_and_says_so(cx: &mut TestAppContext) {
         assert_eq!(g.value(), ["eggs", "bread", "milk", "jam"]);
         assert_eq!(
             g.announcements().last().unwrap().message,
-            "milk dropped at position 3 of 4."
+            "Dropped milk at position 3 of 4."
         );
     });
 }

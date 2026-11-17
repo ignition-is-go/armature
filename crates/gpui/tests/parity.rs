@@ -6,8 +6,10 @@ use std::time::Duration;
 use armature_core::command::{self, Command};
 use armature_core::data_grid::{self, DataGrid};
 use armature_core::dialog::{self, Dialog};
+use armature_core::editable::{self, Editable};
 use armature_core::keys::Dir;
 use armature_core::primitive::{Item, Primitive};
+use armature_core::toggle::{self, Toggle};
 use armature_core::tooltip::{self, Tooltip};
 use armature_core::virtual_list::{self, VirtualList};
 use armature_gpui::{Machine, part};
@@ -194,8 +196,8 @@ fn a_long_list_renders_only_what_is_in_view_and_keys_scroll_it(cx: &mut TestAppC
     };
     assert_eq!(
         rendered(cx),
-        (0..8).collect::<Vec<_>>(),
-        "five in view and three spare"
+        (0..9).collect::<Vec<_>>(),
+        "five in view and four spare"
     );
 
     focus(&rows, cx, virtual_list::Part::Row, Some("0"));
@@ -268,5 +270,59 @@ fn a_grid_copies_its_selection_and_pastes_from_the_clipboard(cx: &mut TestAppCon
         row,
         ("X".to_string(), "Y".to_string()),
         "pasted from the selection's corner"
+    );
+}
+
+#[gpui::test]
+fn text_is_edited_in_place_and_saved_when_focus_leaves(cx: &mut TestAppContext) {
+    struct Both {
+        title: Entity<Machine<Editable>>,
+        other: Entity<Machine<Toggle>>,
+    }
+    impl Render for Both {
+        fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .child(part(&self.title, editable::Part::Preview, None, cx).size(px(ROW)))
+                .child(part(&self.title, editable::Part::Input, None, cx).size(px(ROW)))
+                .child(part(&self.other, toggle::Part::Root, None, cx).size(px(ROW)))
+        }
+    }
+    let (page, cx) = cx.add_window_view(|_, cx| Both {
+        title: cx
+            .new(|cx| Machine::new(Editable::new("Untitled"), "Title", Vec::<Item>::new(), cx)),
+        other: cx.new(|cx| Machine::new(Toggle::default(), "Other", Vec::<Item>::new(), cx)),
+    });
+    let (title, other) = page.update(cx, |page, _| (page.title.clone(), page.other.clone()));
+
+    // Focus changes are only reported in the active window.
+    cx.update(|window, _| window.activate_window());
+    cx.run_until_parked();
+    focus(&title, cx, editable::Part::Preview, None);
+    cx.simulate_keystrokes("f2");
+    assert!(
+        is_focused(&title, cx, editable::Part::Input),
+        "F2 opens the field"
+    );
+    cx.simulate_keystrokes("! escape");
+    assert_eq!(
+        title.read_with(cx, |m, _| m.value()),
+        ["Untitled"],
+        "Escape puts the text back"
+    );
+
+    cx.simulate_keystrokes("enter");
+    cx.simulate_keystrokes("! !");
+    assert_eq!(
+        title.read_with(cx, |m, _| m.value()),
+        ["Untitled"],
+        "not saved while typing"
+    );
+    focus(&other, cx, toggle::Part::Root, None);
+    // The window reports focus changes when it next draws.
+    cx.simulate_keystrokes("space");
+    assert_eq!(
+        title.read_with(cx, |m, _| m.value()),
+        ["Untitled!!"],
+        "leaving the field saves"
     );
 }

@@ -54,6 +54,8 @@ pub struct Machine<P: Primitive> {
     scroll: ScrollHandle,
     /// The scroll offset and viewport length last reported to the primitive.
     scrolled: (f64, f64),
+    /// Watches for focus leaving each part that has held it.
+    blur_watch: HashMap<PartKey<P>, gpui::Subscription>,
     announcements: Vec<Announcement>,
     gate: Option<ChangeGate>,
     registration: u32,
@@ -142,6 +144,7 @@ impl<P: Primitive> Machine<P> {
             scroll: ScrollHandle::new(),
             scrolled: (0.0, 0.0),
             announcements: Vec::new(),
+            blur_watch: HashMap::new(),
             gate: None,
             registration,
             secret: false,
@@ -414,6 +417,38 @@ impl<P: Primitive> Machine<P> {
     }
 
     /// Runs one step of the primitive and carries out what it asks for.
+    /// Tells the primitive when focus leaves the part holding it for somewhere
+    /// outside the primitive.
+    fn watch_blur(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let focused = self
+            .handles
+            .iter()
+            .find(|(_, handle)| handle.is_focused(window));
+        let Some((key, handle)) = focused.map(|(key, handle)| (key.clone(), handle.clone())) else {
+            return;
+        };
+        if self.blur_watch.contains_key(&key) {
+            return;
+        }
+        let (part, item) = key.clone();
+        let watch = cx.on_blur(&handle, window, move |this, window, cx| {
+            if this
+                .handles
+                .values()
+                .any(|handle| handle.is_focused(window))
+            {
+                return;
+            }
+            let input = Input::Blur {
+                part,
+                item: item.clone(),
+            };
+            this.run(window, cx, |machine, _, gate| machine.send(input, gate));
+            cx.notify();
+        });
+        self.blur_watch.insert(key, watch);
+    }
+
     fn run(
         &mut self,
         window: &mut Window,
@@ -424,6 +459,7 @@ impl<P: Primitive> Machine<P> {
             &mut dyn FnMut(&ValueChange) -> bool,
         ) -> Reaction<P::Part>,
     ) -> Reaction<P::Part> {
+        self.watch_blur(window, cx);
         let before = self.machine.value();
         let mut gate = self.gate.take();
         let bounds = &self.bounds;
@@ -802,6 +838,7 @@ impl IntoElement for PartElement {
         let measured = Measured {
             inner: self.inner,
             record: self.record,
+            live: None,
         };
         match self.layout {
             Layout::Inline => measured.into_any_element(),
@@ -829,6 +866,7 @@ fn key_from_keystroke(keystroke: &gpui::Keystroke) -> Option<Key> {
         "escape" => Key::Escape,
         "tab" => Key::Tab,
         "backspace" => Key::Backspace,
+        "f2" => Key::F2,
         key => {
             let typed = keystroke.key_char.as_deref().unwrap_or(key);
             let mut chars = typed.chars();
@@ -878,11 +916,45 @@ fn accessibility_role(role: Role) -> gpui::Role {
     }
 }
 
+fn live_node(id: ElementId, message: SharedString, assertive: bool) -> Measured {
+    let (role, live) = if assertive {
+        (gpui::Role::Alert, accesskit::Live::Assertive)
+    } else {
+        (gpui::Role::Status, accesskit::Live::Polite)
+    };
+    Measured {
+        inner: div().id(id).role(role).aria_label(message),
+        record: Box::new(|_, _| {}),
+        live: Some(live),
+    }
+}
+
+/// A region with no size that carries the primitive's latest announcement to a
+/// screen reader, as a live region does on the web. Render it once, anywhere in the
+/// view that owns the machine.
+pub fn live_region<P: Primitive>(
+    state: &Entity<Machine<P>>,
+    cx: &App,
+) -> impl IntoElement + use<P> {
+    let latest = state.read(cx).announcements.last();
+    let message = latest
+        .map(|said| SharedString::from(said.message.clone()))
+        .unwrap_or_default();
+    let assertive = latest.is_some_and(|said| said.assertive);
+    live_node(
+        ("armature-live", state.entity_id()).into(),
+        message,
+        assertive,
+    )
+}
+
 /// A `div` that reports the bounds it was laid out with, borders and padding
 /// included. A probe child could not see those.
 struct Measured {
     inner: Stateful<Div>,
     record: RecordBounds,
+    /// Set on a region whose changes a screen reader should speak.
+    live: Option<accesskit::Live>,
 }
 
 impl IntoElement for Measured {
@@ -911,6 +983,9 @@ impl Element for Measured {
 
     fn write_a11y_info(&self, node: &mut accesskit::Node) {
         Element::write_a11y_info(&self.inner, node);
+        if let Some(live) = self.live {
+            node.set_live(live);
+        }
     }
 
     fn a11y_synthetic_children(
@@ -963,6 +1038,42 @@ impl Element for Measured {
             prepaint,
             window,
             cx,
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_live_region_marks_its_node_so_changes_are_spoken() {
+        let read = |assertive| {
+            let region = live_node(
+                "live".into(),
+                "Dropped milk at position 3 of 4.".into(),
+                assertive,
+            );
+            let mut node = accesskit::Node::new(Element::a11y_role(&region).unwrap());
+            Element::write_a11y_info(&region, &mut node);
+            (node.role(), node.live(), node.label().map(str::to_string))
+        };
+        let said = Some("Dropped milk at position 3 of 4.".to_string());
+        assert_eq!(
+            read(false),
+            (
+                accesskit::Role::Status,
+                Some(accesskit::Live::Polite),
+                said.clone()
+            )
+        );
+        assert_eq!(
+            read(true),
+            (
+                accesskit::Role::Alert,
+                Some(accesskit::Live::Assertive),
+                said
+            )
         );
     }
 }

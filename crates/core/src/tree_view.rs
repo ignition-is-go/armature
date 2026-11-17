@@ -2,9 +2,14 @@ use std::collections::{HashMap, HashSet};
 
 use crate::agent::{ActError, Snapshot, SnapshotItem};
 use crate::change::{Gate, Reason, Source, ValueChange};
+use crate::drag::{Drag, DragEvent};
+use crate::geometry::Rect;
 use crate::keys::{Dir, Key};
-use crate::primitive::{Focusable, Input, Item, PartOf, Primitive, Reaction, Role, Semantics};
-use crate::tree::{Row, Tree, TreeItem};
+use crate::primitive::{
+    Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction,
+    Role, Semantics,
+};
+use crate::tree::{Row, TREE_INDENT, Tree, TreeItem, drop_depth, place_node, slot_target};
 use crate::typeahead::Typeahead;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -28,6 +33,11 @@ pub struct TreeView {
     selected: Option<String>,
     focused: Option<String>,
     typeahead: Typeahead,
+    drag: Drag,
+    /// The node under the pointer since it went down.
+    pressed: Option<String>,
+    /// Where the dragged node would land: the slot among the other rows, and the depth.
+    landing: Option<(usize, usize)>,
 }
 
 impl TreeView {
@@ -86,6 +96,106 @@ impl TreeView {
             self.selected = Some(key.to_string());
         }
         allowed
+    }
+
+    /// Where a node being dragged would land, as the slot among the other rows and
+    /// the depth, for drawing an indicator.
+    pub fn landing(&self) -> Option<(usize, usize)> {
+        self.landing
+    }
+
+    /// The rows on screen without `key` or anything beneath it.
+    fn others(&self, key: &str) -> Vec<Row> {
+        let tree = Tree::new(&self.data);
+        let moving: Vec<String> = tree.subtree(key).into_iter().map(str::to_string).collect();
+        self.rows()
+            .into_iter()
+            .filter(|row| !moving.contains(&row.key))
+            .collect()
+    }
+
+    /// The slot and depth a node currently occupies among the other rows.
+    fn place_of(&self, key: &str) -> Option<(usize, usize)> {
+        let rows = self.rows();
+        let at = rows.iter().position(|row| row.key == key)?;
+        Some((at, rows[at].level))
+    }
+
+    /// The depth allowed at `slot`, as near to `wanted` as the rows around it permit.
+    fn depth_at(&self, others: &[Row], slot: usize, start: usize, sideways: f64) -> usize {
+        let above = slot
+            .checked_sub(1)
+            .and_then(|at| others.get(at))
+            .map(|row| row.level);
+        let below = others.get(slot).map(|row| row.level);
+        drop_depth(start, sideways, TREE_INDENT, above, below)
+    }
+
+    /// Moves a node to a slot and depth, if that changes anything and the owner
+    /// allows it. The change is offered as `key>parent#index`.
+    fn relocate(
+        &mut self,
+        key: &str,
+        slot: usize,
+        depth: usize,
+        source: Source,
+        gate: Gate,
+    ) -> bool {
+        let others = self.others(key);
+        let (parent, index) = slot_target(&others, slot, depth, &Tree::new(&self.data));
+        let before = self.data.clone();
+        if !place_node(&mut self.data, key, parent.as_deref(), index) || self.data == before {
+            self.data = before;
+            return false;
+        }
+        let value = vec![format!(
+            "{key}>{}#{index}",
+            parent.clone().unwrap_or_default()
+        )];
+        if !gate(&ValueChange {
+            value,
+            source,
+            reason: Reason::Edit,
+        }) {
+            self.data = before;
+            return false;
+        }
+        // The new parent opens so the moved node stays in view.
+        self.expanded.extend(parent);
+        true
+    }
+
+    /// Alt with an arrow moves the focused node: up and down among the rows, left and
+    /// right between depths.
+    fn move_by_key(&mut self, key: Key, gate: Gate) -> Reaction<Part> {
+        let rows = self.rows();
+        let Some(current) = self.current(&rows) else {
+            return Reaction::default();
+        };
+        let Some((slot, depth)) = self.place_of(&current) else {
+            return Reaction::default();
+        };
+        let others = self.others(&current);
+        let (deeper, shallower) = if self.dir == Dir::Rtl {
+            (Key::ArrowLeft, Key::ArrowRight)
+        } else {
+            (Key::ArrowRight, Key::ArrowLeft)
+        };
+        let (slot, sideways) = match key {
+            Key::ArrowUp => (slot.saturating_sub(1), 0.0),
+            Key::ArrowDown => ((slot + 1).min(others.len()), 0.0),
+            k if k == deeper => (slot, TREE_INDENT),
+            k if k == shallower => (slot, -TREE_INDENT),
+            _ => return Reaction::default(),
+        };
+        let depth = self.depth_at(&others, slot, depth, sideways);
+        if self.relocate(&current, slot, depth, Source::User, gate) {
+            let label = self.label(&current);
+            self.focused = Some(current.clone());
+            return Reaction::item(Part::Node, true, Some(current))
+                .alerting(format!("{label} moved to level {depth}."));
+        }
+        Reaction::handled()
     }
 
     fn move_to(&mut self, target: Option<String>) -> Reaction<Part> {
@@ -198,6 +308,10 @@ impl Primitive for TreeView {
         part == Part::Node
     }
 
+    fn tracks_pointer(part: Part) -> bool {
+        part == Part::Node
+    }
+
     fn upsert_item(&mut self, item: Item) {
         if item.disabled {
             self.disabled.insert(item.key.clone());
@@ -253,10 +367,14 @@ impl Primitive for TreeView {
     }
 
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
-        if crate::roving::is_platform_arrow(&input) {
+        // Ctrl with an arrow is the platform's. Alt with an arrow moves the node.
+        if matches!(&input, Input::Key { mods, .. } if mods.ctrl && !mods.alt)
+            && crate::roving::is_platform_arrow(&input)
+        {
             return Reaction::default();
         }
         match input {
+            Input::Key { key, mods, .. } if mods.alt => self.move_by_key(key, gate),
             Input::Key { key, mods, now_ms } => self.on_key(key, now_ms, mods.ctrl, gate),
             Input::Focus {
                 item: Some(key), ..
@@ -275,6 +393,75 @@ impl Primitive for TreeView {
                 self.move_to(Some(key))
             }
             _ => Reaction::default(),
+        }
+    }
+
+    fn pointer(
+        &mut self,
+        pointer: Pointer<Part>,
+        measure: Measure<Part>,
+        gate: Gate,
+    ) -> Reaction<Part> {
+        match pointer.phase {
+            PointerPhase::Down => {
+                self.drag.down(pointer.at);
+                self.pressed = pointer.item.clone().filter(|key| self.enabled(key));
+                Reaction::handled().with(Effect::CapturePointer)
+            }
+            PointerPhase::Move => {
+                let (Some(event), Some(key)) = (self.drag.moved(pointer.at), self.pressed.clone())
+                else {
+                    return Reaction::default();
+                };
+                let (DragEvent::Start { total, .. } | DragEvent::Move { total, .. }) = event else {
+                    return Reaction::default();
+                };
+                // The slot comes from the other rows' middles, the depth from how far
+                // sideways the row has been carried.
+                let others = self.others(&key);
+                let boxes: Vec<Rect> = others
+                    .iter()
+                    .map(|row| measure(Part::Node, Some(&row.key)).unwrap_or_default())
+                    .collect();
+                let before = boxes
+                    .iter()
+                    .filter(|rect| rect.center().y < pointer.at.y)
+                    .count();
+                let start = self.place_of(&key).map_or(1, |(_, depth)| depth);
+                let sideways = if self.dir == Dir::Rtl {
+                    -total.x
+                } else {
+                    total.x
+                };
+                self.landing = Some((before, self.depth_at(&others, before, start, sideways)));
+                Reaction::handled()
+            }
+            PointerPhase::Up => {
+                let landing = self.landing.take();
+                let pressed = self.pressed.take();
+                match (self.drag.up(pointer.at), pressed, landing) {
+                    (Some(DragEvent::End { .. }), Some(key), Some((slot, depth))) => {
+                        self.relocate(&key, slot, depth, Source::User, gate);
+                        self.move_to(Some(key))
+                    }
+                    // A press that never became a drag is an ordinary press.
+                    (Some(DragEvent::Click), Some(key), _) => self.send(
+                        Input::Press {
+                            part: Part::Node,
+                            item: Some(key),
+                            mods: pointer.mods,
+                        },
+                        gate,
+                    ),
+                    _ => Reaction::handled(),
+                }
+            }
+            PointerPhase::Cancel => {
+                self.drag.cancel();
+                self.pressed = None;
+                self.landing = None;
+                Reaction::handled()
+            }
         }
     }
 
@@ -475,5 +662,126 @@ mod tests {
             tree.act("select", Some("src"), &mut |_| false),
             Err(ActError::Refused)
         );
+    }
+
+    fn children(tree: &TreeView, key: &str) -> Vec<String> {
+        Tree::new(&tree.data)
+            .children(key)
+            .into_iter()
+            .map(str::to_string)
+            .collect()
+    }
+
+    #[test]
+    fn alt_with_arrows_moves_the_focused_node_among_rows_and_between_depths() {
+        let mut tree = tree();
+        let alt = Modifiers {
+            alt: true,
+            ..Default::default()
+        };
+        let mut offered = Vec::new();
+        let mut key = |tree: &mut TreeView, key| {
+            tree.send(
+                Input::Key {
+                    key,
+                    mods: alt,
+                    now_ms: 0,
+                },
+                &mut |change| {
+                    offered.extend(change.value.iter().cloned());
+                    true
+                },
+            )
+        };
+        tree.send(
+            Input::Focus {
+                part: Part::Node,
+                item: Some("README.md".into()),
+            },
+            &mut |_| true,
+        );
+        key(&mut tree, Key::ArrowUp);
+        assert_eq!(visible(&tree), ["src", "README.md", "docs"]);
+        let nested = key(&mut tree, Key::ArrowRight);
+        assert_eq!(
+            children(&tree, "src"),
+            ["src/main.rs", "src/ui", "README.md"]
+        );
+        assert!(
+            tree.is_expanded("src"),
+            "the new parent opens to keep the node in view"
+        );
+        assert_eq!(nested.focus_item(), Some("README.md"));
+        assert_eq!(offered, ["README.md>#1", "README.md>src#2"]);
+    }
+
+    #[test]
+    fn dragging_a_row_down_and_sideways_nests_it_under_the_row_above() {
+        let mut tree = tree();
+        let rows = |part: Part, item: Option<&str>| {
+            let at = ["src", "docs", "README.md"]
+                .iter()
+                .position(|key| Some(*key) == item)?;
+            (part == Part::Node).then(|| Rect::new(0.0, at as f64 * 20.0, 200.0, 20.0))
+        };
+        let pointer = |tree: &mut TreeView, phase, x: f64, y: f64| {
+            let pointer = Pointer {
+                phase,
+                part: Part::Node,
+                item: Some("src".into()),
+                at: crate::geometry::Point::new(x, y),
+                mods: Modifiers::default(),
+                now_ms: 0,
+            };
+            tree.pointer(pointer, &rows, &mut |_| true)
+        };
+        pointer(&mut tree, PointerPhase::Down, 10.0, 10.0);
+        pointer(&mut tree, PointerPhase::Move, 40.0, 35.0);
+        assert_eq!(tree.landing(), Some((1, 2)), "after docs, one level in");
+        pointer(&mut tree, PointerPhase::Up, 40.0, 35.0);
+        assert_eq!(children(&tree, "docs"), ["docs/intro.md", "src"]);
+        assert_eq!(tree.landing(), None);
+    }
+
+    #[test]
+    fn a_press_that_is_not_dragged_still_selects() {
+        let mut tree = tree();
+        let press = |phase| Pointer {
+            phase,
+            part: Part::Node,
+            item: Some("docs".into()),
+            at: crate::geometry::Point::new(5.0, 5.0),
+            mods: Modifiers::default(),
+            now_ms: 0,
+        };
+        tree.pointer(press(PointerPhase::Down), &|_, _| None, &mut |_| true);
+        tree.pointer(press(PointerPhase::Up), &|_, _| None, &mut |_| true);
+        assert_eq!(tree.value(), ["docs"]);
+        assert!(tree.is_expanded("docs"));
+    }
+
+    #[test]
+    fn a_refused_move_leaves_the_tree_as_it_was() {
+        let mut tree = tree();
+        let alt = Modifiers {
+            alt: true,
+            ..Default::default()
+        };
+        tree.send(
+            Input::Focus {
+                part: Part::Node,
+                item: Some("README.md".into()),
+            },
+            &mut |_| true,
+        );
+        tree.send(
+            Input::Key {
+                key: Key::ArrowUp,
+                mods: alt,
+                now_ms: 0,
+            },
+            &mut |_| false,
+        );
+        assert_eq!(visible(&tree), ["src", "docs", "README.md"]);
     }
 }
