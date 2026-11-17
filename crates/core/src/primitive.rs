@@ -58,6 +58,8 @@ pub enum Input<Part> {
         part: Part,
         offset: f64,
         viewport: f64,
+        /// The whole length of what is being scrolled.
+        content: f64,
         now_ms: u64,
     },
     /// The person pasted text while focus was inside the primitive.
@@ -165,11 +167,13 @@ impl<Part> Input<Part> {
                 part,
                 offset,
                 viewport,
+                content,
                 now_ms,
             } => Input::Scrolled {
                 part: to(part)?,
                 offset,
                 viewport,
+                content,
                 now_ms,
             },
             Input::Paste { text } => Input::Paste { text },

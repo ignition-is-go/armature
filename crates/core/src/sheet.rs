@@ -552,6 +552,7 @@ mod tests {
                     part: Part::Scroller,
                     offset,
                     viewport: 800.0,
+                    content: 10_000.0,
                     now_ms,
                 },
                 &mut |_| true,

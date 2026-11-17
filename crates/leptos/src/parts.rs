@@ -880,6 +880,7 @@ where
                 part,
                 offset,
                 viewport,
+                content: scroller.scroll_height() as f64,
                 now_ms: js_sys::Date::now() as u64,
             });
         }

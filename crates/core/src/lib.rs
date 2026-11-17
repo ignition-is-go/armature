@@ -57,6 +57,7 @@ pub mod reorder;
 pub mod resizable;
 pub mod roving;
 pub mod scroll;
+pub mod scroll_area;
 pub mod select;
 pub mod selection;
 pub mod sheet;

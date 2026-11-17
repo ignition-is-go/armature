@@ -102,7 +102,7 @@ pub struct Machine<P: Primitive> {
     /// Scrolls the primitive's scrolling part, if it has one.
     scroll: ScrollHandle,
     /// The scroll offset and viewport length last reported to the primitive.
-    scrolled: (f64, f64),
+    scrolled: (f64, f64, f64),
     /// The accessibility node each part was last drawn as, so parts can refer to
     /// one another.
     nodes: HashMap<PartKey<P>, accesskit::NodeId>,
@@ -198,7 +198,7 @@ impl<P: Primitive> Machine<P> {
             captured: None,
             edits: HashMap::new(),
             scroll: ScrollHandle::new(),
-            scrolled: (0.0, 0.0),
+            scrolled: (0.0, 0.0, 0.0),
             announcements: Vec::new(),
             blur_watch: HashMap::new(),
             away_watch: None,
@@ -841,9 +841,11 @@ pub fn part<K: PartOf>(
                     wake = Some(state.now_ms() + delay);
                 }
                 // Scrolling is read off the handle each frame.
+                let viewport = f32::from(bounds.size.height) as f64;
                 let now = (
                     -f32::from(state.scroll.offset().y) as f64,
-                    f32::from(bounds.size.height) as f64,
+                    viewport,
+                    viewport + f32::from(state.scroll.max_offset().y) as f64,
                 );
                 ((scrolls && now != state.scrolled).then_some(now), relinked)
             });
@@ -885,6 +887,7 @@ pub fn part<K: PartOf>(
                             part,
                             offset: now.0,
                             viewport: now.1,
+                            content: now.2,
                             now_ms: state.now_ms(),
                         };
                         state.run(window, cx, |machine, _, gate| machine.send(input, gate));

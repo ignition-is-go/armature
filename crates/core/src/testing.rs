@@ -122,6 +122,7 @@ fn inputs<P: Primitive>(items: &[Item]) -> Vec<Input<P::Part>> {
             part,
             offset: 40.0,
             viewport: 100.0,
+            content: 10_000.0,
             now_ms: 0,
         });
     }
