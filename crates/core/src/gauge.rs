@@ -10,8 +10,9 @@ use crate::primitive::{Input, Item, PartOf, Primitive, Reaction, Role, Semantics
 /// Where `value` sits between `min` and `max`, from 0 to 100. Readings outside the
 /// limits are clamped.
 pub fn percent(value: f64, min: f64, max: f64) -> f64 {
+    // A range with no room in it is full.
     if max <= min {
-        return 0.0;
+        return 100.0;
     }
     ((value - min) / (max - min) * 100.0).clamp(0.0, 100.0)
 }

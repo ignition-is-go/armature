@@ -494,3 +494,101 @@ fn number_steps_and_scales() {
     assert!((log.at_fraction(0.5) - (20.0f64 * 20000.0).sqrt()).abs() < 1e-6);
     assert!((log.at_fraction(log.fraction(1234.0)) - 1234.0).abs() < 1e-6);
 }
+
+use armature_core::file_input::accepts_file;
+use armature_core::gauge::percent;
+
+// files.test.ts and gauge.test.ts
+#[test]
+fn file_kinds_and_gauges() {
+    let rules = |text: &str| -> Vec<String> { text.split(',').map(str::to_string).collect() };
+    let tokens = rules("image/*,application/pdf,.csv");
+    assert!(accepts_file("a.png", "image/png", &tokens));
+    assert!(accepts_file("a.pdf", "application/pdf", &tokens));
+    assert!(!accepts_file("a.txt", "text/plain", &tokens));
+    assert!(accepts_file("a.txt", "text/plain", &rules("*/*")));
+    assert!(accepts_file("a.txt", "text/plain", &[]));
+    // Windows reports CSV files as Excel files, and some platforms know no type.
+    assert!(accepts_file(
+        "data.CSV",
+        "application/vnd.ms-excel",
+        &rules(".csv")
+    ));
+    assert!(accepts_file("photo.heic", "", &rules(".heic")));
+    assert!(!accepts_file("photo.heic", "", &rules("image/*")));
+    assert!(accepts_file(
+        "a.csv",
+        "Text/CSV; charset=utf-8",
+        &rules("text/csv")
+    ));
+    assert!(accepts_file(
+        "a.pdf",
+        "application/pdf",
+        &rules(" image/*, .PDF ,,")
+    ));
+
+    assert_eq!(
+        [
+            percent(30.0, 0.0, 60.0),
+            percent(-5.0, 0.0, 100.0),
+            percent(150.0, 0.0, 100.0),
+            percent(5.0, 5.0, 5.0)
+        ],
+        [50.0, 0.0, 100.0, 100.0]
+    );
+}
+
+use armature_core::fold::fold_text;
+use armature_core::text_match::{match_ranges, match_segments};
+
+// match.test.ts
+#[test]
+fn folding_and_match_ranges() {
+    assert_eq!(fold_text("Łódź", None), "lodz");
+    assert_eq!(fold_text("Smørrebrød", None), "smorrebrod");
+    assert_eq!(fold_text("Crème Brûlée", None), "creme brulee");
+    assert_eq!(fold_text("İstanbul", None), "istanbul");
+    // A language's own letters are kept in that language.
+    assert_eq!(fold_text("Älmhult", Some("sv")), "älmhult");
+    assert_eq!(fold_text("Älmhult", Some("en")), "almhult");
+    assert_eq!(fold_text("ISPARTA", Some("tr")), "ısparta");
+    assert_eq!(fold_text("ISPARTA", Some("en")), "isparta");
+
+    // Upstream counts characters. armature's ranges are byte offsets into the text.
+    let text = "Crème brûlée";
+    let ranges = match_ranges("brule", text).expect("accents are no difference");
+    assert_eq!(ranges.len(), 1);
+    assert_eq!(&text[ranges[0].clone()], "brûlé");
+    let segments: Vec<(&str, bool)> = match_segments(text, &ranges)
+        .iter()
+        .map(|segment| (segment.text, segment.matched))
+        .collect();
+    assert_eq!(segments, [("Crème ", false), ("brûlé", true), ("e", false)]);
+    let push = match_ranges("pu", "Git push").unwrap();
+    assert_eq!(&"Git push"[push[0].clone()], "pu");
+    assert_eq!(push[0].start, 4);
+}
+
+use armature_core::color::{Notation, Rgb};
+
+// color.test.ts
+#[test]
+fn colour_notations() {
+    let red = Rgb::read("red").unwrap();
+    assert_eq!(red.write(Notation::Rgb), "rgb(255 0 0)");
+    assert_eq!(red.write(Notation::Hex), "#ff0000");
+    assert_eq!(red.write(Notation::Hsl), "hsl(0 100% 50%)");
+    assert_eq!(red.write(Notation::Oklch), "oklch(0.628 0.2577 29.23)");
+    assert_eq!(
+        Rgb::read("white").unwrap().write(Notation::Oklch),
+        "oklch(1 0 0)"
+    );
+    let (half_red, alpha) = Rgb::read_alpha("rgb(255 0 0 / 0.5)").unwrap();
+    assert_eq!(
+        half_red.write_alpha(Notation::Rgb, alpha),
+        "rgb(255 0 0 / 0.5)"
+    );
+    let (black, alpha) = Rgb::read_alpha("rgb(0 0 0 / 0.5)").unwrap();
+    assert_eq!(black.write_alpha(Notation::Hex, alpha), "#00000080");
+    assert!(Rgb::read("#12").is_none());
+}

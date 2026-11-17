@@ -24,6 +24,7 @@ pub mod drag;
 pub mod editable;
 pub mod event_list;
 pub mod file_input;
+pub mod fold;
 pub mod form;
 pub mod gauge;
 pub mod geometry;

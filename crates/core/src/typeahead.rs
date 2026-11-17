@@ -2,20 +2,7 @@ const RESET_MS: u64 = 500;
 
 /// A letter without its case or accent, so "Éditer" is found by typing "e".
 fn fold(ch: char) -> char {
-    let lower = ch.to_lowercase().next().unwrap_or(ch);
-    match lower {
-        'à'..='å' | 'ā' | 'ă' | 'ą' => 'a',
-        'ç' | 'ć' | 'č' => 'c',
-        'è'..='ë' | 'ē' | 'ė' | 'ę' | 'ě' => 'e',
-        'ì'..='ï' | 'ī' | 'į' | 'ı' => 'i',
-        'ñ' | 'ń' | 'ň' => 'n',
-        'ò'..='ö' | 'ø' | 'ō' | 'ő' => 'o',
-        'ù'..='ü' | 'ū' | 'ů' | 'ű' => 'u',
-        'ý' | 'ÿ' => 'y',
-        'š' | 'ś' => 's',
-        'ž' | 'ź' | 'ż' => 'z',
-        other => other,
-    }
+    crate::fold::fold_char(ch, None)
 }
 
 fn folded(text: &str) -> String {

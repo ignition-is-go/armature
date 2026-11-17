@@ -295,7 +295,11 @@ mod tests {
     fn values_snap_to_the_nearest_step_from_the_minimum() {
         let range = NumberRange::new(1.0, 10.0, 2.0);
         assert_eq!(range.snap(4.2), 5.0);
-        assert_eq!(range.snap(100.0), 9.0, "the last step at or below the most allowed");
+        assert_eq!(
+            range.snap(100.0),
+            9.0,
+            "the last step at or below the most allowed"
+        );
         assert_eq!(range.snap(-3.0), 1.0);
     }
 

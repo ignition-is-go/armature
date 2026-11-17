@@ -18,6 +18,33 @@ pub enum Part {
     Remove,
 }
 
+/// Whether a file is one of the kinds taken. Each rule is an extension such as
+/// `.csv`, a media type such as `application/pdf`, or a family such as `image/*`.
+/// An extension goes by the file's name, whatever type the platform reports, and
+/// no rules at all takes anything.
+pub fn accepts_file(name: &str, kind: &str, accept: &[String]) -> bool {
+    let rules: Vec<String> = accept
+        .iter()
+        .map(|rule| rule.trim().to_lowercase())
+        .filter(|rule| !rule.is_empty())
+        .collect();
+    let name = name.to_lowercase();
+    // The type without its parameters, such as a character set.
+    let kind = kind
+        .split(';')
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_lowercase();
+    rules.is_empty()
+        || rules.iter().any(|rule| match rule.strip_suffix("/*") {
+            Some("*") => true,
+            Some(family) => kind.starts_with(&format!("{family}/")),
+            None if rule.starts_with('.') => name.ends_with(rule.as_str()),
+            None => kind == *rule,
+        })
+}
+
 /// Why a file was turned away.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Rejection {
@@ -70,18 +97,7 @@ impl FileInput {
     }
 
     fn accepts(&self, file: &FileInfo) -> bool {
-        let name = file.name.to_lowercase();
-        self.opts.accept.is_empty()
-            || self
-                .opts
-                .accept
-                .iter()
-                .map(|rule| rule.trim().to_lowercase())
-                .any(|rule| match rule.strip_suffix("/*") {
-                    Some(family) => file.kind.starts_with(&format!("{family}/")),
-                    None if rule.starts_with('.') => name.ends_with(&rule),
-                    None => file.kind == rule,
-                })
+        accepts_file(&file.name, &file.kind, &self.opts.accept)
     }
 
     fn written(files: &[FileInfo]) -> Vec<String> {

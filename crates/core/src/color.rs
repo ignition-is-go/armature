@@ -201,10 +201,13 @@ impl Rgb {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Notation {
     Hex,
-    /// `rgb(59, 111, 224)`
+    /// `rgb(59 111 224)`
     Rgb,
-    /// `hsl(221, 73%, 55%)`
+    /// `hsl(221 73% 55%)`
     Hsl,
+    /// `oklch(0.628 0.2577 29.23)`: lightness, colourfulness and hue as the eye
+    /// judges them.
+    Oklch,
 }
 
 impl Rgb {
@@ -225,17 +228,89 @@ impl Rgb {
     pub fn write(self, notation: Notation) -> String {
         match notation {
             Notation::Hex => self.to_hex(),
-            Notation::Rgb => format!("rgb({}, {}, {})", self.r, self.g, self.b),
+            Notation::Rgb => format!("rgb({} {} {})", self.r, self.g, self.b),
             Notation::Hsl => {
                 let hsl = self.to_hsl();
                 format!(
-                    "hsl({}, {}%, {}%)",
+                    "hsl({} {}% {}%)",
                     hsl.h.round(),
                     (hsl.s * 100.0).round(),
                     (hsl.l * 100.0).round()
                 )
             }
+            Notation::Oklch => {
+                let (lightness, chroma, hue) = self.to_oklch();
+                let round = |value: f64, places: i32| {
+                    (value * 10f64.powi(places)).round() / 10f64.powi(places)
+                };
+                // A grey has no hue to speak of.
+                let (chroma, hue) = if chroma < 0.00005 {
+                    (0.0, 0.0)
+                } else {
+                    (round(chroma, 4), round(hue, 2))
+                };
+                format!("oklch({} {} {})", round(lightness, 3), chroma, hue)
+            }
         }
+    }
+
+    /// Lightness from 0 to 1, colourfulness, and hue in degrees, in OKLCH.
+    pub fn to_oklch(self) -> (f64, f64, f64) {
+        let [r, g, b] = [self.r, self.g, self.b].map(|part| to_linear(part as f64 / 255.0));
+        let l = (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b).cbrt();
+        let m = (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b).cbrt();
+        let s = (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b).cbrt();
+        let lightness = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
+        let a = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
+        let b = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
+        (
+            lightness,
+            a.hypot(b),
+            b.atan2(a).to_degrees().rem_euclid(360.0),
+        )
+    }
+
+    /// The colour written with how see-through it is, from 0 to 1. A colour that
+    /// is not see-through at all is written without it.
+    pub fn write_alpha(self, notation: Notation, alpha: f64) -> String {
+        let alpha = alpha.clamp(0.0, 1.0);
+        let plain = self.write(notation);
+        if alpha >= 1.0 {
+            return plain;
+        }
+        match notation {
+            Notation::Hex => format!("{plain}{:02x}", (alpha * 255.0).round() as u8),
+            _ => format!(
+                "{} / {})",
+                plain.trim_end_matches(')'),
+                (alpha * 1000.0).round() / 1000.0
+            ),
+        }
+    }
+
+    /// Text read as a colour and how see-through it is: `rgb(255 0 0 / 0.5)`,
+    /// `#00000080`. Without one, it is not see-through.
+    pub fn read_alpha(text: &str) -> Option<(Rgb, f64)> {
+        let text = text.trim();
+        if let Some(hex) = text.strip_prefix('#').filter(|hex| hex.len() == 8) {
+            let alpha = u8::from_str_radix(&hex[6..], 16).ok()? as f64 / 255.0;
+            return Some((Rgb::from_hex(&text[..7])?, alpha));
+        }
+        let alpha = match text.rsplit_once('/') {
+            Some((_, alpha)) => {
+                let alpha = alpha.trim().trim_end_matches(')').trim();
+                match alpha.strip_suffix('%') {
+                    Some(percent) => percent.parse::<f64>().ok()? / 100.0,
+                    None => alpha.parse().ok()?,
+                }
+            }
+            None => 1.0,
+        };
+        let colour = match text.split_once('/') {
+            Some((colour, _)) => format!("{})", colour.trim()),
+            None => text.to_string(),
+        };
+        Some((Rgb::read(&colour)?, alpha.clamp(0.0, 1.0)))
     }
 
     /// Text read as a colour in any notation: hex, `rgb(..)`, `hsl(..)` or a name.
@@ -446,7 +521,7 @@ mod tests {
     #[test]
     fn colours_are_read_and_written_in_each_notation() {
         let blue = Rgb::new(59, 111, 224);
-        assert_eq!(blue.write(Notation::Rgb), "rgb(59, 111, 224)");
+        assert_eq!(blue.write(Notation::Rgb), "rgb(59 111 224)");
         assert_eq!(Rgb::read("rgb(59 111 224)"), Some(blue));
         assert_eq!(Rgb::read(" hsl(0, 100%, 50%) "), Some(Rgb::new(255, 0, 0)));
         assert_eq!(

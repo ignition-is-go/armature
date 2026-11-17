@@ -78,7 +78,8 @@ pub fn match_segments<'a>(text: &'a str, ranges: &[Range<usize>]) -> Vec<Segment
 }
 
 fn same(a: char, b: char) -> bool {
-    a.to_lowercase().eq(b.to_lowercase())
+    // Case and accents are no difference: `brule` finds `brûlé`.
+    crate::fold::fold_char(a, None) == crate::fold::fold_char(b, None)
 }
 
 fn substring(query: &[char], chars: &[(usize, char)]) -> Option<Vec<usize>> {
