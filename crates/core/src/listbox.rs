@@ -252,6 +252,7 @@ impl Primitive for Listbox {
     }
 
     fn act(&mut self, action: &str, item: Option<&str>, gate: Gate) -> Result<(), ActError> {
+        let mut landed = None;
         let next = match action {
             "clear" => Vec::new(),
             "select" | "deselect" => {
@@ -275,8 +276,7 @@ impl Primitive for Listbox {
                         .cloned()
                         .collect()
                 } else {
-                    self.highlighted = Some(key.to_string());
-                    self.anchor = Some(key.to_string());
+                    landed = Some(key.to_string());
                     if self.is_selected(key) {
                         self.selected.clone()
                     } else {
@@ -298,6 +298,10 @@ impl Primitive for Listbox {
             }
         };
         if self.commit(next, Source::Agent, Reason::Action, gate) {
+            if landed.is_some() {
+                self.highlighted = landed.clone();
+                self.anchor = landed;
+            }
             Ok(())
         } else {
             Err(ActError::Refused)
@@ -511,5 +515,6 @@ mod tests {
             lb.act("select", Some("apple"), &mut |_| false),
             Err(ActError::Refused)
         );
+        assert_eq!(lb.highlighted(), None, "a refused action leaves no trace");
     }
 }
