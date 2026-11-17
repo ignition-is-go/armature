@@ -5,6 +5,7 @@ pub mod avatar;
 pub mod button;
 pub mod calendar;
 pub mod canvas;
+pub mod carousel;
 pub mod change;
 pub mod checkbox;
 pub mod collapsible;
