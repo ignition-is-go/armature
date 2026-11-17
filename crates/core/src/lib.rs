@@ -21,6 +21,7 @@ pub mod date_picker;
 pub mod dialog;
 pub mod drag;
 pub mod editable;
+pub mod file_input;
 pub mod gauge;
 pub mod geometry;
 pub mod gesture;

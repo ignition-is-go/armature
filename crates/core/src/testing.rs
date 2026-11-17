@@ -71,6 +71,16 @@ fn inputs<P: Primitive>(items: &[Item]) -> Vec<Input<P::Part>> {
     let mods = Modifiers::default();
     let mut all: Vec<Input<P::Part>> = vec![
         Input::PressOutside,
+        Input::DragOver { inside: true },
+        Input::Files {
+            files: vec![crate::primitive::FileInfo {
+                name: "a.png".into(),
+                kind: "image/png".into(),
+                size: 1,
+                path: None,
+            }],
+            dropped: true,
+        },
         Input::WindowBlur,
         Input::Tick { now_ms: 10_000 },
         Input::Paste {

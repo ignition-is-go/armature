@@ -40,6 +40,11 @@ pub enum Input<Part> {
     Found { part: Part, item: Option<String> },
     /// A picture or other media inside a part finished loading, or failed to.
     Loaded { part: Part, ok: bool },
+    /// Files were chosen in the picker asked for with `Effect::PickFiles`, or dropped
+    /// on a part that takes drops.
+    Files { files: Vec<FileInfo>, dropped: bool },
+    /// Files being dragged came over a part that takes drops, or left it.
+    DragOver { inside: bool },
     /// A press landed outside every part of this primitive.
     PressOutside,
     /// The window stopped being the one the person is working in.
@@ -109,6 +114,21 @@ pub enum Effect {
     ScrollTo { offset: u32 },
     /// Put this text on the clipboard.
     Copy { text: String },
+    /// Show the platform's file picker. What is chosen comes back as `Input::Files`.
+    /// `accept` is a comma-separated list of extensions and media types.
+    PickFiles { multiple: bool, accept: String },
+}
+
+/// A file the person chose or dropped.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FileInfo {
+    pub name: String,
+    /// The media type, such as `image/png`, where the platform knows it.
+    pub kind: String,
+    /// Its length in bytes.
+    pub size: u64,
+    /// Where it is on disk, where the platform says. A browser does not.
+    pub path: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -145,6 +165,8 @@ impl<Part> Input<Part> {
                 ok,
             },
             Input::PressOutside => Input::PressOutside,
+            Input::Files { files, dropped } => Input::Files { files, dropped },
+            Input::DragOver { inside } => Input::DragOver { inside },
             Input::WindowBlur => Input::WindowBlur,
             Input::Tick { now_ms } => Input::Tick { now_ms },
             Input::Text { part, item, value } => Input::Text {
@@ -418,6 +440,12 @@ pub trait Primitive: Clone + 'static {
     /// Whether a part scrolls, so the adapter reports its offset and size and carries
     /// out `Effect::ScrollTo` on it.
     fn scrolls(_part: Self::Part) -> bool {
+        false
+    }
+
+    /// Whether files may be dropped on a part. The adapter then sends
+    /// `Input::DragOver` and `Input::Files` for it.
+    fn drops(_part: Self::Part) -> bool {
         false
     }
 

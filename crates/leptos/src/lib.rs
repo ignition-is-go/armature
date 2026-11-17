@@ -2,12 +2,14 @@
 //! particular primitive.
 
 pub mod agent;
+mod files;
 mod parts;
 mod shortcut;
 mod storage;
 mod viewport;
 
 pub use armature_core::change::{Reason, Source, ValueChange};
+pub use files::chosen_file;
 pub use parts::{ChangeGate, Part, Root, use_primitive};
 pub use shortcut::use_shortcut;
 pub use storage::{CookieStorage, LocalStorage, system_prefers_dark};

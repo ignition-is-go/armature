@@ -156,6 +156,31 @@ impl<P: Primitive + Send + Sync> Context<P> {
                 Ask::Copy { text } => {
                     let _ = window().navigator().clipboard().write_text(&text);
                 }
+                Ask::PickFiles { multiple, accept } => {
+                    // The browser only shows its picker from a file input, so one is
+                    // made for the occasion.
+                    let Ok(input) = document().create_element("input") else {
+                        continue;
+                    };
+                    let input: web_sys::HtmlInputElement = input.unchecked_into();
+                    input.set_type("file");
+                    input.set_multiple(multiple);
+                    input.set_accept(&accept);
+                    let chosen = input.clone();
+                    let picked = Closure::<dyn Fn()>::new(move || {
+                        let files = crate::files::remember(chosen.files());
+                        self.dispatch(Input::Files {
+                            files,
+                            dropped: false,
+                        });
+                    });
+                    let _ = input.add_event_listener_with_callback(
+                        "change",
+                        picked.as_ref().unchecked_ref(),
+                    );
+                    picked.forget();
+                    input.click();
+                }
             }
         }
         reaction.handled
@@ -814,6 +839,42 @@ where
             let _ = element
                 .add_event_listener_with_callback("beforematch", found.as_ref().unchecked_ref());
             found.forget();
+            // Files dragged from outside the page may be dropped on a part that takes them.
+            if K::Primitive::drops(part) {
+                let over =
+                    Closure::<dyn Fn(web_sys::DragEvent)>::new(move |ev: web_sys::DragEvent| {
+                        // Without this the browser opens the file instead of handing it over.
+                        ev.prevent_default();
+                        if ev.type_() == "dragenter" {
+                            ctx.dispatch(Input::DragOver { inside: true });
+                        }
+                    });
+                let left = Closure::<dyn Fn()>::new(move || {
+                    ctx.dispatch(Input::DragOver { inside: false });
+                });
+                let dropped =
+                    Closure::<dyn Fn(web_sys::DragEvent)>::new(move |ev: web_sys::DragEvent| {
+                        ev.prevent_default();
+                        let files = crate::files::remember(
+                            ev.data_transfer().and_then(|data| data.files()),
+                        );
+                        ctx.dispatch(Input::Files {
+                            files,
+                            dropped: true,
+                        });
+                    });
+                for name in ["dragenter", "dragover"] {
+                    let _ = element
+                        .add_event_listener_with_callback(name, over.as_ref().unchecked_ref());
+                }
+                let _ = element
+                    .add_event_listener_with_callback("dragleave", left.as_ref().unchecked_ref());
+                let _ = element
+                    .add_event_listener_with_callback("drop", dropped.as_ref().unchecked_ref());
+                over.forget();
+                left.forget();
+                dropped.forget();
+            }
             // A picture inside the part says when it has loaded or failed. Those events
             // do not bubble, so they are caught on the way down.
             for (name, ok) in [("load", true), ("error", false)] {

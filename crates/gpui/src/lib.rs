@@ -14,8 +14,8 @@ use armature_core::keys::{Key, Modifiers, Orientation};
 use armature_core::layers::{Layer, LayerStack};
 use armature_core::popup::{Align, Side};
 use armature_core::primitive::{
-    Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction,
-    Role, Semantics,
+    Effect, FileInfo, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive,
+    Reaction, Role, Semantics,
 };
 use armature_core::shortcut::Shortcut;
 use armature_core::text_edit::{Edit, TextEdit};
@@ -29,6 +29,24 @@ use gpui::{
 };
 
 pub use armature_core::change::{Reason, Source};
+
+/// What the primitive is told about files chosen or dropped: name, size and where
+/// they are. The media type is not known here, so it is left empty and a primitive
+/// goes by the extension.
+fn described(paths: &[std::path::PathBuf]) -> Vec<FileInfo> {
+    paths
+        .iter()
+        .map(|path| FileInfo {
+            name: path
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            kind: String::new(),
+            size: std::fs::metadata(path).map(|file| file.len()).unwrap_or(0),
+            path: Some(path.to_string_lossy().into_owned()),
+        })
+        .collect()
+}
 
 /// The popups and dialogs open in the application, in the order they opened.
 #[derive(Default)]
@@ -631,6 +649,32 @@ impl<P: Primitive> Machine<P> {
                 Effect::Copy { text } => {
                     cx.write_to_clipboard(ClipboardItem::new_string(text.clone()));
                 }
+                // The platform's picker has no filter for types here, so the primitive
+                // turns away what it does not take when the files come back.
+                Effect::PickFiles { multiple, .. } => {
+                    let chosen = cx.prompt_for_paths(gpui::PathPromptOptions {
+                        files: true,
+                        directories: false,
+                        multiple: *multiple,
+                        prompt: None,
+                    });
+                    cx.spawn_in(window, async move |this, cx| {
+                        if let Ok(Ok(Some(paths))) = chosen.await {
+                            let _ = this.update_in(cx, |state, window, cx| {
+                                let files = described(&paths);
+                                state.dispatch(
+                                    Input::Files {
+                                        files,
+                                        dropped: false,
+                                    },
+                                    window,
+                                    cx,
+                                );
+                            });
+                        }
+                    })
+                    .detach();
+                }
             }
         }
         cx.notify();
@@ -737,6 +781,23 @@ pub fn part<K: PartOf>(
     let scrolls = K::Primitive::scrolls(part);
     if scrolls {
         el = el.overflow_y_scroll().track_scroll(&machine.scroll);
+    }
+
+    if K::Primitive::drops(part) {
+        let state = state.clone();
+        el = el.on_drop(move |paths: &gpui::ExternalPaths, window, cx| {
+            let files = described(paths.paths());
+            state.update(cx, |state, cx| {
+                state.dispatch(
+                    Input::Files {
+                        files,
+                        dropped: true,
+                    },
+                    window,
+                    cx,
+                );
+            });
+        });
     }
 
     let tracks_pointer = K::Primitive::tracks_pointer(part);
