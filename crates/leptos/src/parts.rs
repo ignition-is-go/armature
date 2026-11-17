@@ -7,6 +7,8 @@ use armature_core::keys::{Key, Modifiers, Orientation};
 use armature_core::popup::{self, Placement, Rect, Side, Size};
 use armature_core::primitive::{FocusTarget, Focusable, Input, Item, PartOf, Primitive, Role};
 use leptos::prelude::*;
+use send_wrapper::SendWrapper;
+use wasm_bindgen::closure::Closure;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::HtmlElement;
 
@@ -301,6 +303,31 @@ where
                     ctx.place(&popup, placement);
                 }
             });
+        });
+
+        let follow = move || {
+            if !semantics.get_untracked().hidden
+                && let Some(popup) = element.get_untracked()
+            {
+                ctx.place(&popup, placement);
+            }
+        };
+        // Scroll does not bubble, so it is caught on the way down. That follows the
+        // anchor inside any scrolling container, not only the page.
+        let on_scroll = SendWrapper::new(Closure::<dyn Fn()>::new(follow));
+        let _ = window().add_event_listener_with_callback_and_bool(
+            "scroll",
+            on_scroll.as_ref().unchecked_ref(),
+            true,
+        );
+        let on_resize = window_event_listener(leptos::ev::resize, move |_| follow());
+        on_cleanup(move || {
+            let _ = window().remove_event_listener_with_callback_and_bool(
+                "scroll",
+                on_scroll.as_ref().unchecked_ref(),
+                true,
+            );
+            on_resize.remove();
         });
     }
 
