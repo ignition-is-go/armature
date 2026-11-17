@@ -1,0 +1,13 @@
+[workspace]
+resolver = "2"
+members = ["crates/core", "crates/leptos", "crates/gpui", "examples/leptos-demo", "examples/gpui-demo"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+armature-core = { path = "crates/core" }
+armature-leptos = { path = "crates/leptos" }
+leptos = "0.8"
