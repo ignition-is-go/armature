@@ -190,6 +190,96 @@ impl Tree {
     }
 }
 
+/// Where a dragged node lands relative to the row it is dropped on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DropPosition {
+    Before,
+    After,
+    /// As the last child of the row.
+    Inside,
+}
+
+/// Which drop the pointer means at `fraction` of the way down a row, from 0 at its top
+/// to 1 at its bottom. The middle half nests when the row can take children.
+pub fn drop_position(fraction: f64, can_nest: bool) -> DropPosition {
+    match fraction {
+        f if can_nest && (0.25..=0.75).contains(&f) => DropPosition::Inside,
+        f if f < 0.5 => DropPosition::Before,
+        _ => DropPosition::After,
+    }
+}
+
+/// Moves node `key`, with everything beneath it, next to or into `target`. Returns
+/// `false` and changes nothing if either is missing or `target` is inside the moved
+/// subtree.
+pub fn move_node(
+    items: &mut Vec<TreeItem>,
+    key: &str,
+    target: &str,
+    position: DropPosition,
+) -> bool {
+    fn contains(item: &TreeItem, key: &str) -> bool {
+        item.key == key || item.children.iter().any(|child| contains(child, key))
+    }
+    fn find<'a>(items: &'a [TreeItem], key: &str) -> Option<&'a TreeItem> {
+        items.iter().find_map(|item| {
+            if item.key == key {
+                Some(item)
+            } else {
+                find(&item.children, key)
+            }
+        })
+    }
+    fn take(items: &mut Vec<TreeItem>, key: &str) -> Option<TreeItem> {
+        if let Some(at) = items.iter().position(|item| item.key == key) {
+            return Some(items.remove(at));
+        }
+        items
+            .iter_mut()
+            .find_map(|item| take(&mut item.children, key))
+    }
+    fn place(
+        items: &mut Vec<TreeItem>,
+        node: TreeItem,
+        target: &str,
+        position: DropPosition,
+    ) -> Result<(), TreeItem> {
+        if let Some(at) = items.iter().position(|item| item.key == target) {
+            match position {
+                DropPosition::Before => items.insert(at, node),
+                DropPosition::After => items.insert(at + 1, node),
+                DropPosition::Inside => items[at].children.push(node),
+            }
+            return Ok(());
+        }
+        let mut node = node;
+        for item in items.iter_mut() {
+            match place(&mut item.children, node, target, position) {
+                Ok(()) => return Ok(()),
+                Err(returned) => node = returned,
+            }
+        }
+        Err(node)
+    }
+
+    let movable = find(items, key).is_some_and(|node| !contains(node, target))
+        && find(items, target).is_some();
+    if !movable {
+        return false;
+    }
+    let node = take(items, key).expect("found above");
+    place(items, node, target, position).is_ok()
+}
+
+/// What to tell a screen reader after a node is moved.
+pub fn tree_reorder_message(label: &str, target: &str, position: DropPosition) -> String {
+    match position {
+        DropPosition::Before => format!("{label} moved before {target}."),
+        DropPosition::After => format!("{label} moved after {target}."),
+        DropPosition::Inside => format!("{label} moved into {target}."),
+    }
+}
+
 /// Builds a tree from slash-separated paths. Each node's key is its full path and its
 /// label is the last segment.
 pub fn tree_from_paths(paths: &[&str]) -> Vec<TreeItem> {
@@ -302,5 +392,58 @@ mod tests {
             tree().subtree("src/ui"),
             ["src/ui", "src/ui/button.rs", "src/ui/menu.rs"]
         );
+    }
+
+    #[test]
+    fn a_node_moves_with_everything_beneath_it() {
+        let mut items = tree_from_paths(&["src/main.rs", "src/ui/button.rs", "docs/intro.md"]);
+        assert!(move_node(
+            &mut items,
+            "src/ui",
+            "docs",
+            DropPosition::Inside
+        ));
+        let tree = Tree::new(&items);
+        assert_eq!(tree.children("docs"), ["docs/intro.md", "src/ui"]);
+        assert_eq!(tree.children("src/ui"), ["src/ui/button.rs"]);
+        assert_eq!(tree.children("src"), ["src/main.rs"]);
+    }
+
+    #[test]
+    fn a_node_can_be_placed_before_or_after_a_sibling() {
+        let mut items = tree_from_paths(&["a", "b", "c"]);
+        move_node(&mut items, "c", "a", DropPosition::Before);
+        move_node(&mut items, "a", "b", DropPosition::After);
+        let keys: Vec<_> = items.iter().map(|item| item.key.as_str()).collect();
+        assert_eq!(keys, ["c", "b", "a"]);
+    }
+
+    #[test]
+    fn a_node_cannot_be_dropped_into_its_own_subtree() {
+        let mut items = tree_from_paths(&["src/ui/button.rs"]);
+        let before = items.clone();
+        assert!(!move_node(
+            &mut items,
+            "src",
+            "src/ui",
+            DropPosition::Inside
+        ));
+        assert!(!move_node(&mut items, "src", "src", DropPosition::After));
+        assert!(!move_node(
+            &mut items,
+            "src",
+            "missing",
+            DropPosition::After
+        ));
+        assert_eq!(items, before);
+    }
+
+    #[test]
+    fn the_middle_of_a_row_nests_only_where_nesting_is_allowed() {
+        assert_eq!(drop_position(0.1, true), DropPosition::Before);
+        assert_eq!(drop_position(0.5, true), DropPosition::Inside);
+        assert_eq!(drop_position(0.9, true), DropPosition::After);
+        assert_eq!(drop_position(0.4, false), DropPosition::Before);
+        assert_eq!(drop_position(0.6, false), DropPosition::After);
     }
 }
