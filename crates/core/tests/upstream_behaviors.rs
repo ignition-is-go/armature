@@ -989,6 +989,36 @@ fn number_input_behaviors() {
     );
     key(&mut typed, Key::Enter);
     assert_eq!(typed.number(), 10.0, "Enter clamps what was typed");
+    // "a controller step leaves nothing for the next blur to commit", and a blur commits what was typed
+    typed.send(
+        Input::Text {
+            part: Part::Input,
+            item: None,
+            value: "3".into(),
+        },
+        &mut |_| true,
+    );
+    typed.send(
+        Input::Blur {
+            part: Part::Input,
+            item: None,
+        },
+        &mut |_| true,
+    );
+    assert_eq!(typed.number(), 3.0);
+    typed.act("increment", None, &mut |_| true).unwrap();
+    let mut asked = 0;
+    typed.send(
+        Input::Blur {
+            part: Part::Input,
+            item: None,
+        },
+        &mut |_| {
+            asked += 1;
+            true
+        },
+    );
+    assert_eq!((typed.number(), asked), (4.0, 0));
 }
 
 use armature_core::combobox::{self, Combobox};

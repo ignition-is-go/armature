@@ -36,6 +36,36 @@ for key in ["one", "two", "three"] {
 UI the adapter does this from the parts you render. A fresh `Tabs` has its first
 enabled tab selected.
 
+## Options
+
+Each `Options` implements `Default`; set only what you need with `..Default::default()`.
+Primitives not listed take their settings through `new(...)` arguments or builder methods.
+
+| Module | `Options` fields |
+| --- | --- |
+| `accordion` | `multiple: bool`, `collapsible: bool`, `findable: bool` |
+| `calendar` | `week_start: u8`, `dir: Dir`, `min: Option<Date>`, `max: Option<Date>`, `mode: Selecting`, `unavailable: Option<fn(Date) -> bool>`, `deselectable: bool`, `months: usize` |
+| `carousel` | `wrap: bool`, `autoplay_ms: Option<u64>`, `dir: Dir`, `per_page: usize`, `orientation: crate::keys::Orientation` |
+| `combobox` | `multiple: bool`, `custom: bool`, `auto_highlight: bool`, `max_selected: Option<usize>`, `open_on_focus: bool`, `load_more: bool`, `remote: bool`, `read_only: bool` |
+| `dialog` | `dismiss_on_backdrop: bool`, `dismiss_on_escape: bool`, `alert: bool`, `dismissible: bool`, `modal: bool` |
+| `event_list` | `orientation: Orientation`, `dir: Dir`, `wrap: bool`, `feed: bool` |
+| `file_input` | `multiple: bool`, `accept: Vec<String>`, `max_size: Option<u64>`, `max_files: Option<usize>` |
+| `listbox` | `mode: Mode`, `orientation: Orientation`, `dir: Dir`, `wrap: bool` |
+| `navigation_menu` | `hover: bool`, `open_delay_ms: u64`, `close_delay_ms: u64`, `orientation: Orientation`, `dir: Dir` |
+| `panel_group` | `orientation: Orientation`, `dir: Dir`, `min: f64`, `step: f64`, `large_step: f64` |
+| `range_slider` | `range: NumberRange`, `orientation: Orientation`, `dir: Dir`, `large_step: f64`, `min_steps_between: f64` |
+| `rating` | `max: u32`, `halves: bool`, `deselectable: bool`, `dir: Dir`, `read_only: bool` |
+| `resizable` | `orientation: Orientation`, `dir: Dir`, `min: f64`, `max: f64` |
+| `slider` | `range: NumberRange`, `orientation: Orientation`, `dir: Dir`, `large_step: f64` |
+| `tabs` | `orientation: Orientation`, `dir: Dir`, `manual: bool`, `wrap: bool` |
+| `timeline` | `range: Span`, `grid: f64`, `min_length: f64` |
+| `toggle_group` | `multiple: bool`, `deselectable: bool`, `orientation: Orientation`, `dir: Dir` |
+| `tooltip` | `open_delay_ms: u64`, `close_delay_ms: u64`, `card: bool`, `disabled: bool` |
+
+An accordion is single and not collapsible by default: its open section stays open,
+so `toggle` and `close` on it change nothing. Set `collapsible: true` to allow closing.
+An action that changes nothing returns `Ok(())` without asking the gate.
+
 ## Sending input
 
 ```rust
@@ -127,6 +157,30 @@ the top of its file, and `snapshot().actions`. Those used most:
 | toast | `dismiss`, `action`, `dismiss_all` |
 | tooltip | `show`, `hide` |
 | tree_view | `select`, `expand`, `collapse` |
+
+Actions that name something take it as `item`: the key for `select`, `open`, `close`,
+`toggle`, `remove`, `expand`; the new value as text for `set` (`act("set", Some("70"), ..)`)
+and `type`. `clear`, `increment`, `decrement`, `show`, `hide` and a dialog's or popover's
+`open` and `close` take `None`. `snapshot().name` is a short name that can differ from
+the module, such as `"number"` for `number_input`.
+
+## Details that are easy to guess wrong
+
+- **Number input.** Its value is one string written as Rust prints an `f64`: `["7"]`,
+  `["0.3"]`. `NumberInput::new(NumberRange::new(min, max, step), value)` sets the range;
+  the default is 0 to 100 by 1. Typed text arrives as `Input::Text` and is committed by
+  Enter, Tab or `Input::Blur`, clamped to the range, with `Reason::Text`. Arrow keys step
+  with `Reason::Keyboard`.
+- **Tooltip.** It opens 500 ms after `Input::Hover { inside: true, .. }` (the
+  `open_delay_ms` option), when it next hears `Input::Tick` at or past that time. The
+  hover returns `Effect::Wake { at_ms }` saying when to tick. Focus opens it at once.
+  Escape hides it whether or not anything was focused. It has `is_open()`.
+- **Keys and focus.** Keys that act on one part or item (Enter on a button, arrows in
+  a list) need `Input::Focus` first. Keys that mean the whole primitive, such as
+  Escape on a popup, do not.
+- **Traits.** `upsert_item`, `send`, `act`, `value`, `set_value`, `semantics` and
+  `snapshot` are `Primitive` methods, so import the trait. `is_open()`, `results()` and
+  the like are the type's own.
 
 ## A whole test
 

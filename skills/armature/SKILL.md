@@ -18,7 +18,8 @@ Primitives ship unstyled. You supply the look and the children.
 ## Read first
 
 Start with `references/core-contract.md`: the types, import paths and signatures you
-need to drive any primitive. Then read the source for the details. It is the reference.
+need to drive any primitive, and each primitive's options. Read the source only for
+edge behavior the references do not cover.
 
 1. `crates/core/src/primitive.rs` is the whole contract between primitives and adapters.
 2. The primitive you will use, in `crates/core/src`. Its `Part` enum lists what you

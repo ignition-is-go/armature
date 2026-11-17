@@ -171,8 +171,10 @@ impl Primitive for NumberInput {
                 self.focused = part == Part::Input;
                 Reaction::default()
             }
+            // Leaving the field by any route commits what was typed.
             Input::Blur { .. } => {
                 self.focused = false;
+                self.commit(gate);
                 Reaction::default()
             }
             Input::Wheel { delta, mods, .. } if self.focused => {
