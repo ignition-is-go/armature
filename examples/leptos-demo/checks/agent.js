@@ -1,0 +1,32 @@
+async () => {
+  const out = {};
+  const a = window.armature;
+  const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 40))));
+  const snap = a.snapshot();
+  out.labels = snap.map(s => s.label).join(', ');
+  out.hiddenIsAbsent = !snap.some(s => s.label === 'Admin mode');
+  out.secret = JSON.stringify(snap.find(s => s.label === 'PIN').value);
+  out.query = a.query('blue').map(f => `${f.label}@${f.ref}:${f.item}`).join(' ');
+  out.queryComponent = a.query('volume')[0].item === null;
+  const run = a.run([{ target: 'Volume', action: 'set', item: '64' }, { target: 'Rating', action: 'select', item: '2' }, { target: 'Rating', action: 'explode' }, { target: 'Wi-Fi', action: 'check' }]);
+  await frame();
+  out.run = { ok: run.ok, changes: run.changes.map(c => `${c.label}: [${c.before}] -> [${c.after}]`), failed: run.failed };
+  out.pageFollowedRun = document.getElementById('volume-value').textContent + ' / ' + document.getElementById('rating-value').textContent + ' / wifi ' + document.getElementById('wifi-value').textContent;
+  out.confirmDirect = a.act(snap.find(s => s.label === 'Delete account').ref, 'check');
+  out.confirmWithoutApprover = a.run([{ target: 'Delete account', action: 'check' }]).failed;
+  let asked = null;
+  a.approve = (step, what) => { asked = `${step.target}/${step.action}: ${what}`; return true; };
+  const approved = a.run([{ target: 'Delete account', action: 'check' }]);
+  out.confirmApproved = { ok: approved.ok, asked };
+  out.secretRun = a.run([{ target: 'PIN', action: 'increment' }]).changes[0];
+  document.querySelector('[role=switch]').click(); await frame();
+  out.history = a.history().map(h => h.text);
+  window.__mcp = [];
+  Object.defineProperty(navigator, 'modelContext', { value: { registerTool(t) { window.__mcp.push(t); } }, configurable: true });
+  out.webmcpRegistered = a.registerTools();
+  out.webmcpTools = window.__mcp.map(t => t.name).join(',');
+  out.webmcpQuery = window.__mcp.find(t => t.name === 'query').execute({ text: 'cherry' }).map(f => f.item).join(',');
+  out.webmcpAct = window.__mcp.find(t => t.name === 'act').execute({ steps: [{ target: 'Wi-Fi', action: 'toggle' }] }).ok;
+  out.tools = a.tools().map(t => `${t.name}(${Object.keys(t.inputSchema.properties).join(',')})`).join(' ');
+  return out;
+}

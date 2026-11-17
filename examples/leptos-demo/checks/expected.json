@@ -1,0 +1,204 @@
+{
+  "basics": {
+    "slider": {
+      "aria": "30/0-100 label=Volume",
+      "press": "Volume: 50%",
+      "dragOutsideTrack": "Volume: 80%",
+      "afterRelease": "Volume: 80%",
+      "focusOnThumb": true,
+      "keys": "Volume: 89% aria=89"
+    },
+    "switch": "On checked=true -> Off",
+    "accordion": {
+      "start": "none,none",
+      "after": "Open: returns | none,block | false,true,false,false",
+      "arrowMovesFocus": true
+    },
+    "rating": {
+      "click": "Rating: 3 filled=3 checked=false,false,true,false",
+      "arrow": "Rating: 4 focus=4"
+    },
+    "tree": {
+      "start": "src,docs,README.md",
+      "open": "focus=src/main.rs level=2 shown=src,src/main.rs,src/ui,docs,README.md",
+      "select": "File: src/main.rs"
+    },
+    "command": {
+      "filter": "open:shown* save:shown close:hidden",
+      "chose": "Ran: save inputKept=\"file\" focusOnInput=true"
+    },
+    "number": {
+      "start": "2 role=spinbutton now=2",
+      "typed": "Quantity: 7",
+      "stoppedAfterRelease": true
+    },
+    "sortable": {
+      "dragging": "true",
+      "drag": "Order: eggs, bread, milk, jam | dom=eggs,bread,milk,jam,a,b,c | said=\"milk dropped at position 3 of 4.\"",
+      "keyboard": "dom=eggs,bread,jam,milk,a,b,c | said=\"jam dropped at position 3 of 4.\""
+    },
+    "labels": "combobox=Size | tablist=Settings | listbox=Fruit | listbox=Access | slider=Volume | switch=Wi-Fi | radiogroup=Rating | tree=Files | input=Commands | button=Decrease | spinbutton=Quantity | button=Increase | list=Groceries | button=Previous month | button=Next month | grid=Date | toolbar=Formatting | input=Code | input=Tags | separator=Panels | button=Share | button=Close | tooltip=Help | slider=Saturation and brightness | slider=Hue | input=Colour | listbox=Rows | list=Day | grid=Sheet | group=Board | button=Into a | button=Out of a | button=Into b | button=Out of b | button=Into c | button=Out of c | button=Confirm | switch=Delete account | switch=Admin mode | spinbutton=PIN",
+    "agent": "select:Size=[] tabs:Settings=[fruit] listbox:Fruit=[] listbox:Access=[] slider:Volume=[89] switch:Wi-Fi=[] accordion:Questions=[returns] radio:Rating=[4] tree:Files=[src/main.rs] command:Commands=[save] number:Quantity=[14] sortable:Groceries=[eggs,bread,jam,milk] calendar:Date=[] toolbar:Formatting=[] otp:Code=[] tokens:Tags=[] resizable:Panels=[50] popover:Share=[] tooltip:Help=[] color:Colour=[#3b6fe0] swipe-row:Message=[] virtual-list:Rows=[] timeline:Day=[] grid:Sheet=[0,0] canvas:Board=[a:10,10,90,50,b:150,10,90,50,c:10,100,90,50] dialog:Confirm=[] switch:Delete account=[] number:PIN=[[redacted]]"
+  },
+  "inputs": {
+    "calendar": {
+      "cells": 44,
+      "stop": "2026-11-17",
+      "arrow": "2026-11-18",
+      "crossedIntoDecember": "2026-12 focus=2026-12-02",
+      "chosen": "Day: 2026-12-02 selected=true",
+      "enterOnNextMonth": "2027-01 Day: 2026-12-02 label=Next month"
+    },
+    "toolbar": {
+      "moved": "link",
+      "pressed": "Pressed: link",
+      "stops": 1
+    },
+    "otp": {
+      "code": "Code: 1234",
+      "cells": "1|2|3|4",
+      "field": "1234"
+    },
+    "tokens": {
+      "afterPaste": "Tags: rust, wasm field=\" \"",
+      "afterEnter": "Tags: rust, wasm, gpui",
+      "afterBackspace": "Tags: rust, wasm",
+      "tokenName": "Remove rust",
+      "afterRemove": "Tags: wasm",
+      "focusOnField": true
+    },
+    "resizable": {
+      "aria": "50 vertical",
+      "dragged": "Split: 24.8 panel=25%",
+      "end": "Split: 90"
+    },
+    "relations": {
+      "tabControls": "tabpanel",
+      "panelLabelledByTab": true,
+      "headerControls": "region",
+      "regionLabelledBy": true
+    }
+  },
+  "gestures": {
+    "popover": {
+      "opened": true,
+      "gap": 8,
+      "labelledBy": "Share this page",
+      "describedBy": "Anyone with the link can view.",
+      "arrowPointsAtTrigger": true,
+      "closedByOutsidePress": true
+    },
+    "tooltip": {
+      "describedBy": true,
+      "hiddenAtFirst": true,
+      "stillHiddenAt200ms": true,
+      "shownAfterDelay": true,
+      "hiddenOnLeave": true,
+      "touchNeverHovers": true,
+      "shownOnFocus": true,
+      "hiddenOnEscape": true
+    },
+    "color": {
+      "afterHue": "Colour: #3be03b",
+      "white": "Colour: #ffffff",
+      "pureHueAgain": "Colour: #00ff00",
+      "field": "#00ff00",
+      "swatch": "rgb(0, 255, 0)",
+      "typed": "Colour: #ff8800"
+    },
+    "swipe": {
+      "hiddenAtFirst": true,
+      "revealed": "true offset=translateX(-80px)",
+      "pressed": "Ran: delete closed=translateX(0px)",
+      "fullSwipe": "Ran: archive"
+    },
+    "virtual": {
+      "rendered": 9,
+      "scrollHeight": 240008,
+      "afterScroll": "12 rows, first=4997",
+      "keyboard": "Row: 5005 focus=5005 scrollTop=120016"
+    },
+    "timeline": {
+      "drawn": "Plan: span-1:9-13",
+      "moved": "Plan: span-1:11-15",
+      "resizedByKeyboard": "Plan: span-1:11-16",
+      "said": "span-1 now runs from 11 to 16."
+    },
+    "grid": {
+      "selected": "Cells: 0,0 0,1 1,0 1,1",
+      "copied": "\"a1\\tb1\\na2\\tb2\"",
+      "pasted": "a1,b1,c1,a2,X,Y,a3,Z,W",
+      "edits": "Cells: 1,1=X 1,2=Y 2,1=Z 2,2=W"
+    },
+    "canvas": {
+      "lasso": "a,b lassoShown=true",
+      "moved": "a:40,50,90,50 b:180,50,90,50 c:10,100,90,50",
+      "undone": "a:10,10,90,50 b:150,10,90,50 c:10,100,90,50",
+      "links": "a>c",
+      "said": "a connected to c."
+    }
+  },
+  "dialog": {
+    "start": "shown=false backdrop=none",
+    "opened": "shown=true modal=true focus=Content expanded=true",
+    "tabCycle": "dialog-yes > Close > dialog-yes > Close",
+    "shiftTab": "dialog-yes",
+    "escape": "shown=false focus=Trigger",
+    "backdrop": "shown=false focus=Trigger",
+    "close": "shown=false focus=Trigger",
+    "agentOpen": "shown=true expanded=true"
+  },
+  "agent": {
+    "labels": "Size, Settings, Fruit, Access, Volume, Wi-Fi, Questions, Rating, Files, Commands, Quantity, Groceries, Date, Formatting, Code, Tags, Panels, Share, Help, Colour, Message, Rows, Day, Sheet, Board, Confirm, Delete account, PIN",
+    "hiddenIsAbsent": true,
+    "secret": "[\"[redacted]\"]",
+    "query": "Blueberry@e3:blueberry",
+    "queryComponent": true,
+    "run": {
+      "ok": false,
+      "changes": [
+        "Volume: [30] -> [64]",
+        "Rating: [] -> [2]"
+      ],
+      "failed": {
+        "step": 2,
+        "error": "unknown action \"explode\"; valid actions: select"
+      }
+    },
+    "pageFollowedRun": "Volume: 64% / Rating: 2 / wifi Off",
+    "confirmDirect": {
+      "ok": false,
+      "error": "this needs a person's approval: Delete the account"
+    },
+    "confirmWithoutApprover": {
+      "step": 0,
+      "error": "the action was not approved"
+    },
+    "confirmApproved": {
+      "ok": true,
+      "asked": "Delete account/check: Delete the account"
+    },
+    "secretRun": {
+      "ref": "e29",
+      "label": "PIN",
+      "before": [
+        "[redacted]"
+      ],
+      "after": [
+        "[redacted]"
+      ]
+    },
+    "history": [
+      "Volume changed from 30 to 64 by an agent.",
+      "Rating changed from nothing to 2 by an agent.",
+      "Delete account changed from nothing to on by an agent.",
+      "PIN changed from [redacted] to [redacted] by an agent.",
+      "Wi-Fi changed from nothing to on by the user."
+    ],
+    "webmcpRegistered": true,
+    "webmcpTools": "snapshot,query,act",
+    "webmcpQuery": "cherry",
+    "webmcpAct": true,
+    "tools": "snapshot() query(text) act(steps)"
+  }
+}
