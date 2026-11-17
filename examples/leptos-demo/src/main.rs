@@ -14,6 +14,7 @@ use armature_core::listbox::{self, Listbox};
 use armature_core::number::NumberRange;
 use armature_core::number_input::{self, NumberInput};
 use armature_core::otp_input::{self, OtpInput};
+use armature_core::picker::{self, Picker};
 use armature_core::popover::{self, Popover};
 use armature_core::preference::{ColorScheme, Preference};
 use armature_core::prompt::{self, Prompt};
@@ -386,6 +387,7 @@ fn ThemeChoice() -> impl IntoView {
 fn App() -> impl IntoView {
     let (size, on_size) = follow();
     let (title, on_title) = follow();
+    let (hour, on_hour) = follow();
     let (chosen, on_chosen) = follow();
     let (moved, on_moved) = follow();
     let sent = RwSignal::new(Vec::<String>::new());
@@ -834,6 +836,19 @@ fn App() -> impl IntoView {
                     <Part part=accordion::Part::Panel item="billing">"Invoices are sent on the first."</Part>
                     <Part part=accordion::Part::Trigger item="privacy">"Privacy"</Part>
                     <Part part=accordion::Part::Panel item="privacy">"We keep nothing you did not send."</Part>
+                </Root>
+            </Section>
+
+            <Section title="Picker">
+                <p id="hour-value">"Hour: " {move || hour.get().join("")}</p>
+                <Root machine=Picker::new(28.0) label="Hour" on_value_change=on_hour>
+                    <Part part=picker::Part::Viewport>
+                        <div class="picker-pad">
+                            {(1..=12)
+                                .map(|n| view! { <Part part=picker::Part::Option item=n.to_string()>{n}</Part> })
+                                .collect_view()}
+                        </div>
+                    </Part>
                 </Root>
             </Section>
 

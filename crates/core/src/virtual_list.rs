@@ -311,6 +311,7 @@ mod tests {
                 part: Part::Viewport,
                 offset: 0.0,
                 viewport: 100.0,
+                now_ms: 0,
             },
             &mut |_| true,
         );
@@ -338,6 +339,7 @@ mod tests {
                 part: Part::Viewport,
                 offset: 100_000.0,
                 viewport: 100.0,
+                now_ms: 0,
             },
             &mut |_| true,
         );

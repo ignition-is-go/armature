@@ -820,6 +820,7 @@ where
                 part,
                 offset,
                 viewport,
+                now_ms: js_sys::Date::now() as u64,
             });
         }
     };

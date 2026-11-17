@@ -8,6 +8,7 @@ use armature_core::data_grid::{self, DataGrid};
 use armature_core::dialog::{self, Dialog};
 use armature_core::editable::{self, Editable};
 use armature_core::keys::Dir;
+use armature_core::picker::{self, Picker};
 use armature_core::primitive::{Item, Primitive};
 use armature_core::toggle::{self, Toggle};
 use armature_core::tooltip::{self, Tooltip};
@@ -325,4 +326,56 @@ fn text_is_edited_in_place_and_saved_when_focus_leaves(cx: &mut TestAppContext) 
         ["Untitled!!"],
         "leaving the field saves"
     );
+}
+
+#[gpui::test]
+fn a_wheel_picker_scrolls_to_what_the_keys_choose_and_follows_the_scroll(cx: &mut TestAppContext) {
+    let hours: Vec<Item> = (1..=12)
+        .map(|hour| Item {
+            key: hour.to_string(),
+            label: hour.to_string(),
+            disabled: false,
+        })
+        .collect();
+    let (page, cx) = cx.add_window_view(|_, cx| Page {
+        machine: cx.new(|cx| Machine::new(Picker::new(ROW as f64), "Hour", hours, cx)),
+        draw: Box::new(|picker: &Entity<Machine<Picker>>, cx: &mut App| {
+            let options = (1..=12).map(|hour| {
+                part(picker, picker::Part::Option, Some(&hour.to_string()), cx)
+                    .h(px(ROW))
+                    .w_full()
+            });
+            part(picker, picker::Part::Viewport, None, cx)
+                .h(px(100.))
+                .w(px(80.))
+                .child(div().py(px(40.)).children(options.collect::<Vec<_>>()))
+                .into_any_element()
+        }),
+    });
+    let picker = page.update(cx, |page, _| page.machine.clone());
+    cx.run_until_parked();
+
+    assert!(
+        picker.read_with(cx, |m, _| m.value()).is_empty(),
+        "nothing is chosen until someone chooses"
+    );
+    focus(&picker, cx, picker::Part::Viewport, None);
+    cx.simulate_keystrokes("down down down");
+    cx.run_until_parked();
+    assert_eq!(picker.read_with(cx, |m, _| m.value()), ["3"]);
+    assert_eq!(
+        picker.read_with(cx, |m, _| m.primitive().wanted_scroll()),
+        Some(2. * ROW as f64)
+    );
+
+    // The column really moved, and once it rests the choice it reports is unchanged.
+    cx.executor().advance_clock(Duration::from_millis(300));
+    cx.run_until_parked();
+    assert_eq!(picker.read_with(cx, |m, _| m.value()), ["3"]);
+
+    cx.simulate_keystrokes("end");
+    cx.run_until_parked();
+    cx.executor().advance_clock(Duration::from_millis(300));
+    cx.run_until_parked();
+    assert_eq!(picker.read_with(cx, |m, _| m.value()), ["12"]);
 }

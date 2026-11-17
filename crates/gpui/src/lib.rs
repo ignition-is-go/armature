@@ -690,7 +690,7 @@ pub fn part<K: PartOf>(
     };
     let record: RecordBounds = {
         let (state, key) = (state.clone(), key.clone());
-        Box::new(move |bounds, cx: &mut App| {
+        Box::new(move |bounds, window: &mut Window, cx: &mut App| {
             let scrolled = state.update(cx, |state, _| {
                 state.bounds.insert(key.clone(), bounds);
                 // Scrolling is read off the handle each frame.
@@ -704,16 +704,16 @@ pub fn part<K: PartOf>(
             // being drawn cannot ask for another.
             if let Some(now) = scrolled {
                 let (state, part) = (state.clone(), key.0);
-                cx.defer(move |cx| {
+                window.defer(cx, move |window, cx| {
                     state.update(cx, |state, cx| {
                         state.scrolled = now;
                         let input = Input::Scrolled {
                             part,
                             offset: now.0,
                             viewport: now.1,
+                            now_ms: state.now_ms(),
                         };
-                        state.machine.send(input, &mut |_| true);
-                        cx.notify();
+                        state.run(window, cx, |machine, _, gate| machine.send(input, gate));
                     });
                 });
             }
@@ -801,7 +801,7 @@ fn floating(side: Side, align: Align, gap: f64, anchor: Bounds<Pixels>) -> Layou
     }
 }
 
-type RecordBounds = Box<dyn Fn(Bounds<Pixels>, &mut App)>;
+type RecordBounds = Box<dyn Fn(Bounds<Pixels>, &mut Window, &mut App)>;
 
 /// A part's `div`. It takes styles, children and listeners like a `div`, but whether
 /// and where it appears is decided by the primitive, so styling cannot un-hide it.
@@ -924,7 +924,7 @@ fn live_node(id: ElementId, message: SharedString, assertive: bool) -> Measured 
     };
     Measured {
         inner: div().id(id).role(role).aria_label(message),
-        record: Box::new(|_, _| {}),
+        record: Box::new(|_, _, _| {}),
         live: Some(live),
     }
 }
@@ -1015,7 +1015,7 @@ impl Element for Measured {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        (self.record)(bounds, cx);
+        (self.record)(bounds, window, cx);
         self.inner
             .prepaint(id, inspector_id, bounds, state, window, cx)
     }

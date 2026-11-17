@@ -116,6 +116,21 @@ async () => {
     return r;
   });
 
+  await step('picker', async () => {
+    const column = document.querySelector('[aria-label="Hour"]');
+    const chosen = () => column.querySelector('[aria-selected="true"]')?.dataset.value;
+    const r = { start: `${text('hour-value')} chosen=${chosen()}` };
+    column.scrollTop = 28 * 4 + 6; await wait(60);
+    r.follows = `${text('hour-value')} chosen=${chosen()}`;
+    await wait(400);
+    r.settles = `top=${column.scrollTop}`;
+    key(column, 'PageDown'); await wait(300);
+    r.pageDown = `${text('hour-value')} top=${column.scrollTop}`;
+    key(column, 'Home'); await wait(300);
+    r.home = `${text('hour-value')} top=${column.scrollTop}`;
+    return r;
+  });
+
   await step('layers', async () => {
     const trigger = document.querySelector('[data-armature-part="Trigger"][aria-label="Share"]');
     const content = document.getElementById(trigger.getAttribute('aria-controls'));

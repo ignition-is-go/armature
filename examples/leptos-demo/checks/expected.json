@@ -244,6 +244,13 @@
       "chosen": "Theme: dark attr=dark stored=dark cookie=true",
       "scriptApplies": "dark"
     },
+    "picker": {
+      "start": "Hour:  chosen=undefined",
+      "follows": "Hour: 5 chosen=5",
+      "settles": "top=112",
+      "pageDown": "Hour: 8 top=196",
+      "home": "Hour: 1 top=0"
+    },
     "layers": {
       "staysOpenUnderADialog": true,
       "closesOnceTheDialogIsGone": true

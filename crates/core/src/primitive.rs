@@ -54,6 +54,7 @@ pub enum Input<Part> {
         part: Part,
         offset: f64,
         viewport: f64,
+        now_ms: u64,
     },
     /// The person pasted text while focus was inside the primitive.
     Paste { text: String },

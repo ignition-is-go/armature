@@ -31,6 +31,7 @@ pub mod motion;
 pub mod number;
 pub mod number_input;
 pub mod otp_input;
+pub mod picker;
 pub mod popover;
 pub mod popup;
 pub mod preference;

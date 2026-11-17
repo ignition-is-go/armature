@@ -19,6 +19,11 @@
       .outline-row [role="treeitem"] { padding: 3px 6px; cursor: grab; outline: none; user-select: none; }
       .outline-row [role="treeitem"]:focus-visible { background: #e8eefc; }
       .hint { color: #778; font-size: 12px; }
+      [aria-label="Hour"] { height: 140px; width: 5rem; overflow-y: auto; border: 1px solid #bbb; border-radius: 6px; padding: 0; }
+      .picker-pad { padding: 56px 0; }
+      .picker-pad [role="option"] { height: 28px; padding: 0; line-height: 28px; text-align: center; color: #99a; }
+      .picker-pad [role="option"][aria-selected="true"] { color: inherit; }
+      .picker-pad [role="option"][aria-selected="true"]::after { content: ""; }
       body { font: 15px/1.4 system-ui, sans-serif; margin: 2rem; }
       [role="listbox"] { width: 16rem; border: 1px solid #bbb; border-radius: 6px; padding: 4px; }
       [role="option"] { padding: 6px 8px; border-radius: 4px; cursor: default; outline: none; }
