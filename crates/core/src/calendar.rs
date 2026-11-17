@@ -28,6 +28,8 @@ pub struct Options {
     pub unavailable: Option<fn(Date) -> bool>,
     /// Whether choosing the chosen day again clears it.
     pub deselectable: bool,
+    /// How many months show side by side. The month buttons page by this many.
+    pub months: usize,
 }
 
 /// What a calendar chooses.
@@ -51,6 +53,7 @@ impl Default for Options {
             mode: Selecting::Single,
             unavailable: None,
             deselectable: false,
+            months: 1,
         }
     }
 }
@@ -92,7 +95,29 @@ impl Calendar {
 
     /// Whether a day belongs to the month on show, for dimming the padding days.
     pub fn in_month(&self, date: Date) -> bool {
-        (date.year, date.month) == self.month()
+        self.shown_months().contains(&(date.year, date.month))
+    }
+
+    /// The months on show, in order. With several, they are fixed runs of that many
+    /// months, so the view only changes when focus leaves the run.
+    pub fn shown_months(&self) -> Vec<(i32, u8)> {
+        let run = self.opts.months.max(1) as i32;
+        let index = self.focused.year * 12 + self.focused.month as i32 - 1;
+        let first = index.div_euclid(run) * run;
+        (first..first + run)
+            .map(|month| (month.div_euclid(12), (month.rem_euclid(12) + 1) as u8))
+            .collect()
+    }
+
+    /// One shown month's weeks, padded with its neighbours' days. Where several
+    /// months show, draw a padding day only if `in_month` says no for it, and leave
+    /// it out, so no day is drawn twice.
+    pub fn weeks_of(&self, year: i32, month: u8) -> Vec<[Date; 7]> {
+        month_grid(year, month, self.opts.week_start)
+    }
+
+    fn page(&self) -> i32 {
+        self.opts.months.max(1) as i32
     }
 
     fn allowed(&self, date: Date) -> bool {
@@ -199,7 +224,13 @@ impl Primitive for Calendar {
                         ..Default::default()
                     };
                 };
-                let shown = self.weeks().iter().flatten().any(|day| *day == date);
+                let months = self.shown_months();
+                let shown = months.iter().any(|(year, month)| {
+                    self.weeks_of(*year, *month)
+                        .iter()
+                        .flatten()
+                        .any(|day| *day == date)
+                });
                 Semantics {
                     role: Some(Role::GridCell),
                     selected: Some(self.is_selected(date)),
@@ -289,14 +320,14 @@ impl Primitive for Calendar {
                 part: Part::PreviousMonth,
                 ..
             } => {
-                self.focused = self.focused.add_months(-1);
+                self.focused = self.focused.add_months(-self.page());
                 Reaction::handled()
             }
             Input::Press {
                 part: Part::NextMonth,
                 ..
             } => {
-                self.focused = self.focused.add_months(1);
+                self.focused = self.focused.add_months(self.page());
                 Reaction::handled()
             }
             _ => Reaction::default(),
@@ -337,8 +368,8 @@ impl Primitive for Calendar {
 
     fn act(&mut self, action: &str, item: Option<&str>, gate: Gate) -> Result<(), ActError> {
         match action {
-            "next_month" => self.focused = self.focused.add_months(1),
-            "previous_month" => self.focused = self.focused.add_months(-1),
+            "next_month" => self.focused = self.focused.add_months(self.page()),
+            "previous_month" => self.focused = self.focused.add_months(-self.page()),
             "select" => {
                 let text = item.ok_or(ActError::MissingItem { action: "select" })?;
                 let date =
@@ -603,5 +634,28 @@ mod tests {
             })
             .collect();
         crate::testing::assert_conforms(calendar, &days);
+    }
+
+    #[test]
+    fn several_months_show_as_a_fixed_run_and_the_buttons_page_a_run_at_a_time() {
+        let mut calendar = Calendar::new(
+            Options {
+                months: 2,
+                ..Default::default()
+            },
+            Date::new(2026, 11, 17).unwrap(),
+        );
+        assert_eq!(calendar.shown_months(), [(2026, 11), (2026, 12)]);
+        assert!(calendar.in_month(Date::new(2026, 12, 25).unwrap()));
+        assert!(!calendar.semantics(Part::Day, Some("2026-12-25")).hidden);
+        calendar.act("next_month", None, &mut |_| true).unwrap();
+        assert_eq!(calendar.shown_months(), [(2027, 1), (2027, 2)]);
+        assert!(
+            calendar
+                .weeks_of(2027, 2)
+                .iter()
+                .flatten()
+                .any(|day| day.format() == "2027-02-28")
+        );
     }
 }

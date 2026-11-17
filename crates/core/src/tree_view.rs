@@ -33,6 +33,10 @@ pub struct TreeView {
     disabled: HashSet<String>,
     labels: HashMap<String, String>,
     selected: Option<String>,
+    /// Nodes whose children are fetched when they are first opened, and those
+    /// being fetched now.
+    lazy: HashSet<String>,
+    loading: HashSet<String>,
     /// Whether several nodes can be selected. A press or Space then adds a node to
     /// the selection or takes it out.
     multiple: bool,
@@ -65,7 +69,12 @@ impl TreeView {
 
     /// The rows on screen, in order.
     pub fn rows(&self) -> Vec<Row> {
-        Tree::new(&self.data).visible_rows(&self.expanded)
+        let mut rows = Tree::new(&self.data).visible_rows(&self.expanded);
+        // A node still to be loaded can be opened, though it has nothing yet.
+        for row in rows.iter_mut().filter(|row| self.lazy.contains(&row.key)) {
+            row.has_children = true;
+        }
+        rows
     }
 
     fn enabled(&self, key: &str) -> bool {
@@ -91,6 +100,34 @@ impl TreeView {
                     .find(|row| self.enabled(&row.key))
                     .map(|row| row.key.clone())
             })
+    }
+
+    /// Marks nodes whose children are loaded on demand. Opening one offers
+    /// `load:<key>` to the gate, and the owner answers with
+    /// `set("children", "<key>=child,child")` when they arrive.
+    pub fn lazy(mut self, keys: &[&str]) -> Self {
+        self.lazy = keys.iter().map(|key| key.to_string()).collect();
+        self
+    }
+
+    pub fn is_loading(&self, key: &str) -> bool {
+        self.loading.contains(key)
+    }
+
+    /// Opens a node. One whose children have yet to be loaded asks for them first.
+    fn open_node(&mut self, key: &str, gate: Gate) {
+        if !self.lazy.contains(key) {
+            self.expanded.insert(key.to_string());
+        } else if !self.loading.contains(key) {
+            let asked = gate(&ValueChange {
+                value: vec![format!("load:{key}")],
+                source: Source::User,
+                reason: Reason::Action,
+            });
+            if asked {
+                self.loading.insert(key.to_string());
+            }
+        }
     }
 
     /// Lets several nodes be selected at once.
@@ -323,7 +360,7 @@ impl TreeView {
                     );
                     self.move_to(child)
                 } else {
-                    self.expanded.insert(current);
+                    self.open_node(&current, gate);
                     Reaction::handled()
                 }
             }
@@ -380,6 +417,29 @@ impl Primitive for TreeView {
 
     fn tracks_pointer(part: Part) -> bool {
         part == Part::Node
+    }
+
+    fn set(&mut self, name: &str, value: &str) -> bool {
+        let Some((parent, children)) = value.split_once('=').filter(|_| name == "children") else {
+            return false;
+        };
+        for (index, child) in children
+            .split(',')
+            .filter(|child| !child.is_empty())
+            .enumerate()
+        {
+            let item = TreeItem {
+                key: child.to_string(),
+                label: child.rsplit('/').next().unwrap_or(child).to_string(),
+                children: Vec::new(),
+            };
+            self.data.push(item);
+            place_node(&mut self.data, child, Some(parent), index);
+        }
+        self.lazy.remove(parent);
+        self.loading.remove(parent);
+        self.expanded.insert(parent.to_string());
+        true
     }
 
     fn upsert_item(&mut self, item: Item) {
@@ -459,7 +519,11 @@ impl Primitive for TreeView {
             Input::Press {
                 item: Some(key), ..
             } if self.enabled(&key) => {
-                if !Tree::new(&self.data).children(&key).is_empty() && !self.expanded.remove(&key) {
+                if self.lazy.contains(&key) {
+                    self.open_node(&key, gate);
+                } else if !Tree::new(&self.data).children(&key).is_empty()
+                    && !self.expanded.remove(&key)
+                {
                     self.expanded.insert(key.clone());
                 }
                 self.select(&key, Source::User, Reason::Press, gate);
@@ -612,9 +676,7 @@ impl Primitive for TreeView {
             return Err(ActError::Disabled(key.to_string()));
         }
         match action {
-            "expand" => {
-                self.expanded.insert(key.to_string());
-            }
+            "expand" => self.open_node(key, gate),
             "collapse" => {
                 self.expanded.remove(key);
             }
@@ -934,5 +996,36 @@ mod tests {
         assert_eq!(tree.semantics(Part::Node, Some("src")).selected, Some(true));
         tree.act("select", Some("src"), &mut |_| true).unwrap();
         assert_eq!(tree.value(), ["README.md"]);
+    }
+
+    #[test]
+    fn a_node_can_load_its_children_when_it_is_first_opened() {
+        let mut tree =
+            TreeView::new(tree_from_paths(&["remote", "README.md"]), Dir::Ltr).lazy(&["remote"]);
+        assert!(
+            tree.rows()[0].has_children,
+            "it can be opened, though nothing is loaded"
+        );
+        let mut asked = Vec::new();
+        tree.send(
+            Input::Key {
+                key: Key::ArrowRight,
+                mods: Modifiers::default(),
+                now_ms: 0,
+            },
+            &mut |change| {
+                asked.extend(change.value.iter().cloned());
+                true
+            },
+        );
+        assert_eq!(asked, ["load:remote"]);
+        assert!(tree.is_loading("remote"));
+        assert_eq!(visible(&tree), ["remote", "README.md"]);
+        assert!(tree.set("children", "remote=remote/a.txt,remote/b.txt"));
+        assert_eq!(
+            visible(&tree),
+            ["remote", "remote/a.txt", "remote/b.txt", "README.md"]
+        );
+        assert!(!tree.is_loading("remote"));
     }
 }
