@@ -14,9 +14,10 @@ use armature_core::popup::{Align, Side};
 use armature_core::primitive::{Focusable, Input, Item, PartOf, Primitive, Role, Semantics};
 use gpui::prelude::*;
 use gpui::{
-    Anchor, AnyElement, App, Bounds, ClickEvent, Context, Div, Empty, Entity, FocusHandle,
-    Interactivity, KeyDownEvent, MouseDownEvent, Pixels, Point, SharedString, Stateful,
-    StyleRefinement, Window, anchored, canvas, deferred, div, point, px,
+    A11ySubtreeBuilder, Anchor, AnyElement, App, Bounds, ClickEvent, Context, Div, ElementId,
+    Empty, Entity, FocusHandle, GlobalElementId, InspectorElementId, Interactivity, KeyDownEvent,
+    LayoutId, MouseDownEvent, Pixels, Point, SharedString, Stateful, StyleRefinement, Window,
+    anchored, deferred, div, point, px,
 };
 
 pub use armature_core::change::{Reason, Source};
@@ -210,15 +211,12 @@ pub fn part<K: PartOf>(
     let anchors_a_popup = parts.iter().any(|other| {
         K::Primitive::popup_of(*other).is_some_and(|placement| placement.anchor == part)
     });
-    if anchors_a_popup {
+    let record: Option<RecordBounds> = anchors_a_popup.then(|| {
         let state = state.clone();
-        let record = move |bounds, _: &mut Window, cx: &mut App| {
+        Box::new(move |bounds, cx: &mut App| {
             state.update(cx, |state, _| state.anchors.insert(part, bounds));
-        };
-        el = el
-            .relative()
-            .child(canvas(record, |_, _, _, _| {}).absolute().size_full());
-    }
+        }) as RecordBounds
+    });
     if let Some(placement) = K::Primitive::popup_of(part) {
         let state = state.clone();
         el = el.on_mouse_down_out(move |event: &MouseDownEvent, window, cx| {
@@ -247,7 +245,11 @@ pub fn part<K: PartOf>(
         },
     };
     let Some(handle) = handle else {
-        return PartElement { inner: el, layout };
+        return PartElement {
+            inner: el,
+            layout,
+            record,
+        };
     };
     let handle = handle.tab_stop(semantics.focusable == Focusable::TabStop);
     let item = item.map(str::to_string);
@@ -281,7 +283,11 @@ pub fn part<K: PartOf>(
                 state.update(cx, |state, cx| state.dispatch(input, window, cx));
             }
         });
-    PartElement { inner, layout }
+    PartElement {
+        inner,
+        layout,
+        record,
+    }
 }
 
 enum Layout {
@@ -318,7 +324,11 @@ fn floating(side: Side, align: Align, gap: f64, anchor: Bounds<Pixels>) -> Layou
 pub struct PartElement {
     inner: Stateful<Div>,
     layout: Layout,
+    /// Set on a part that anchors a popup.
+    record: Option<RecordBounds>,
 }
+
+type RecordBounds = Box<dyn Fn(Bounds<Pixels>, &mut App)>;
 
 impl Styled for PartElement {
     fn style(&mut self) -> &mut StyleRefinement {
@@ -345,7 +355,14 @@ impl IntoElement for PartElement {
 
     fn into_element(self) -> AnyElement {
         match self.layout {
-            Layout::Inline => self.inner.into_any_element(),
+            Layout::Inline => match self.record {
+                None => self.inner.into_any_element(),
+                Some(record) => Measured {
+                    inner: self.inner,
+                    record,
+                }
+                .into_any_element(),
+            },
             Layout::Hidden => Empty.into_any_element(),
             Layout::Floating { corner, position } => deferred(
                 anchored()
@@ -396,5 +413,94 @@ fn accessibility_role(role: Role) -> gpui::Role {
         Role::Tab => gpui::Role::Tab,
         Role::TabPanel => gpui::Role::TabPanel,
         Role::ComboBox => gpui::Role::ComboBox,
+    }
+}
+
+/// A `div` that reports the bounds it was laid out with, borders and padding
+/// included. A probe child could not see those.
+struct Measured {
+    inner: Stateful<Div>,
+    record: RecordBounds,
+}
+
+impl IntoElement for Measured {
+    type Element = Self;
+
+    fn into_element(self) -> Self {
+        self
+    }
+}
+
+impl Element for Measured {
+    type RequestLayoutState = <Stateful<Div> as Element>::RequestLayoutState;
+    type PrepaintState = <Stateful<Div> as Element>::PrepaintState;
+
+    fn id(&self) -> Option<ElementId> {
+        Element::id(&self.inner)
+    }
+
+    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        Element::source_location(&self.inner)
+    }
+
+    fn a11y_role(&self) -> Option<gpui::Role> {
+        Element::a11y_role(&self.inner)
+    }
+
+    fn write_a11y_info(&self, node: &mut accesskit::Node) {
+        Element::write_a11y_info(&self.inner, node);
+    }
+
+    fn a11y_synthetic_children(
+        &mut self,
+        prepaint: &mut Self::PrepaintState,
+        builder: &mut A11ySubtreeBuilder,
+    ) {
+        Element::a11y_synthetic_children(&mut self.inner, prepaint, builder);
+    }
+
+    fn request_layout(
+        &mut self,
+        id: Option<&GlobalElementId>,
+        inspector_id: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        self.inner.request_layout(id, inspector_id, window, cx)
+    }
+
+    fn prepaint(
+        &mut self,
+        id: Option<&GlobalElementId>,
+        inspector_id: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        state: &mut Self::RequestLayoutState,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self::PrepaintState {
+        (self.record)(bounds, cx);
+        self.inner
+            .prepaint(id, inspector_id, bounds, state, window, cx)
+    }
+
+    fn paint(
+        &mut self,
+        id: Option<&GlobalElementId>,
+        inspector_id: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        request_layout: &mut Self::RequestLayoutState,
+        prepaint: &mut Self::PrepaintState,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        self.inner.paint(
+            id,
+            inspector_id,
+            bounds,
+            request_layout,
+            prepaint,
+            window,
+            cx,
+        );
     }
 }

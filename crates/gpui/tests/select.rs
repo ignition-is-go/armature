@@ -24,6 +24,8 @@ impl Render for Demo {
                 part(&self.size, Part::Trigger, None, cx)
                     .w(px(100.))
                     .h(px(30.))
+                    .p_2()
+                    .border_1()
                     .child("Size"),
             )
             .child(content)
@@ -64,8 +66,9 @@ fn trigger_has_focus(size: &Entity<Machine<Select>>, cx: &mut VisualTestContext)
 }
 
 const IN_TRIGGER: (f32, f32) = (10., 10.);
-/// Inside the first option when the popup sits 4px below the 30px trigger.
-const IN_FIRST_OPTION: (f32, f32) = (10., 44.);
+/// Inside the first option only if the popup lines up with the trigger's outer edge,
+/// 4px below it.
+const IN_FIRST_OPTION: (f32, f32) = (2., 36.);
 const FAR_AWAY: (f32, f32) = (400., 400.);
 
 fn click(cx: &mut VisualTestContext, (x, y): (f32, f32)) {
