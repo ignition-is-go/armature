@@ -24,6 +24,8 @@ use crate::agent;
 pub type ChangeGate = Callback<ValueChange, bool>;
 
 thread_local! {
+    /// Where focus was before a component's hotkey took it, by component.
+    static RETURN_TO: std::cell::RefCell<std::collections::HashMap<u32, HtmlElement>> = std::cell::RefCell::new(Default::default());
     /// The popups and dialogs open on the page, in the order they opened.
     static LAYERS: std::cell::RefCell<armature_core::layers::LayerStack> = std::cell::RefCell::new(Default::default());
     static NEXT_INSTANCE: Cell<u32> = const { Cell::new(1) };
@@ -149,12 +151,24 @@ impl<P: Primitive + Send + Sync> Context<P> {
                 Ask::CapturePointer => {}
                 Ask::ScrollTo { offset } => {
                     let scrolling = P::parts().iter().copied().find(|part| P::scrolls(*part));
+                    let across =
+                        self.machine.with_untracked(|m| m.scroll_axis()) == Orientation::Horizontal;
                     if let Some(element) = scrolling.and_then(|part| self.element_of(part, None)) {
-                        element.set_scroll_top(offset as i32);
+                        if across {
+                            element.set_scroll_left(offset as i32);
+                        } else {
+                            element.set_scroll_top(offset as i32);
+                        }
                     }
                 }
                 Ask::Copy { text } => {
                     let _ = window().navigator().clipboard().write_text(&text);
+                }
+                Ask::RestoreFocus => {
+                    let back = RETURN_TO.with_borrow_mut(|held| held.remove(&self.instance));
+                    if let Some(back) = back {
+                        let _ = back.focus();
+                    }
                 }
                 Ask::PickFiles { multiple, accept } => {
                     // The browser only shows its picker from a file input, so one is
@@ -236,10 +250,18 @@ impl<P: Primitive + Send + Sync> Context<P> {
         let own = item
             .as_deref()
             .and_then(|item| self.element_of(placement.anchor, Some(item)));
-        let Some(anchor) = own.or_else(|| self.element_of(placement.anchor, None)) else {
-            return;
+        // A popup called up at a point, as a context menu is, sits against that point.
+        let point = self.machine.with_untracked(|m| m.popup_point());
+        let at_point = point.and_then(|point| {
+            web_sys::DomRect::new_with_x_and_y_and_width_and_height(point.x, point.y, 0.0, 0.0).ok()
+        });
+        let anchor = match at_point {
+            Some(rect) => rect,
+            None => match own.or_else(|| self.element_of(placement.anchor, None)) {
+                Some(anchor) => anchor.get_bounding_client_rect(),
+                None => return,
+            },
         };
-        let anchor = anchor.get_bounding_client_rect();
         let size = popup.get_bounding_client_rect();
         let dimension = |value: Result<JsValue, JsValue>| value.ok().and_then(|v| v.as_f64());
         let viewport = Size {
@@ -364,6 +386,7 @@ pub(crate) fn key_from_dom(key: &str) -> Option<Key> {
         "Tab" => Key::Tab,
         "Backspace" => Key::Backspace,
         "F2" => Key::F2,
+        "F6" => Key::F6,
         other => {
             let mut chars = other.chars();
             match (chars.next(), chars.next()) {
@@ -450,6 +473,10 @@ pub fn Root<P>(
     /// what is being approved.
     #[prop(optional, into)]
     agent_confirm: Option<String>,
+    /// Settings the owner changes while the component runs, as name and value: a
+    /// combobox's `status`, for one. Each is passed to `Primitive::set`.
+    #[prop(optional, into)]
+    settings: Option<Signal<Vec<(String, String)>>>,
     children: Children,
 ) -> impl IntoView
 where
@@ -535,6 +562,45 @@ where
             ctx.dispatch(Input::WindowBlur);
         });
         on_cleanup(move || away.remove());
+    }
+
+    if let Some(settings) = settings {
+        Effect::new(move |_| {
+            let settings = settings.get();
+            machine.update(|m| {
+                for (name, value) in &settings {
+                    m.set(name, value);
+                }
+            });
+        });
+    }
+
+    // A key that reaches the component from anywhere on the page.
+    if let Some(shortcut) = machine.with_untracked(|m| m.hotkey()) {
+        let inside = format!("[data-armature=\"{instance}\"]");
+        let listener = window_event_listener(leptos::ev::keydown, move |ev| {
+            let mods = modifiers(ev.shift_key(), ev.ctrl_key() || ev.meta_key(), ev.alt_key());
+            if !key_from_dom(&ev.key()).is_some_and(|key| shortcut.matches(key, mods)) {
+                return;
+            }
+            ev.prevent_default();
+            // Where focus was is remembered, so the key can send it back.
+            let active = document().active_element();
+            let outside = active
+                .as_ref()
+                .is_some_and(|active| !matches!(active.closest(&inside), Ok(Some(_))));
+            if let Some(active) = active
+                .filter(|_| outside)
+                .and_then(|active| active.dyn_into::<HtmlElement>().ok())
+            {
+                RETURN_TO.with_borrow_mut(|held| held.insert(instance, active));
+            }
+            ctx.dispatch(Input::Hotkey);
+        });
+        on_cleanup(move || {
+            listener.remove();
+            RETURN_TO.with_borrow_mut(|held| held.remove(&instance));
+        });
     }
 
     // A primitive whose value was set from outside may have a timer to start.
@@ -857,6 +923,7 @@ where
         Effect::new(move |_| {
             let Some(element) = element.get() else { return };
             let item = item.clone();
+            let for_context = item.clone();
             let found = Closure::<dyn Fn()>::new(move || {
                 ctx.dispatch(Input::Found {
                     part,
@@ -866,6 +933,26 @@ where
             let _ = element
                 .add_event_listener_with_callback("beforematch", found.as_ref().unchecked_ref());
             found.forget();
+            // The platform's gesture for a context menu goes to a part that takes it,
+            // in place of the browser's own menu.
+            if K::Primitive::context(part) {
+                let item = for_context;
+                let asked =
+                    Closure::<dyn Fn(web_sys::MouseEvent)>::new(move |ev: web_sys::MouseEvent| {
+                        ev.prevent_default();
+                        let at = Point::new(ev.client_x() as f64, ev.client_y() as f64);
+                        ctx.dispatch(Input::ContextMenu {
+                            part,
+                            item: item.clone(),
+                            at,
+                        });
+                    });
+                let _ = element.add_event_listener_with_callback(
+                    "contextmenu",
+                    asked.as_ref().unchecked_ref(),
+                );
+                asked.forget();
+            }
             // Files dragged from outside the page may be dropped on a part that takes them.
             if K::Primitive::drops(part) {
                 let over =
@@ -962,13 +1049,25 @@ where
     let scrolls = K::Primitive::scrolls(part);
     let report_scroll = move || {
         if let Some(scroller) = element.get_untracked() {
-            let offset = scroller.scroll_top() as f64;
-            let viewport = scroller.client_height() as f64;
+            let across = ctx.machine.with_untracked(|m| m.scroll_axis()) == Orientation::Horizontal;
+            let (offset, viewport, content) = if across {
+                (
+                    scroller.scroll_left(),
+                    scroller.client_width(),
+                    scroller.scroll_width(),
+                )
+            } else {
+                (
+                    scroller.scroll_top(),
+                    scroller.client_height(),
+                    scroller.scroll_height(),
+                )
+            };
             ctx.dispatch(Input::Scrolled {
                 part,
-                offset,
-                viewport,
-                content: scroller.scroll_height() as f64,
+                offset: offset as f64,
+                viewport: viewport as f64,
+                content: content as f64,
                 now_ms: js_sys::Date::now() as u64,
             });
         }

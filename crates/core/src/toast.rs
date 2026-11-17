@@ -280,6 +280,12 @@ impl Primitive for Toaster {
         Some(Part::Region)
     }
 
+    /// F6 moves focus into the stack and back, so the keyboard can reach a
+    /// notification without tabbing through the page.
+    fn hotkey(&self) -> Option<crate::shortcut::Shortcut> {
+        crate::shortcut::Shortcut::parse("f6")
+    }
+
     fn wake_after(&self) -> Option<u64> {
         (self.paused.is_none() && !self.unstarted().is_empty()).then_some(0)
     }
@@ -390,6 +396,15 @@ impl Primitive for Toaster {
                 self.focused = None;
                 Reaction::default()
             }
+            Input::Hotkey => match (&self.focused, self.visible().last()) {
+                (Some(_), _) => {
+                    self.focused = None;
+                    Reaction::handled().with(Effect::RestoreFocus)
+                }
+                // The newest notification is the one most likely wanted.
+                (None, Some(toast)) => Reaction::item(Part::Close, true, Some(toast.id.clone())),
+                (None, None) => Reaction::default(),
+            },
             Input::Press {
                 part: Part::Close,
                 item: Some(id),
@@ -702,6 +717,29 @@ mod tests {
         drag(&mut toaster, PointerPhase::Move, 90.0);
         drag(&mut toaster, PointerPhase::Up, 90.0);
         assert!(ids(&toaster).is_empty());
+    }
+
+    #[test]
+    fn the_hotkey_moves_focus_into_the_stack_and_back() {
+        let mut toaster = toaster(&[Toast::new("a", "Saved"), Toast::new("b", "Sent")]);
+        assert_eq!(toaster.hotkey().map(|key| key.key), Some(Key::F6));
+        let entered = toaster.send(Input::Hotkey, &mut |_| true);
+        assert_eq!(
+            (
+                entered.focus.as_ref().map(|target| target.part),
+                entered.focus_item()
+            ),
+            (Some(Part::Close), Some("b"))
+        );
+        toaster.send(
+            Input::Focus {
+                part: Part::Close,
+                item: Some("b".into()),
+            },
+            &mut |_| true,
+        );
+        let left = toaster.send(Input::Hotkey, &mut |_| true);
+        assert_eq!(left.effects, [Effect::RestoreFocus]);
     }
 
     #[test]

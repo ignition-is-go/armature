@@ -21,6 +21,17 @@ pub enum Part {
     Clear,
     /// Shown in the list when nothing matches.
     Empty,
+    /// Shown in the list while results are loading, or when loading failed.
+    Status,
+}
+
+/// Where results that come from elsewhere are.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Loading {
+    #[default]
+    Idle,
+    Loading,
+    Error,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -48,9 +59,16 @@ pub struct Combobox {
     selected: Vec<String>,
     active: Option<String>,
     on_clear: bool,
+    loading: Loading,
 }
 
 impl Combobox {
+    /// Whether results are loading or failed. The owner says so with
+    /// `set("status", "loading")`, `"error"` or `"idle"`.
+    pub fn loading(&self) -> Loading {
+        self.loading
+    }
+
     pub fn new(opts: Options) -> Self {
         Combobox {
             opts,
@@ -193,6 +211,7 @@ impl Primitive for Combobox {
             Part::Chip,
             Part::Clear,
             Part::Empty,
+            Part::Status,
         ]
     }
 
@@ -221,6 +240,18 @@ impl Primitive for Combobox {
 
     fn named_part(&self) -> Option<Part> {
         Some(Part::Input)
+    }
+
+    fn set(&mut self, name: &str, value: &str) -> bool {
+        if name != "status" {
+            return false;
+        }
+        self.loading = match value {
+            "loading" => Loading::Loading,
+            "error" => Loading::Error,
+            _ => Loading::Idle,
+        };
+        true
     }
 
     fn upsert_item(&mut self, item: Item) {
@@ -290,9 +321,19 @@ impl Primitive for Combobox {
                     ..Default::default()
                 }
             }
+            (Part::Status, _) => Semantics {
+                role: Some(if self.loading == Loading::Error {
+                    Role::Alert
+                } else {
+                    Role::Status
+                }),
+                hidden: !self.open || self.loading == Loading::Idle,
+                ..Default::default()
+            },
+            // Nothing is said to be missing while results may still arrive.
             (Part::Empty, _) => Semantics {
                 role: Some(Role::Status),
-                hidden: !self.open || !nothing,
+                hidden: !self.open || !nothing || self.loading != Loading::Idle,
                 ..Default::default()
             },
         }
@@ -317,6 +358,7 @@ impl Primitive for Combobox {
                     .find(|key| self.items.is_enabled(key))
                     .map(|key| key.to_string());
                 let message = match results.len() {
+                    _ if self.loading == Loading::Loading => "Loading".to_string(),
                     0 => "No results".to_string(),
                     1 => "1 result".to_string(),
                     count => format!("{count} results"),
@@ -683,5 +725,29 @@ mod tests {
             },
             &items,
         );
+    }
+
+    #[test]
+    fn while_results_load_it_says_so_and_not_that_nothing_matches() {
+        let mut combobox = fruit(Options::default());
+        assert!(combobox.set("status", "loading"));
+        let said = typed(&mut combobox, "zzz");
+        assert_eq!(
+            said.effects,
+            [crate::primitive::Effect::Announce {
+                message: "Loading".into(),
+                assertive: false
+            }]
+        );
+        assert!(combobox.semantics(Part::Empty, None).hidden);
+        assert!(!combobox.semantics(Part::Status, None).hidden);
+        combobox.set("status", "error");
+        assert_eq!(
+            combobox.semantics(Part::Status, None).role,
+            Some(Role::Alert)
+        );
+        combobox.set("status", "idle");
+        assert!(!combobox.semantics(Part::Empty, None).hidden);
+        assert!(!combobox.set("colour", "red"), "not a setting it has");
     }
 }

@@ -71,6 +71,7 @@ fn inputs<P: Primitive>(items: &[Item]) -> Vec<Input<P::Part>> {
     let mods = Modifiers::default();
     let mut all: Vec<Input<P::Part>> = vec![
         Input::PressOutside,
+        Input::Hotkey,
         Input::DragOver { inside: true },
         Input::Files {
             files: vec![crate::primitive::FileInfo {
@@ -108,6 +109,11 @@ fn inputs<P: Primitive>(items: &[Item]) -> Vec<Input<P::Part>> {
             value: "12".into(),
         });
         all.push(Input::Loaded { part, ok: true });
+        all.push(Input::ContextMenu {
+            part,
+            item: item.clone(),
+            at: crate::geometry::Point::new(5.0, 5.0),
+        });
         all.push(Input::Blur {
             part,
             item: item.clone(),

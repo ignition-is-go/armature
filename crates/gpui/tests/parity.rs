@@ -641,3 +641,109 @@ fn a_text_field_shows_its_problem_once_it_is_left(cx: &mut TestAppContext) {
         m.semantics(text_field::Part::Input, None).invalid
     }));
 }
+
+#[gpui::test]
+fn the_toast_hotkey_moves_focus_into_the_stack_and_back(cx: &mut TestAppContext) {
+    struct Both {
+        other: Entity<Machine<Toggle>>,
+        toaster: Entity<Machine<Toaster>>,
+    }
+    impl Render for Both {
+        fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            self.toaster.update(cx, |m, cx| {
+                m.track(toast::Part::Close, ["a".to_string()], cx)
+            });
+            div()
+                .child(part(&self.other, toggle::Part::Root, None, cx).size(px(ROW)))
+                .child(
+                    part(&self.toaster, toast::Part::Region, None, cx).child(
+                        part(&self.toaster, toast::Part::Close, Some("a"), cx).size(px(ROW)),
+                    ),
+                )
+        }
+    }
+    let (page, cx) = cx.add_window_view(|_, cx| Both {
+        other: cx.new(|cx| Machine::new(Toggle::default(), "Other", Vec::<Item>::new(), cx)),
+        toaster: cx.new(|cx| {
+            let mut toaster = Toaster::default();
+            toaster.set_value(vec![Toast::new("a", "Saved").lasting(0).encode()]);
+            Machine::new(toaster, "Notifications", Vec::<Item>::new(), cx)
+        }),
+    });
+    let (other, toaster) = page.update(cx, |page, _| (page.other.clone(), page.toaster.clone()));
+    cx.update(|window, _| window.activate_window());
+    cx.simulate_mouse_move(point(px(300.), px(300.)), None, Modifiers::default());
+    cx.run_until_parked();
+
+    focus(&other, cx, toggle::Part::Root, None);
+    cx.simulate_keystrokes("f6");
+    cx.run_until_parked();
+    let on_close = toaster.update_in(cx, |m, window, _| {
+        m.focus_handle(toast::Part::Close, Some("a"))
+            .unwrap()
+            .is_focused(window)
+    });
+    assert!(on_close, "into the stack");
+    cx.simulate_keystrokes("f6");
+    cx.run_until_parked();
+    assert!(
+        is_focused(&other, cx, toggle::Part::Root),
+        "and back to where it was"
+    );
+}
+
+#[gpui::test]
+fn a_right_click_opens_a_menu_where_the_pointer_is(cx: &mut TestAppContext) {
+    let entries = vec![
+        Entry::action("copy", "Copy"),
+        Entry::action("paste", "Paste"),
+    ];
+    let (menu, cx) = open(
+        cx,
+        Menu::new(entries),
+        |menu: &Entity<Machine<Menu>>, cx: &mut App| {
+            let shown: Vec<String> = menu
+                .read(cx)
+                .primitive()
+                .shown()
+                .iter()
+                .map(|entry| entry.key.clone())
+                .collect();
+            menu.update(cx, |m, cx| m.track(menu::Part::Item, shown.clone(), cx));
+            div()
+                .size_full()
+                .child(part(menu, menu::Part::Area, None, cx).size(px(400.)))
+                .child(
+                    part(menu, menu::Part::Content, None, cx).children(
+                        shown
+                            .iter()
+                            .map(|key| {
+                                part(menu, menu::Part::Item, Some(key), cx)
+                                    .h(px(ROW))
+                                    .w(px(80.))
+                            })
+                            .collect::<Vec<_>>(),
+                    ),
+                )
+        },
+    );
+    cx.simulate_mouse_down(
+        point(px(120.), px(90.)),
+        gpui::MouseButton::Right,
+        Modifiers::default(),
+    );
+    cx.simulate_mouse_up(
+        point(px(120.), px(90.)),
+        gpui::MouseButton::Right,
+        Modifiers::default(),
+    );
+    cx.run_until_parked();
+    assert!(menu.read_with(cx, |m, _| m.primitive().is_open()));
+    let at = menu
+        .read_with(cx, |m, _| m.primitive().popup_point())
+        .unwrap();
+    assert_eq!((at.x, at.y), (120.0, 90.0));
+    cx.simulate_keystrokes("down enter");
+    cx.run_until_parked();
+    assert!(!menu.read_with(cx, |m, _| m.primitive().is_open()));
+}

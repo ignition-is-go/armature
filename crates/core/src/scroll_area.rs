@@ -1,5 +1,6 @@
 use crate::agent::{ActError, Snapshot};
 use crate::change::Gate;
+use crate::keys::Orientation;
 use crate::primitive::{
     Effect, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction, Role,
     Semantics, ValueRange,
@@ -24,7 +25,7 @@ const IDLE_MS: u64 = 1000;
 /// A scrolling box with a scrollbar you draw yourself. The platform still does the
 /// scrolling, so wheels, touch and the keyboard behave as they do everywhere. It
 /// scrolls down the page. It has no value.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct ScrollArea {
     offset: f64,
     viewport: f64,
@@ -34,9 +35,34 @@ pub struct ScrollArea {
     hovered: bool,
     idle_at: Option<u64>,
     scrolling: bool,
+    axis: Orientation,
+}
+
+impl Default for ScrollArea {
+    fn default() -> Self {
+        ScrollArea {
+            offset: 0.0,
+            viewport: 0.0,
+            content: 0.0,
+            drag: None,
+            hovered: false,
+            idle_at: None,
+            scrolling: false,
+            axis: Orientation::Vertical,
+        }
+    }
 }
 
 impl ScrollArea {
+    /// A box that scrolls across the page. The default scrolls down it. For both,
+    /// put one inside the other.
+    pub fn horizontal() -> Self {
+        ScrollArea {
+            axis: Orientation::Horizontal,
+            ..ScrollArea::default()
+        }
+    }
+
     /// Whether there is more content than fits.
     pub fn overflows(&self) -> bool {
         self.content > self.viewport + 0.5
@@ -88,6 +114,10 @@ impl Primitive for ScrollArea {
         part == Part::Viewport
     }
 
+    fn scroll_axis(&self) -> Orientation {
+        self.axis
+    }
+
     fn tracks_pointer(part: Part) -> bool {
         matches!(part, Part::Scrollbar | Part::Thumb)
     }
@@ -115,6 +145,7 @@ impl Primitive for ScrollArea {
             // use. The drawn scrollbar is for the pointer, so it takes no focus.
             Part::Scrollbar => Semantics {
                 role: Some(Role::ScrollBar),
+                orientation: Some(self.axis),
                 hidden: !self.overflows(),
                 range: Some(ValueRange {
                     now: self.offset,
@@ -179,8 +210,13 @@ impl Primitive for ScrollArea {
         let Some(track) = measure(Part::Scrollbar, None) else {
             return Reaction::default();
         };
-        let along = pointer.at.y - track.y;
-        let (start, _) = self.thumb(track.height);
+        let across = self.axis == Orientation::Horizontal;
+        let (along, length) = if across {
+            (pointer.at.x - track.x, track.width)
+        } else {
+            (pointer.at.y - track.y, track.height)
+        };
+        let (start, _) = self.thumb(length);
         let scroll_to = |offset: f64| {
             Reaction::handled().with(Effect::ScrollTo {
                 offset: offset.round() as u32,
@@ -188,7 +224,7 @@ impl Primitive for ScrollArea {
         };
         match (pointer.phase, pointer.part) {
             (PointerPhase::Down, Part::Thumb) => {
-                self.drag = Some((along - start, track.height));
+                self.drag = Some((along - start, length));
                 Reaction::handled().with(Effect::CapturePointer)
             }
             // A press on the track pages towards it, as a platform scrollbar does.
@@ -347,5 +383,33 @@ mod tests {
     #[test]
     fn it_conforms() {
         crate::testing::assert_conforms(ScrollArea::default, &[]);
+    }
+
+    #[test]
+    fn a_sideways_area_reads_the_pointer_and_the_track_along_its_own_axis() {
+        let mut area = ScrollArea::horizontal();
+        assert_eq!(area.scroll_axis(), Orientation::Horizontal);
+        area.send(
+            Input::Scrolled {
+                part: Part::Viewport,
+                offset: 0.0,
+                viewport: 200.0,
+                content: 1000.0,
+                now_ms: 0,
+            },
+            &mut |_| true,
+        );
+        let wide = |_: Part, _: Option<&str>| Some(Rect::new(0.0, 0.0, 200.0, 10.0));
+        let at = |x: f64, phase| Pointer {
+            phase,
+            part: Part::Thumb,
+            item: None,
+            at: Point::new(x, 0.0),
+            mods: Modifiers::default(),
+            now_ms: 0,
+        };
+        area.pointer(at(10.0, PointerPhase::Down), &wide, &mut |_| true);
+        let dragged = area.pointer(at(90.0, PointerPhase::Move), &wide, &mut |_| true);
+        assert_eq!(dragged.effects, [Effect::ScrollTo { offset: 400 }]);
     }
 }

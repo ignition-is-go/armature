@@ -59,7 +59,6 @@ pub mod radio;
 pub mod reorder;
 pub mod resizable;
 pub mod roving;
-pub mod safe_area;
 pub mod scroll;
 pub mod scroll_area;
 pub mod select;

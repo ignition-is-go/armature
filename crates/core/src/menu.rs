@@ -67,6 +67,9 @@ pub enum Part {
     Content,
     /// One entry, keyed by its key.
     Item,
+    /// Optional. A region whose context-menu gesture, such as a right click, opens
+    /// the menu where the pointer is.
+    Area,
 }
 
 const ACTIONS: &[&str] = &["open", "close", "run", "toggle"];
@@ -85,6 +88,8 @@ pub struct Menu {
     checked: HashSet<String>,
     chosen: HashMap<String, String>,
     typeahead: Typeahead,
+    /// Where the pointer was when the menu was called up as a context menu.
+    point: Option<crate::geometry::Point>,
 }
 
 impl Menu {
@@ -139,6 +144,7 @@ impl Menu {
     }
 
     fn close(&mut self) {
+        self.point = None;
         self.open = false;
         self.path.clear();
         self.active = None;
@@ -231,7 +237,7 @@ impl Primitive for Menu {
     type Part = Part;
 
     fn parts() -> &'static [Part] {
-        &[Part::Trigger, Part::Content, Part::Item]
+        &[Part::Trigger, Part::Content, Part::Item, Part::Area]
     }
 
     fn is_item(_: Part) -> bool {
@@ -240,6 +246,14 @@ impl Primitive for Menu {
 
     fn hovers(part: Part) -> bool {
         part == Part::Item
+    }
+
+    fn context(part: Part) -> bool {
+        part == Part::Area
+    }
+
+    fn popup_point(&self) -> Option<crate::geometry::Point> {
+        self.point.filter(|_| self.open)
     }
 
     fn popup_of(part: Part) -> Option<Placement<Part>> {
@@ -261,7 +275,7 @@ impl Primitive for Menu {
                 labelled_by: Some(Part::Trigger),
                 ..Default::default()
             },
-            Part::Item => Relations::default(),
+            Part::Item | Part::Area => Relations::default(),
         }
     }
 
@@ -319,6 +333,7 @@ impl Primitive for Menu {
                     ..Default::default()
                 }
             }
+            (Part::Area, _) => Semantics::default(),
             (Part::Item, None) => Semantics {
                 role: Some(Role::MenuItem),
                 hidden: item.is_some(),
@@ -329,6 +344,12 @@ impl Primitive for Menu {
 
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
         match (input, self.open) {
+            // Called up where the pointer is, as a context menu.
+            (Input::ContextMenu { at, .. }, _) => {
+                let reaction = self.open_at(false);
+                self.point = Some(at);
+                reaction
+            }
             (
                 Input::Press {
                     part: Part::Trigger,
@@ -648,6 +669,25 @@ mod tests {
             menu.act("run", Some("open"), &mut |_| true),
             Err(ActError::Disabled("open".into()))
         );
+    }
+
+    #[test]
+    fn a_context_gesture_opens_the_menu_where_the_pointer_is() {
+        let mut menu = menu();
+        let at = crate::geometry::Point::new(120.0, 80.0);
+        let opened = menu.send(
+            Input::ContextMenu {
+                part: Part::Area,
+                item: None,
+                at,
+            },
+            &mut |_| true,
+        );
+        assert!(menu.is_open());
+        assert_eq!(opened.focus_item(), Some("new"));
+        assert_eq!(menu.popup_point(), Some(at));
+        menu.send(Input::PressOutside, &mut |_| true);
+        assert_eq!(menu.popup_point(), None);
     }
 
     #[test]

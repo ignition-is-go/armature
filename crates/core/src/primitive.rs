@@ -45,6 +45,15 @@ pub enum Input<Part> {
     Files { files: Vec<FileInfo>, dropped: bool },
     /// Files being dragged came over a part that takes drops, or left it.
     DragOver { inside: bool },
+    /// The primitive's `hotkey` was pressed, wherever focus was.
+    Hotkey,
+    /// The platform's gesture for a context menu, such as a right click or a long
+    /// press, on a part that takes it. `at` is where, in the same space as a pointer.
+    ContextMenu {
+        part: Part,
+        item: Option<String>,
+        at: crate::geometry::Point,
+    },
     /// A press landed outside every part of this primitive.
     PressOutside,
     /// The window stopped being the one the person is working in.
@@ -114,6 +123,8 @@ pub enum Effect {
     ScrollTo { offset: u32 },
     /// Put this text on the clipboard.
     Copy { text: String },
+    /// Put focus back where it was before the primitive's hotkey took it.
+    RestoreFocus,
     /// Show the platform's file picker. What is chosen comes back as `Input::Files`.
     /// `accept` is a comma-separated list of extensions and media types.
     PickFiles { multiple: bool, accept: String },
@@ -165,6 +176,12 @@ impl<Part> Input<Part> {
                 ok,
             },
             Input::PressOutside => Input::PressOutside,
+            Input::Hotkey => Input::Hotkey,
+            Input::ContextMenu { part, item, at } => Input::ContextMenu {
+                part: to(part)?,
+                item,
+                at,
+            },
             Input::Files { files, dropped } => Input::Files { files, dropped },
             Input::DragOver { inside } => Input::DragOver { inside },
             Input::WindowBlur => Input::WindowBlur,
@@ -441,6 +458,32 @@ pub trait Primitive: Clone + 'static {
     /// out `Effect::ScrollTo` on it.
     fn scrolls(_part: Self::Part) -> bool {
         false
+    }
+
+    /// Changes a setting the owner controls while the primitive runs, such as
+    /// whether results are still loading. Returns whether the setting is one it has.
+    fn set(&mut self, _name: &str, _value: &str) -> bool {
+        false
+    }
+
+    /// Which way the scrolling part scrolls.
+    fn scroll_axis(&self) -> crate::keys::Orientation {
+        crate::keys::Orientation::Vertical
+    }
+
+    /// A key that reaches the primitive from anywhere, as `Input::Hotkey`.
+    fn hotkey(&self) -> Option<crate::shortcut::Shortcut> {
+        None
+    }
+
+    /// Whether a part takes the platform's context-menu gesture.
+    fn context(_part: Self::Part) -> bool {
+        false
+    }
+
+    /// A point to place the popup at in place of its anchor, as for a context menu.
+    fn popup_point(&self) -> Option<crate::geometry::Point> {
+        None
     }
 
     /// Whether files may be dropped on a part. The adapter then sends

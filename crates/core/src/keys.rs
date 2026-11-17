@@ -15,6 +15,8 @@ pub enum Key {
     Backspace,
     /// Conventionally starts editing the focused item.
     F2,
+    /// Conventionally moves between the panes or regions of a window.
+    F6,
     Char(char),
 }
 

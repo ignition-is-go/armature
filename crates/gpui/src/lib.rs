@@ -73,6 +73,7 @@ pub fn binding_for(shortcut: &Shortcut) -> String {
         Key::Tab => "tab".to_string(),
         Key::Backspace => "backspace".to_string(),
         Key::F2 => "f2".to_string(),
+        Key::F6 => "f6".to_string(),
         Key::Char(ch) => ch.to_lowercase().to_string(),
     };
     let mods = [
@@ -124,6 +125,12 @@ pub struct Machine<P: Primitive> {
     /// The accessibility node each part was last drawn as, so parts can refer to
     /// one another.
     nodes: HashMap<PartKey<P>, accesskit::NodeId>,
+    /// Listens for the primitive's hotkey, wherever focus is.
+    hotkey_watch: Option<gpui::Subscription>,
+    /// Where focus was before the hotkey took it.
+    return_to: Option<FocusHandle>,
+    /// Whether files are being dragged over a part that takes drops.
+    dragged_over: bool,
     /// Whether a tick the primitive asked for through `wake_after` is on its way.
     waking: bool,
     /// Watches for the window being switched away from.
@@ -221,6 +228,9 @@ impl<P: Primitive> Machine<P> {
             blur_watch: HashMap::new(),
             away_watch: None,
             waking: false,
+            hotkey_watch: None,
+            return_to: None,
+            dragged_over: false,
             nodes: HashMap::new(),
             gate: None,
             registration,
@@ -323,6 +333,36 @@ impl<P: Primitive> Machine<P> {
     }
 
     /// Everything announced so far, oldest first.
+    /// Changes a setting the owner controls while the primitive runs, such as a
+    /// combobox's `status`. Returns whether it is a setting the primitive has.
+    pub fn set(&mut self, name: &str, value: &str, cx: &mut Context<Self>) -> bool {
+        cx.notify();
+        self.machine.set(name, value)
+    }
+
+    /// Listens for the primitive's hotkey wherever focus is, and remembers where
+    /// focus was so the key can send it back.
+    fn watch_hotkey(&mut self, cx: &mut Context<Self>) {
+        let Some(shortcut) = self.machine.hotkey() else {
+            return;
+        };
+        self.hotkey_watch = Some(cx.observe_keystrokes(move |state, event, window, cx| {
+            let pressed = key_from_keystroke(&event.keystroke);
+            let mods = modifiers(event.keystroke.modifiers);
+            if !pressed.is_some_and(|key| shortcut.matches(key, mods)) {
+                return;
+            }
+            if !state
+                .handles
+                .values()
+                .any(|handle| handle.is_focused(window))
+            {
+                state.return_to = window.focused(cx);
+            }
+            state.dispatch(Input::Hotkey, window, cx);
+        }));
+    }
+
     /// Tells the primitive that a picture inside a part loaded or failed. GPUI's `img`
     /// does not report this to its parent, so the view passes it on.
     pub fn loaded(&mut self, part: P::Part, ok: bool, window: &mut Window, cx: &mut Context<Self>) {
@@ -643,8 +683,19 @@ impl<P: Primitive> Machine<P> {
                     .detach();
                 }
                 Effect::CapturePointer => {}
+                Effect::RestoreFocus => {
+                    if let Some(back) = self.return_to.take() {
+                        back.focus(window, cx);
+                    }
+                }
                 Effect::ScrollTo { offset } => {
-                    self.scroll.set_offset(point(px(0.), px(-(*offset as f32))));
+                    let along = px(-(*offset as f32));
+                    let across = self.machine.scroll_axis() == Orientation::Horizontal;
+                    self.scroll.set_offset(if across {
+                        point(along, px(0.))
+                    } else {
+                        point(px(0.), along)
+                    });
                 }
                 Effect::Copy { text } => {
                     cx.write_to_clipboard(ClipboardItem::new_string(text.clone()));
@@ -780,10 +831,45 @@ pub fn part<K: PartOf>(
     }
     let scrolls = K::Primitive::scrolls(part);
     if scrolls {
-        el = el.overflow_y_scroll().track_scroll(&machine.scroll);
+        el = if machine.machine.scroll_axis() == Orientation::Horizontal {
+            el.overflow_x_scroll().track_scroll(&machine.scroll)
+        } else {
+            el.overflow_y_scroll().track_scroll(&machine.scroll)
+        };
+    }
+
+    if K::Primitive::context(part) {
+        let (state, item) = (state.clone(), item.map(str::to_string));
+        el = el.on_mouse_down(
+            MouseButton::Right,
+            move |event: &MouseDownEvent, window, cx| {
+                let at = CorePoint::new(
+                    f32::from(event.position.x) as f64,
+                    f32::from(event.position.y) as f64,
+                );
+                let input = Input::ContextMenu {
+                    part,
+                    item: item.clone(),
+                    at,
+                };
+                state.update(cx, |state, cx| state.dispatch(input, window, cx));
+            },
+        );
     }
 
     if K::Primitive::drops(part) {
+        let over = state.clone();
+        el = el.on_drag_move(
+            move |event: &gpui::DragMoveEvent<gpui::ExternalPaths>, window, cx| {
+                let inside = event.bounds.contains(&event.event.position);
+                over.update(cx, |state, cx| {
+                    if state.dragged_over != inside {
+                        state.dragged_over = inside;
+                        state.dispatch(Input::DragOver { inside }, window, cx);
+                    }
+                });
+            },
+        );
         let state = state.clone();
         el = el.on_drop(move |paths: &gpui::ExternalPaths, window, cx| {
             let files = described(paths.paths());
@@ -864,11 +950,24 @@ pub fn part<K: PartOf>(
         None => Layout::Inline,
         // A popup that belongs to an item sits against that item's own anchor.
         Some(placement) => match machine
-            .bounds
-            .get(&(placement.anchor, item.map(str::to_string)))
-            .or_else(|| machine.bounds.get(&(placement.anchor, None)))
+            .machine
+            .popup_point()
+            // A popup called up at a point, as a context menu is, sits against it.
+            .map(|at| {
+                Bounds::new(
+                    point(px(at.x as f32), px(at.y as f32)),
+                    gpui::size(px(0.), px(0.)),
+                )
+            })
+            .or_else(|| {
+                machine
+                    .bounds
+                    .get(&(placement.anchor, item.map(str::to_string)))
+                    .copied()
+            })
+            .or_else(|| machine.bounds.get(&(placement.anchor, None)).copied())
         {
-            Some(anchor) => floating(placement.side, placement.align, placement.gap, *anchor),
+            Some(anchor) => floating(placement.side, placement.align, placement.gap, anchor),
             None => Layout::Hidden,
         },
     };
@@ -890,10 +989,12 @@ pub fn part<K: PartOf>(
         let (state, key) = (state.clone(), key.clone());
         Box::new(move |bounds, node, window: &mut Window, cx: &mut App| {
             let mut wake = None;
+            let mut listen = false;
             let (scrolled, relinked) = state.update(cx, |state, _| {
                 state.bounds.insert(key.clone(), bounds);
                 let relinked =
                     node.is_some_and(|node| state.nodes.insert(key.clone(), node) != Some(node));
+                listen = state.hotkey_watch.is_none() && state.machine.hotkey().is_some();
                 // A value set from outside may have left a timer to start.
                 if !state.waking
                     && let Some(delay) = state.machine.wake_after()
@@ -902,14 +1003,34 @@ pub fn part<K: PartOf>(
                     wake = Some(state.now_ms() + delay);
                 }
                 // Scrolling is read off the handle each frame.
-                let viewport = f32::from(bounds.size.height) as f64;
+                let across = state.machine.scroll_axis() == Orientation::Horizontal;
+                let (offset, max, length) = if across {
+                    (
+                        state.scroll.offset().x,
+                        state.scroll.max_offset().x,
+                        bounds.size.width,
+                    )
+                } else {
+                    (
+                        state.scroll.offset().y,
+                        state.scroll.max_offset().y,
+                        bounds.size.height,
+                    )
+                };
+                let viewport = f32::from(length) as f64;
                 let now = (
-                    -f32::from(state.scroll.offset().y) as f64,
+                    -f32::from(offset) as f64,
                     viewport,
-                    viewport + f32::from(state.scroll.max_offset().y) as f64,
+                    viewport + f32::from(max) as f64,
                 );
                 ((scrolls && now != state.scrolled).then_some(now), relinked)
             });
+            if listen {
+                let state = state.clone();
+                window.defer(cx, move |_, cx| {
+                    state.update(cx, |state, cx| state.watch_hotkey(cx))
+                });
+            }
             if let Some(at_ms) = wake {
                 let state = state.clone();
                 window.defer(cx, move |window, cx| {
@@ -1127,6 +1248,7 @@ fn key_from_keystroke(keystroke: &gpui::Keystroke) -> Option<Key> {
         "tab" => Key::Tab,
         "backspace" => Key::Backspace,
         "f2" => Key::F2,
+        "f6" => Key::F6,
         key => {
             let typed = keystroke.key_char.as_deref().unwrap_or(key);
             let mut chars = typed.chars();

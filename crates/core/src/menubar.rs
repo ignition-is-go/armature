@@ -100,7 +100,7 @@ impl Menubar {
                     part: Part::Trigger,
                     item: Some(key.clone()),
                 },
-                menu::Part::Content => crate::primitive::FocusTarget {
+                menu::Part::Content | menu::Part::Area => crate::primitive::FocusTarget {
                     part: Part::Content,
                     item: Some(key.clone()),
                 },
