@@ -919,3 +919,74 @@ fn tooltip_behaviors() {
     hover(&mut first, true, 5000, true);
     assert!(!first.is_open());
 }
+
+use armature_core::number::NumberRange;
+use armature_core::number_input::NumberInput;
+use armature_core::select::Select;
+
+// select.test.ts
+#[test]
+fn select_behaviors() {
+    let filled = |select: Select| {
+        let mut select = select;
+        for name in ["small", "large"] {
+            select.upsert_item(item(name, false));
+        }
+        select.set_value(vec!["large".into()]);
+        select
+    };
+    // "clearing a read-only or disabled select keeps its value"
+    let mut locked = filled(Select::default().read_only());
+    assert!(locked.act("clear", None, &mut |_| true).is_err());
+    assert_eq!(locked.value(), ["large"]);
+    // "a canceled clear keeps the value"
+    let mut select = filled(Select::default());
+    let _ = select.act("clear", None, &mut |_| false);
+    assert_eq!(select.value(), ["large"]);
+    select.act("clear", None, &mut |_| true).unwrap();
+    assert!(select.value().is_empty());
+}
+
+// number-input.test.ts
+#[test]
+fn number_input_behaviors() {
+    use armature_core::number_input::Part;
+    // "End and the increment button stop at the highest value on the step grid"
+    let mut input = NumberInput::new(NumberRange::new(0.0, 10.0, 3.0), 0.0);
+    key(&mut input, Key::End);
+    assert_eq!(input.number(), 9.0);
+    assert!(input.semantics(Part::Increment, None).disabled);
+    input.act("increment", None, &mut |_| true).unwrap();
+    assert_eq!(input.number(), 9.0);
+    key(&mut input, Key::Home);
+    assert_eq!(input.number(), 0.0);
+    assert!(input.semantics(Part::Decrement, None).disabled);
+    // "the default small step has no floating point noise"
+    let mut small = NumberInput::new(NumberRange::new(0.0, 1.0, 0.1), 0.0);
+    for _ in 0..3 {
+        key(&mut small, Key::ArrowUp);
+    }
+    assert_eq!(small.value(), ["0.3"]);
+    // "typing follows the value only while it's a number within the bounds"
+    let mut typed = NumberInput::new(NumberRange::new(0.0, 10.0, 1.0), 5.0);
+    typed.send(
+        Input::Text {
+            part: Part::Input,
+            item: None,
+            value: "abc".into(),
+        },
+        &mut |_| true,
+    );
+    key(&mut typed, Key::Enter);
+    assert_eq!(typed.number(), 5.0);
+    typed.send(
+        Input::Text {
+            part: Part::Input,
+            item: None,
+            value: "50".into(),
+        },
+        &mut |_| true,
+    );
+    key(&mut typed, Key::Enter);
+    assert_eq!(typed.number(), 10.0, "Enter clamps what was typed");
+}

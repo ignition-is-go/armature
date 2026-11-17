@@ -15,7 +15,7 @@ pub enum Part {
     Option,
 }
 
-const ACTIONS: &[&str] = &["open", "close", "select"];
+const ACTIONS: &[&str] = &["open", "close", "select", "clear"];
 
 /// A single-choice select: a trigger that opens a popup listbox.
 #[derive(Clone, Debug, Default)]
@@ -24,6 +24,8 @@ pub struct Select {
     open: bool,
     /// Whether several options can be chosen. The popup then stays open.
     multiple: bool,
+    /// Shown but not to be changed, by the person or by an agent.
+    locked: bool,
 }
 
 impl Select {
@@ -38,11 +40,18 @@ impl Select {
             list: Listbox::new(opts),
             open: false,
             multiple: true,
+            locked: false,
         }
     }
 
     pub fn is_open(&self) -> bool {
         self.open
+    }
+
+    /// A select that shows its value and cannot be changed or cleared.
+    pub fn read_only(mut self) -> Self {
+        self.locked = true;
+        self
     }
 
     /// Opens the popup and moves focus to the chosen option, or the first one.
@@ -176,6 +185,9 @@ impl Primitive for Select {
     }
 
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
+        if self.locked && !matches!(input, Input::Focus { .. } | Input::Blur { .. }) {
+            return Reaction::default();
+        }
         match input {
             Input::PressOutside | Input::WindowBlur => {
                 self.open = false;
@@ -276,7 +288,9 @@ impl Primitive for Select {
         match action {
             "open" => self.open = true,
             "close" => self.open = false,
+            "select" | "clear" if self.locked => return Err(ActError::Refused),
             "select" => self.list.act("select", item, gate)?,
+            "clear" => self.list.act("clear", None, gate)?,
             other => {
                 return Err(ActError::UnknownAction {
                     action: other.to_string(),

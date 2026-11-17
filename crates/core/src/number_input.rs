@@ -145,7 +145,8 @@ impl Primitive for NumberInput {
             },
             Part::Increment => Semantics {
                 role: Some(Role::Button),
-                disabled: self.value >= self.range.max,
+                // The last step may fall short of the greatest value allowed.
+                disabled: self.value >= self.range.max_on_grid(),
                 ..Default::default()
             },
             Part::Decrement => Semantics {
@@ -177,6 +178,20 @@ impl Primitive for NumberInput {
             Input::Wheel { delta, mods, .. } if self.focused => {
                 let steps = if mods.shift { 10.0 } else { 1.0 };
                 self.step(delta.signum() * steps, Reason::Drag, gate);
+                Reaction::handled()
+            }
+            // Home and End go to the least value and the greatest one on the steps.
+            Input::Key { key: Key::Home, .. } => {
+                self.set(self.range.min, Source::User, Reason::Keyboard, gate);
+                Reaction::handled()
+            }
+            Input::Key { key: Key::End, .. } => {
+                self.set(
+                    self.range.max_on_grid(),
+                    Source::User,
+                    Reason::Keyboard,
+                    gate,
+                );
                 Reaction::handled()
             }
             // PageUp, PageDown and Shift with an arrow go ten steps at a time.
