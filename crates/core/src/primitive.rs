@@ -115,6 +115,82 @@ pub struct FocusTarget<Part> {
     pub item: Option<String>,
 }
 
+impl<Part> Input<Part> {
+    /// The same input addressed to another primitive's parts, for a primitive built
+    /// out of others. `None` if it names a part the other does not have.
+    pub fn for_parts<Other>(self, to: impl Fn(Part) -> Option<Other>) -> Option<Input<Other>> {
+        Some(match self {
+            Input::Key { key, mods, now_ms } => Input::Key { key, mods, now_ms },
+            Input::Press { part, item, mods } => Input::Press {
+                part: to(part)?,
+                item,
+                mods,
+            },
+            Input::Focus { part, item } => Input::Focus {
+                part: to(part)?,
+                item,
+            },
+            Input::Blur { part, item } => Input::Blur {
+                part: to(part)?,
+                item,
+            },
+            Input::Found { part, item } => Input::Found {
+                part: to(part)?,
+                item,
+            },
+            Input::Loaded { part, ok } => Input::Loaded {
+                part: to(part)?,
+                ok,
+            },
+            Input::PressOutside => Input::PressOutside,
+            Input::WindowBlur => Input::WindowBlur,
+            Input::Tick { now_ms } => Input::Tick { now_ms },
+            Input::Text { part, item, value } => Input::Text {
+                part: to(part)?,
+                item,
+                value,
+            },
+            Input::Hover {
+                part,
+                item,
+                inside,
+                now_ms,
+            } => Input::Hover {
+                part: to(part)?,
+                item,
+                inside,
+                now_ms,
+            },
+            Input::Scrolled {
+                part,
+                offset,
+                viewport,
+                now_ms,
+            } => Input::Scrolled {
+                part: to(part)?,
+                offset,
+                viewport,
+                now_ms,
+            },
+            Input::Paste { text } => Input::Paste { text },
+        })
+    }
+}
+
+impl<Part> Reaction<Part> {
+    /// The same reaction in terms of another primitive's parts.
+    pub fn for_parts<Other>(self, to: impl Fn(Part) -> Other) -> Reaction<Other> {
+        Reaction {
+            handled: self.handled,
+            focus: self.focus.map(|target| FocusTarget {
+                part: to(target.part),
+                item: target.item,
+            }),
+            effects: self.effects,
+        }
+    }
+}
+
 /// What the adapter must do after an input.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Reaction<Part> {

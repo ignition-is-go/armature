@@ -15,6 +15,8 @@ pub mod command;
 pub mod connect;
 pub mod data_grid;
 pub mod date;
+pub mod date_input;
+pub mod date_picker;
 pub mod dialog;
 pub mod drag;
 pub mod editable;

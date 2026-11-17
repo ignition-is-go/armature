@@ -1,0 +1,501 @@
+use crate::agent::{ActError, Snapshot};
+use crate::change::{Gate, Reason, Source, ValueChange};
+use crate::date::{Date, days_in_month};
+use crate::keys::Key;
+use crate::primitive::{
+    Focusable, Input, Item, PartOf, Primitive, Reaction, Role, Semantics, ValueRange,
+};
+
+/// One editable piece of a date.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Segment {
+    Year,
+    Month,
+    Day,
+    Hour,
+    Minute,
+}
+
+impl Segment {
+    pub const DATE: [Segment; 3] = [Segment::Year, Segment::Month, Segment::Day];
+    pub const DATE_TIME: [Segment; 5] = [
+        Segment::Year,
+        Segment::Month,
+        Segment::Day,
+        Segment::Hour,
+        Segment::Minute,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Segment::Year => "year",
+            Segment::Month => "month",
+            Segment::Day => "day",
+            Segment::Hour => "hour",
+            Segment::Minute => "minute",
+        }
+    }
+
+    fn named(name: &str) -> Option<Segment> {
+        Segment::DATE_TIME
+            .into_iter()
+            .find(|segment| segment.name() == name)
+    }
+
+    fn width(self) -> usize {
+        if self == Segment::Year { 4 } else { 2 }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Part {
+    Root,
+    /// One piece of the date, keyed by its name: `year`, `month`, `day`, `hour` or
+    /// `minute`. Fill it from `text`.
+    Segment,
+}
+
+const ACTIONS: &[&str] = &["set", "clear"];
+
+/// A date typed one piece at a time. Up and Down step a piece, digits fill it and
+/// move on when it is full, and Left and Right move between pieces. The value is
+/// the date as `YYYY-MM-DD`, with `THH:MM` when it carries a time, once every piece
+/// holds something.
+#[derive(Clone, Debug)]
+pub struct DateInput {
+    with_time: bool,
+    fields: [Option<u32>; 5],
+    focused: Segment,
+    /// The digits typed into the focused piece so far.
+    typed: String,
+}
+
+impl Default for DateInput {
+    fn default() -> Self {
+        DateInput::new(false)
+    }
+}
+
+impl DateInput {
+    pub fn new(with_time: bool) -> Self {
+        DateInput {
+            with_time,
+            fields: [None; 5],
+            focused: Segment::Year,
+            typed: String::new(),
+        }
+    }
+
+    /// The pieces shown, in order.
+    pub fn segments(&self) -> &'static [Segment] {
+        if self.with_time {
+            &Segment::DATE_TIME
+        } else {
+            &Segment::DATE
+        }
+    }
+
+    fn get(&self, segment: Segment) -> Option<u32> {
+        self.fields[segment as usize]
+    }
+
+    fn limits(&self, segment: Segment) -> (u32, u32) {
+        match segment {
+            Segment::Year => (1, 9999),
+            Segment::Month => (1, 12),
+            // A day is checked against its month once the month and year are known.
+            Segment::Day => match (self.get(Segment::Year), self.get(Segment::Month)) {
+                (year, Some(month)) => (
+                    1,
+                    days_in_month(year.unwrap_or(2000) as i32, month as u8) as u32,
+                ),
+                _ => (1, 31),
+            },
+            Segment::Hour => (0, 23),
+            Segment::Minute => (0, 59),
+        }
+    }
+
+    fn written(&self, fields: &[Option<u32>; 5]) -> Vec<String> {
+        let get = |segment: Segment| fields[segment as usize];
+        let (Some(year), Some(month), Some(day)) =
+            (get(Segment::Year), get(Segment::Month), get(Segment::Day))
+        else {
+            return Vec::new();
+        };
+        let date = format!("{year:04}-{month:02}-{day:02}");
+        match (self.with_time, get(Segment::Hour), get(Segment::Minute)) {
+            (false, _, _) => vec![date],
+            (true, Some(hour), Some(minute)) => vec![format!("{date}T{hour:02}:{minute:02}")],
+            _ => Vec::new(),
+        }
+    }
+
+    /// Stores a piece, pulling the day back if its month turned out shorter.
+    fn put(
+        &mut self,
+        segment: Segment,
+        number: Option<u32>,
+        source: Source,
+        reason: Reason,
+        gate: Gate,
+    ) -> bool {
+        let mut fields = self.fields;
+        fields[segment as usize] = number;
+        let trial = DateInput {
+            fields,
+            ..self.clone()
+        };
+        let (_, longest) = trial.limits(Segment::Day);
+        fields[Segment::Day as usize] = fields[Segment::Day as usize].map(|day| day.min(longest));
+        let (before, after) = (self.written(&self.fields), self.written(&fields));
+        if before != after
+            && !gate(&ValueChange {
+                value: after,
+                source,
+                reason,
+            })
+        {
+            return false;
+        }
+        self.fields = fields;
+        true
+    }
+
+    fn neighbour(&self, forward: bool) -> Option<Segment> {
+        let segments = self.segments();
+        let at = segments
+            .iter()
+            .position(|segment| *segment == self.focused)?;
+        if forward {
+            segments.get(at + 1).copied()
+        } else {
+            at.checked_sub(1).map(|at| segments[at])
+        }
+    }
+
+    fn move_to(&mut self, segment: Segment) -> Reaction<Part> {
+        self.focused = segment;
+        self.typed.clear();
+        Reaction::item(Part::Segment, true, Some(segment.name().to_string()))
+    }
+}
+
+impl PartOf for Part {
+    type Primitive = DateInput;
+}
+
+impl Primitive for DateInput {
+    type Part = Part;
+
+    fn parts() -> &'static [Part] {
+        &[Part::Root, Part::Segment]
+    }
+
+    fn is_item(_: Part) -> bool {
+        false
+    }
+
+    fn named_part(&self) -> Option<Part> {
+        Some(Part::Root)
+    }
+
+    fn upsert_item(&mut self, _: Item) {}
+    fn remove_item(&mut self, _: &str) {}
+    fn set_order(&mut self, _: &[(String, String)]) {}
+
+    fn semantics(&self, part: Part, item: Option<&str>) -> Semantics {
+        let segment = item
+            .and_then(Segment::named)
+            .filter(|segment| self.segments().contains(segment));
+        match (part, segment) {
+            (Part::Root, _) => Semantics {
+                role: Some(Role::Group),
+                ..Default::default()
+            },
+            (Part::Segment, Some(segment)) => {
+                let (min, max) = self.limits(segment);
+                Semantics {
+                    role: Some(Role::SpinButton),
+                    range: self.get(segment).map(|now| ValueRange {
+                        now: now as f64,
+                        min: min as f64,
+                        max: max as f64,
+                    }),
+                    // The first piece is the way in. The arrows reach the rest.
+                    focusable: if segment == self.focused {
+                        Focusable::TabStop
+                    } else {
+                        Focusable::Programmatic
+                    },
+                    ..Default::default()
+                }
+            }
+            (Part::Segment, None) => Semantics {
+                role: Some(Role::SpinButton),
+                hidden: item.is_some(),
+                ..Default::default()
+            },
+        }
+    }
+
+    fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
+        match input {
+            Input::Focus {
+                part: Part::Segment,
+                item: Some(name),
+            } => {
+                if let Some(segment) =
+                    Segment::named(&name).filter(|segment| *segment != self.focused)
+                {
+                    self.focused = segment;
+                    self.typed.clear();
+                }
+                Reaction::default()
+            }
+            Input::Key { key, mods, .. } if !mods.ctrl && !mods.alt => {
+                let segment = self.focused;
+                let (min, max) = self.limits(segment);
+                match key {
+                    Key::ArrowUp | Key::ArrowDown => {
+                        // Stepping wraps round, and an empty piece starts at an end.
+                        let next = match (self.get(segment), key == Key::ArrowUp) {
+                            (None, true) => min,
+                            (None, false) => max,
+                            (Some(now), true) => {
+                                if now >= max {
+                                    min
+                                } else {
+                                    now + 1
+                                }
+                            }
+                            (Some(now), false) => {
+                                if now <= min {
+                                    max
+                                } else {
+                                    now - 1
+                                }
+                            }
+                        };
+                        self.typed.clear();
+                        self.put(segment, Some(next), Source::User, Reason::Keyboard, gate);
+                        Reaction::handled()
+                    }
+                    Key::ArrowRight | Key::ArrowLeft => {
+                        match self.neighbour(key == Key::ArrowRight) {
+                            Some(next) => self.move_to(next),
+                            None => Reaction::handled(),
+                        }
+                    }
+                    Key::Backspace => {
+                        self.typed.clear();
+                        self.put(segment, None, Source::User, Reason::Keyboard, gate);
+                        Reaction::handled()
+                    }
+                    Key::Char(digit) if digit.is_ascii_digit() => {
+                        self.typed.push(digit);
+                        let number: u32 = self.typed.parse().unwrap_or(0);
+                        // The piece is full when another digit could not fit under the most it
+                        // could ever hold. What was typed is then brought within what this
+                        // month allows.
+                        let most = if segment == Segment::Day { 31 } else { max };
+                        let full = self.typed.len() >= segment.width() || number * 10 > most;
+                        let stored = match (full, number >= min) {
+                            (true, _) => Some(number.clamp(min, max)),
+                            (false, true) => Some(number.min(max)),
+                            // A leading zero is not a value yet.
+                            (false, false) => None,
+                        };
+                        self.put(segment, stored, Source::User, Reason::Text, gate);
+                        match (full, self.neighbour(true)) {
+                            (true, Some(next)) => self.move_to(next),
+                            (true, None) => {
+                                self.typed.clear();
+                                Reaction::handled()
+                            }
+                            (false, _) => Reaction::handled(),
+                        }
+                    }
+                    // A separator typed out of habit moves on, as it would in plain text.
+                    Key::Char('/' | '-' | '.' | ':') => match self.neighbour(true) {
+                        Some(next) => self.move_to(next),
+                        None => Reaction::handled(),
+                    },
+                    _ => Reaction::default(),
+                }
+            }
+            _ => Reaction::default(),
+        }
+    }
+
+    /// What a piece shows: its number, or dashes while it is empty.
+    fn text(&self, part: Part, item: Option<&str>) -> Option<String> {
+        let segment = item
+            .and_then(Segment::named)
+            .filter(|_| part == Part::Segment)?;
+        Some(match self.get(segment) {
+            Some(number) => format!("{number:0width$}", width = segment.width()),
+            None => "-".repeat(segment.width()),
+        })
+    }
+
+    fn value(&self) -> Vec<String> {
+        self.written(&self.fields)
+    }
+
+    fn set_value(&mut self, value: Vec<String>) {
+        let Some(text) = value.first() else {
+            self.fields = [None; 5];
+            return;
+        };
+        let (date, time) = text.split_once('T').unwrap_or((text, ""));
+        let Some(date) = Date::parse(date) else {
+            return;
+        };
+        let mut clock = time.split(':').map(|piece| piece.parse::<u32>().ok());
+        let (hour, minute) = (clock.next().flatten(), clock.next().flatten());
+        self.fields = [
+            Some(date.year as u32),
+            Some(date.month as u32),
+            Some(date.day as u32),
+            hour,
+            minute,
+        ];
+        if self.with_time {
+            self.fields[3] = Some(hour.unwrap_or(0).min(23));
+            self.fields[4] = Some(minute.unwrap_or(0).min(59));
+        }
+    }
+
+    fn snapshot(&self, label: &str) -> Snapshot {
+        Snapshot {
+            name: "date-input",
+            label: label.to_string(),
+            value: self.value(),
+            expanded: None,
+            actions: ACTIONS,
+            items: Vec::new(),
+        }
+    }
+
+    fn act(&mut self, action: &str, item: Option<&str>, gate: Gate) -> Result<(), ActError> {
+        let mut next = self.clone();
+        match action {
+            "clear" => next.fields = [None; 5],
+            "set" => {
+                let text = item.ok_or(ActError::MissingItem { action: "set" })?;
+                next.fields = [None; 5];
+                next.set_value(vec![text.to_string()]);
+                if next.value().is_empty() {
+                    return Err(ActError::UnknownItem(text.to_string()));
+                }
+            }
+            other => {
+                return Err(ActError::UnknownAction {
+                    action: other.to_string(),
+                    valid: ACTIONS,
+                });
+            }
+        }
+        if next.value() != self.value()
+            && !gate(&ValueChange {
+                value: next.value(),
+                source: Source::Agent,
+                reason: Reason::Action,
+            })
+        {
+            return Err(ActError::Refused);
+        }
+        self.fields = next.fields;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::keys::Modifiers;
+
+    fn key(input: &mut DateInput, key: Key) -> Reaction<Part> {
+        input.send(
+            Input::Key {
+                key,
+                mods: Modifiers::default(),
+                now_ms: 0,
+            },
+            &mut |_| true,
+        )
+    }
+
+    fn type_digits(input: &mut DateInput, digits: &str) {
+        for digit in digits.chars() {
+            key(input, Key::Char(digit));
+        }
+    }
+
+    #[test]
+    fn digits_fill_a_piece_and_move_on_when_no_more_could_fit() {
+        let mut input = DateInput::default();
+        type_digits(&mut input, "2026");
+        assert_eq!(input.focused, Segment::Month, "four digits fill the year");
+        type_digits(&mut input, "2");
+        assert_eq!(
+            input.focused,
+            Segment::Day,
+            "no month starts with 2 and has two digits"
+        );
+        assert!(
+            input.value().is_empty(),
+            "not a date until every piece is in"
+        );
+        type_digits(&mut input, "30");
+        assert_eq!(input.value(), ["2026-02-28"], "February is not that long");
+        assert_eq!(
+            input.text(Part::Segment, Some("month")).as_deref(),
+            Some("02")
+        );
+    }
+
+    #[test]
+    fn arrows_step_a_piece_round_and_walk_between_pieces() {
+        let mut input = DateInput::default();
+        input.set_value(vec!["2026-12-31".into()]);
+        assert_eq!(key(&mut input, Key::ArrowRight).focus_item(), Some("month"));
+        key(&mut input, Key::ArrowUp);
+        assert_eq!(input.value(), ["2026-01-31"], "December wraps to January");
+        key(&mut input, Key::ArrowUp);
+        assert_eq!(
+            input.value(),
+            ["2026-02-28"],
+            "and the day is pulled back to fit"
+        );
+        key(&mut input, Key::Backspace);
+        assert!(input.value().is_empty());
+        assert_eq!(
+            input.text(Part::Segment, Some("month")).as_deref(),
+            Some("--")
+        );
+    }
+
+    #[test]
+    fn a_time_makes_it_a_date_and_time() {
+        let mut input = DateInput::new(true);
+        type_digits(&mut input, "20261102");
+        assert!(input.value().is_empty());
+        type_digits(&mut input, "1430");
+        assert_eq!(input.value(), ["2026-11-02T14:30"]);
+        input
+            .act("set", Some("2027-01-05T09:15"), &mut |_| true)
+            .unwrap();
+        assert_eq!(
+            input.text(Part::Segment, Some("hour")).as_deref(),
+            Some("09")
+        );
+    }
+
+    #[test]
+    fn it_conforms() {
+        crate::testing::assert_conforms(DateInput::default, &[]);
+        crate::testing::assert_conforms(|| DateInput::new(true), &[]);
+    }
+}
