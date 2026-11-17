@@ -22,6 +22,23 @@ pub struct Options {
     /// The earliest and latest days that may be chosen.
     pub min: Option<Date>,
     pub max: Option<Date>,
+    /// Whether one day, several days or a span of days is chosen.
+    pub mode: Selecting,
+    /// Days that cannot be chosen, such as weekends or days already booked.
+    pub unavailable: Option<fn(Date) -> bool>,
+    /// Whether choosing the chosen day again clears it.
+    pub deselectable: bool,
+}
+
+/// What a calendar chooses.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Selecting {
+    #[default]
+    Single,
+    /// Any number of separate days. Choosing a chosen day lets it go.
+    Multiple,
+    /// A first and a last day. The value is both once the second is chosen.
+    Range,
 }
 
 impl Default for Options {
@@ -31,6 +48,9 @@ impl Default for Options {
             dir: Dir::Ltr,
             min: None,
             max: None,
+            mode: Selecting::Single,
+            unavailable: None,
+            deselectable: false,
         }
     }
 }
@@ -43,7 +63,8 @@ pub struct Calendar {
     opts: Options,
     /// The day the keyboard is on. Its month is the month shown.
     focused: Date,
-    selected: Option<Date>,
+    /// The chosen days in order. For a span, its first day and then its last.
+    selected: Vec<Date>,
     /// The month button holding focus, if one does.
     on_button: Option<Part>,
 }
@@ -54,7 +75,7 @@ impl Calendar {
         Calendar {
             opts,
             focused: showing,
-            selected: None,
+            selected: Vec::new(),
             on_button: None,
         }
     }
@@ -75,20 +96,62 @@ impl Calendar {
     }
 
     fn allowed(&self, date: Date) -> bool {
-        self.opts.min.is_none_or(|min| date >= min) && self.opts.max.is_none_or(|max| date <= max)
+        self.opts.min.is_none_or(|min| date >= min)
+            && self.opts.max.is_none_or(|max| date <= max)
+            && !self
+                .opts
+                .unavailable
+                .is_some_and(|unavailable| unavailable(date))
+    }
+
+    /// Whether a day is chosen, or lies inside the chosen span.
+    pub fn is_selected(&self, date: Date) -> bool {
+        match (self.opts.mode, self.selected.as_slice()) {
+            (Selecting::Range, [first, last]) => (*first..=*last).contains(&date),
+            _ => self.selected.contains(&date),
+        }
+    }
+
+    /// The first and last day of the span, once both are chosen.
+    pub fn range(&self) -> Option<(Date, Date)> {
+        match (self.opts.mode, self.selected.as_slice()) {
+            (Selecting::Range, [first, last]) => Some((*first, *last)),
+            _ => None,
+        }
     }
 
     fn select(&mut self, date: Date, source: Source, reason: Reason, gate: Gate) -> bool {
-        if self.selected == Some(date) {
-            return true;
+        let chosen = self.selected.contains(&date);
+        let mut next = match self.opts.mode {
+            Selecting::Single if chosen && self.opts.deselectable => Vec::new(),
+            Selecting::Single if chosen => return true,
+            Selecting::Single => vec![date],
+            Selecting::Multiple if chosen => self
+                .selected
+                .iter()
+                .copied()
+                .filter(|day| *day != date)
+                .collect(),
+            Selecting::Multiple => self.selected.iter().copied().chain([date]).collect(),
+            // The second day closes the span. A third starts another.
+            Selecting::Range if self.selected.len() == 1 => vec![self.selected[0], date],
+            Selecting::Range => vec![date],
+        };
+        next.sort();
+        // A span may not reach across a day that cannot be chosen.
+        if let (Selecting::Range, [first, last]) = (self.opts.mode, next.as_slice()) {
+            let days = first.days_until(*last);
+            if (0..=days).any(|offset| !self.allowed(first.add_days(offset))) {
+                next = vec![date];
+            }
         }
         let allowed = gate(&ValueChange {
-            value: vec![date.format()],
+            value: next.iter().map(|day| day.format()).collect(),
             source,
             reason,
         });
         if allowed {
-            self.selected = Some(date);
+            self.selected = next;
         }
         allowed
     }
@@ -139,7 +202,7 @@ impl Primitive for Calendar {
                 let shown = self.weeks().iter().flatten().any(|day| *day == date);
                 Semantics {
                     role: Some(Role::GridCell),
-                    selected: Some(self.selected == Some(date)),
+                    selected: Some(self.is_selected(date)),
                     disabled: !self.allowed(date),
                     hidden: !shown,
                     focusable: if date == self.focused {
@@ -245,9 +308,19 @@ impl Primitive for Calendar {
     }
 
     fn set_value(&mut self, value: Vec<String>) {
-        if let Some(date) = value.first().and_then(|text| Date::parse(text)) {
-            self.selected = Some(date);
-            self.focused = date;
+        let mut days: Vec<Date> = value.iter().filter_map(|text| Date::parse(text)).collect();
+        days.sort();
+        days.dedup();
+        match self.opts.mode {
+            Selecting::Single => days.truncate(1),
+            Selecting::Range => days.truncate(2),
+            Selecting::Multiple => {}
+        }
+        if let Some(first) = days.first() {
+            self.focused = *first;
+        }
+        if !days.is_empty() || value.is_empty() {
+            self.selected = days;
         }
     }
 
@@ -431,6 +504,92 @@ mod tests {
         );
         key(&mut calendar, Key::Enter);
         assert_eq!(calendar.value(), ["2026-12-17"]);
+    }
+
+    #[test]
+    fn a_span_is_two_presses_and_a_third_starts_another() {
+        let start = Date::new(2026, 11, 17).unwrap();
+        let mut calendar = Calendar::new(
+            Options {
+                mode: Selecting::Range,
+                ..Default::default()
+            },
+            start,
+        );
+        let press = |calendar: &mut Calendar, day: &str| {
+            calendar.send(
+                Input::Press {
+                    part: Part::Day,
+                    item: Some(day.into()),
+                    mods: Modifiers::default(),
+                },
+                &mut |_| true,
+            );
+        };
+        press(&mut calendar, "2026-11-20");
+        assert_eq!(calendar.range(), None, "one end is not a span yet");
+        press(&mut calendar, "2026-11-12");
+        assert_eq!(
+            calendar.value(),
+            ["2026-11-12", "2026-11-20"],
+            "in order, whichever was pressed first"
+        );
+        assert!(
+            calendar
+                .semantics(Part::Day, Some("2026-11-15"))
+                .selected
+                .unwrap(),
+            "days between are inside it"
+        );
+        press(&mut calendar, "2026-11-25");
+        assert_eq!(calendar.value(), ["2026-11-25"]);
+    }
+
+    #[test]
+    fn several_days_can_be_chosen_and_booked_days_cannot() {
+        let start = Date::new(2026, 11, 17).unwrap();
+        let weekend: fn(Date) -> bool = |date| matches!(date.weekday(), 0 | 6);
+        let opts = Options {
+            mode: Selecting::Multiple,
+            unavailable: Some(weekend),
+            ..Default::default()
+        };
+        let mut calendar = Calendar::new(opts, start);
+        for day in ["2026-11-18", "2026-11-16", "2026-11-18", "2026-11-19"] {
+            calendar.act("select", Some(day), &mut |_| true).unwrap();
+        }
+        assert_eq!(
+            calendar.value(),
+            ["2026-11-16", "2026-11-19"],
+            "the day chosen twice was let go"
+        );
+        assert!(
+            calendar.semantics(Part::Day, Some("2026-11-21")).disabled,
+            "a Saturday"
+        );
+        assert!(
+            calendar
+                .act("select", Some("2026-11-21"), &mut |_| true)
+                .is_err()
+        );
+
+        let mut span = Calendar::new(
+            Options {
+                mode: Selecting::Range,
+                unavailable: Some(weekend),
+                ..Default::default()
+            },
+            start,
+        );
+        span.act("select", Some("2026-11-19"), &mut |_| true)
+            .unwrap();
+        span.act("select", Some("2026-11-24"), &mut |_| true)
+            .unwrap();
+        assert_eq!(
+            span.value(),
+            ["2026-11-24"],
+            "a span cannot reach across the weekend"
+        );
     }
 
     #[test]
