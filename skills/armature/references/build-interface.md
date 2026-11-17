@@ -65,6 +65,7 @@ Each lives in `armature_core::<module>` and exports a `Part` enum.
 | Rating | `rating` | `Root`, `Star` | The number of stars, in halves if allowed. Fill each star by `fill(star)`. |
 | Waterfall | `waterfall` | `Root`, `Row`, `Bar`, `Axis` | The selected span. Draw from `rows()`, `bar(key)` and `ticks(most)`. |
 | Outline | `outline` | `Root`, `Row` | The rows in order, each `depth:key`. The outline owns its rows: `Outline::new(options, rows)`. Draw from `rows()`, indenting by depth. Space picks a row up, arrows move and nest it, Space drops it. |
+| Text with tokens | `token_editor` | `Root`, `Token` | The content as text, each token written `[@label](kind:value)`. The primitive edits its own content key by key, so `Root` is not a native field: draw `segments()` with the caret at `caret()` (`split_at_caret` gives both sides). `trigger(rules)` finds an `@` or `/` being typed and `complete(match, token, gate)` replaces it with a token. For plain tags use `token_input`. |
 
 A part marked as an item part (`Primitive::is_item`) is rendered once per item and takes
 that item's key. Some other parts also take a key: a tab's panel, an accordion's panel,

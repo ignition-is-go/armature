@@ -105,5 +105,22 @@ async () => {
   key(' '); await frame();
   out.outline = `${during} | dropped=${value()} focus=${document.activeElement.dataset.value}`;
   }
+  // The token editor: typed text, a token an agent inserts, and Backspace taking the token whole.
+  {
+    const a = window.armature;
+    const prompt = () => a.snapshot().find(s => s.label === 'Prompt');
+    const box = document.querySelector('[role=textbox][aria-label="Prompt"]');
+    const shown = () => document.getElementById('prompt-content').textContent;
+    box.scrollIntoView(); box.focus(); await frame();
+    for (const ch of ['a', 's', 'k', ' ']) { key(ch); await frame(); }
+    const typed = `${box.tagName}:${prompt().value.join('')}`;
+    a.act(prompt().ref, 'insert', '[@@Alice](mention:alice)'); await frame();
+    key('!'); await frame();
+    const withToken = `${prompt().value.join('')} | shown=${shown()} tokens=${prompt().items.map(i => i.label).join(',')}`;
+    key('ArrowLeft'); await frame();
+    key('Backspace'); await frame();
+    out.tokenEditor = `${typed} | ${withToken} | afterBackspace=${prompt().value.join('')}`;
+    a.act(prompt().ref, 'clear'); await frame();
+  }
   return out;
 }

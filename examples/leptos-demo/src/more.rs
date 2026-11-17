@@ -62,6 +62,48 @@ fn MenuItems() -> impl IntoView {
 }
 
 #[component]
+fn PromptContent() -> impl IntoView {
+    use armature_core::token_editor::{Part as EditorPart, TokenEditor, split_at_caret};
+    use armature_core::token_text::Segment;
+    let editor = use_primitive::<TokenEditor>();
+    // Each piece with a key that changes when its content does.
+    let pieces = move || {
+        editor.with(|editor| {
+            let (before, after) = split_at_caret(editor);
+            let caret = std::iter::once((String::from("caret"), None, String::new()));
+            let piece = |side: &'static str| {
+                move |(at, segment): (usize, Segment)| match segment {
+                    Segment::Text(text) => (format!("{side}{at}:{text}"), None, text),
+                    Segment::Token(token) => {
+                        (format!("token:{}", token.id), Some(token.id), token.label)
+                    }
+                }
+            };
+            before
+                .into_iter()
+                .enumerate()
+                .map(piece("a"))
+                .chain(caret)
+                .chain(after.into_iter().enumerate().map(piece("b")))
+                .collect::<Vec<_>>()
+        })
+    };
+    view! {
+        <Part part=EditorPart::Root>
+            <span id="prompt-content" style="display:inline-block;min-width:16rem;min-height:1.4em;white-space:pre-wrap;border:1px solid currentColor;padding:2px 4px">
+                <For each=pieces key=|piece| piece.0.clone() let:piece>
+                    {match (piece.0.as_str(), piece.1.clone()) {
+                        ("caret", _) => view! { <span data-caret="" style="border-left:1px solid currentColor;margin-right:-1px"></span> }.into_any(),
+                        (_, Some(id)) => view! { <Part part=EditorPart::Token item=id><b>{piece.2.clone()}</b></Part> }.into_any(),
+                        _ => view! { <span>{piece.2.clone()}</span> }.into_any(),
+                    }}
+                </For>
+            </span>
+        </Part>
+    }
+}
+
+#[component]
 fn OutlineRows() -> impl IntoView {
     use armature_core::outline::{Outline, Part as OutlinePart};
     let outline = use_primitive::<Outline>();
@@ -633,6 +675,10 @@ pub fn More() -> impl IntoView {
             >
                 <Part part=menu::Part::Trigger>"Note"</Part>
                 <MenuItems />
+            </Root>
+            // Text with tokens in it, edited at a caret.
+            <Root machine=armature_core::token_editor::TokenEditor::default() label="Prompt">
+                <PromptContent />
             </Root>
             // An outline reordered and nested with the keyboard or by dragging.
             <Root

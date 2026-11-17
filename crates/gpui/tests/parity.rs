@@ -982,3 +982,29 @@ fn a_destructive_menu_entry_and_a_disabled_trigger_reach_the_adapter(cx: &mut Te
         "a disabled trigger never opens the menu"
     );
 }
+
+#[gpui::test]
+fn a_token_editor_takes_typing_and_deletes_a_token_whole(cx: &mut TestAppContext) {
+    use armature_core::token_editor::{self, TokenEditor};
+    let (editor, cx) = open(
+        cx,
+        TokenEditor::default(),
+        |editor: &Entity<Machine<TokenEditor>>, cx: &mut App| {
+            part(editor, token_editor::Part::Root, None, cx).size(px(ROW))
+        },
+    );
+    cx.update(|window, _| window.activate_window());
+    cx.run_until_parked();
+    focus(&editor, cx, token_editor::Part::Root, None);
+    cx.simulate_keystrokes("h i space");
+    cx.run_until_parked();
+    assert_eq!(editor.read_with(cx, |m, _| m.primitive().value()), ["hi "]);
+    // The owner sets the content with a token in it; the caret goes to the end.
+    editor.update(cx, |m, cx| {
+        m.set_value(vec!["hi [@a.ts](file:src/a.ts)".into()], cx)
+    });
+    cx.simulate_keystrokes("x left backspace");
+    cx.run_until_parked();
+    assert_eq!(editor.read_with(cx, |m, _| m.primitive().value()), ["hi x"]);
+    assert_eq!(editor.read_with(cx, |m, _| m.primitive().caret()), 3);
+}

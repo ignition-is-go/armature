@@ -814,7 +814,12 @@ where
     let interactive = move || semantics.get_untracked().focusable != Focusable::No;
     let names_component =
         item.is_none() && ctx.machine.with_untracked(|m| m.named_part()) == Some(part);
-    let takes_text = matches!(role, Some(Role::TextBox | Role::SpinButton));
+    // A part the primitive keeps text for is a native field. One that edits its
+    // own content, key by key, is not.
+    let takes_text = matches!(role, Some(Role::TextBox | Role::SpinButton))
+        && ctx
+            .machine
+            .with_untracked(|m| m.text(part, item.as_deref()).is_some());
 
     let element = NodeRef::<leptos::html::Div>::new();
     // A part the person types into is an input, not a div.

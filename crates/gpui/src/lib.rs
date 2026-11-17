@@ -1254,7 +1254,10 @@ pub fn part<K: PartOf>(
         };
     };
     let handle = handle.tab_stop(semantics.focusable == Focusable::TabStop);
-    let takes_text = matches!(semantics.role, Some(Role::TextBox | Role::SpinButton));
+    // A part the primitive keeps text for is edited as a text field. One that
+    // edits its own content, key by key, is not.
+    let takes_text = matches!(semantics.role, Some(Role::TextBox | Role::SpinButton))
+        && state.read(cx).text(key.0, key.1.as_deref()).is_some();
     let (part, item) = key;
 
     let inner = el
