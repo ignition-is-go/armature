@@ -866,3 +866,119 @@ fn a_panel_stays_open_while_the_pointer_crosses_the_gap_to_it(cx: &mut TestAppCo
     move_to(cx, 300., 300., 200);
     assert!(!open_now(cx), "gone elsewhere");
 }
+
+#[gpui::test]
+fn an_outline_row_is_picked_up_moved_with_its_children_and_dropped(cx: &mut TestAppContext) {
+    use armature_core::outline::{self, Outline, OutlineRow};
+    let rows: Vec<OutlineRow> = [
+        ("inbox", 0),
+        ("projects", 0),
+        ("site", 1),
+        ("copy", 2),
+        ("app", 1),
+    ]
+    .iter()
+    .map(|(key, depth)| OutlineRow {
+        key: key.to_string(),
+        depth: *depth,
+    })
+    .collect();
+    let changes = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let heard = changes.clone();
+    let (page, cx) = cx.add_window_view(|_, cx| Page {
+        machine: cx.new(|cx| {
+            Machine::new(
+                Outline::new(Default::default(), rows),
+                "Notes",
+                Vec::<Item>::new(),
+                cx,
+            )
+            .on_value_change(move |change, _| {
+                heard.borrow_mut().push(change.value.clone());
+                true
+            })
+        }),
+        draw: Box::new(|outline: &Entity<Machine<Outline>>, cx: &mut App| {
+            let keys: Vec<String> = outline
+                .read(cx)
+                .primitive()
+                .rows()
+                .iter()
+                .map(|row| row.key.clone())
+                .collect();
+            outline.update(cx, |m, cx| m.track(outline::Part::Row, keys.clone(), cx));
+            part(outline, outline::Part::Root, None, cx)
+                .children(
+                    keys.iter()
+                        .map(|key| part(outline, outline::Part::Row, Some(key), cx).h(px(ROW)))
+                        .collect::<Vec<_>>(),
+                )
+                .into_any_element()
+        }),
+    });
+    let outline = page.update(cx, |page, _| page.machine.clone());
+    cx.update(|window, _| window.activate_window());
+    cx.run_until_parked();
+
+    focus(&outline, cx, outline::Part::Row, Some("site"));
+    cx.simulate_keystrokes("space down");
+    cx.run_until_parked();
+    let drawn = outline.read_with(cx, |m, _| {
+        m.primitive()
+            .rows()
+            .iter()
+            .map(|row| format!("{}:{}", row.depth, row.key))
+            .collect::<Vec<_>>()
+    });
+    assert_eq!(
+        drawn,
+        ["0:inbox", "0:projects", "1:app", "1:site", "2:copy"]
+    );
+    assert!(
+        changes.borrow().is_empty(),
+        "nothing is committed while the row is up"
+    );
+    let still_focused = outline.update_in(cx, |m, window, _| {
+        m.focus_handle(outline::Part::Row, Some("site"))
+            .is_some_and(|handle| handle.is_focused(window))
+    });
+    assert!(still_focused, "focus stays on the row being moved");
+    cx.simulate_keystrokes("left space");
+    cx.run_until_parked();
+    assert_eq!(
+        *changes.borrow(),
+        [vec!["0:inbox", "0:projects", "1:app", "0:site", "1:copy"]]
+    );
+}
+
+#[gpui::test]
+fn a_destructive_menu_entry_and_a_disabled_trigger_reach_the_adapter(cx: &mut TestAppContext) {
+    let entries = vec![Entry::action("erase", "Erase all").destructive()];
+    let (menu, cx) = open(
+        cx,
+        Menu::new(entries).disabled(),
+        |menu: &Entity<Machine<Menu>>, cx: &mut App| {
+            menu.update(cx, |m, cx| {
+                m.track(menu::Part::Item, vec!["erase".to_string()], cx)
+            });
+            div()
+                .child(part(menu, menu::Part::Trigger, None, cx).size(px(ROW)))
+                .child(
+                    part(menu, menu::Part::Content, None, cx)
+                        .child(part(menu, menu::Part::Item, Some("erase"), cx).h(px(ROW))),
+                )
+        },
+    );
+    cx.update(|window, _| window.activate_window());
+    cx.run_until_parked();
+    assert!(menu.read_with(cx, |m, _| {
+        m.semantics(menu::Part::Item, Some("erase")).destructive
+    }));
+    focus(&menu, cx, menu::Part::Trigger, None);
+    cx.simulate_keystrokes("down enter");
+    cx.run_until_parked();
+    assert!(
+        !menu.read_with(cx, |m, _| m.primitive().is_open()),
+        "a disabled trigger never opens the menu"
+    );
+}
