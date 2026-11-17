@@ -2,7 +2,9 @@ use crate::agent::{ActError, Snapshot, SnapshotItem};
 use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::items::Items;
 use crate::keys::Key;
-use crate::primitive::{Focusable, Input, Item, PartOf, Primitive, Reaction, Role, Semantics};
+use crate::primitive::{
+    Focusable, Input, Item, PartOf, Primitive, Reaction, Relations, Role, Semantics,
+};
 use crate::roving::Nav;
 use crate::text_match::fuzzy_score;
 
@@ -91,6 +93,16 @@ impl Primitive for Command {
 
     fn is_item(part: Part) -> bool {
         part == Part::Option
+    }
+
+    fn relations(part: Part) -> Relations<Part> {
+        match part {
+            Part::Input => Relations {
+                controls: Some(Part::List),
+                ..Default::default()
+            },
+            _ => Relations::default(),
+        }
     }
 
     fn upsert_item(&mut self, item: Item) {

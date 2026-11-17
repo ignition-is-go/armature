@@ -2,8 +2,8 @@ use crate::agent::{ActError, Snapshot};
 use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::keys::Key;
 use crate::primitive::{
-    Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction, Role,
-    Semantics,
+    Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction, Relations,
+    Role, Semantics,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -102,6 +102,16 @@ impl Primitive for Dialog {
 
     fn tracks_pointer(part: Part) -> bool {
         part == Part::Backdrop
+    }
+
+    fn relations(part: Part) -> Relations<Part> {
+        match part {
+            Part::Trigger => Relations {
+                controls: Some(Part::Content),
+                ..Default::default()
+            },
+            _ => Relations::default(),
+        }
     }
 
     fn upsert_item(&mut self, _: Item) {}

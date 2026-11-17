@@ -125,8 +125,8 @@ impl<P: Primitive + Send + Sync> Context<P> {
             self.secret,
         );
 
-        if let Some(target) = &reaction.focus {
-            self.focus(&rendered, target);
+        if let Some(target) = reaction.focus {
+            self.focus(target);
         }
         for effect in reaction.effects {
             match effect {
@@ -171,30 +171,26 @@ impl<P: Primitive + Send + Sync> Context<P> {
         let name = format!("{part:?}");
         self.rendered()
             .into_iter()
-            .find(|r| r.part == name && (item.is_none() || r.item.as_deref() == item))
+            .find(|r| r.part == name && r.item.as_deref() == item)
             .map(|r| r.element)
     }
 
-    fn focus(self, rendered: &[Rendered], target: &FocusTarget<P::Part>) {
-        let part = format!("{:?}", target.part);
-        let Some(found) = rendered
-            .iter()
-            .find(|r| r.part == part && r.item == target.item)
-        else {
-            return;
-        };
-        let element = found.element.clone();
-        let _ = element.focus();
-        // A target inside a popup that is still hidden cannot take focus until the
-        // popup has rendered.
-        let focused = document()
-            .active_element()
-            .is_some_and(|active| active.is_same_node(Some(&element)));
-        if !focused {
-            request_animation_frame(move || {
+    /// Moves focus to a part, now and again a frame later. The change that asked for
+    /// it may not have rendered yet, and a re-render that moves the part drops focus.
+    fn focus(self, target: FocusTarget<P::Part>) {
+        let attempt = move || {
+            let Some(element) = self.element_of(target.part, target.item.as_deref()) else {
+                return;
+            };
+            let focused = document()
+                .active_element()
+                .is_some_and(|active| active.is_same_node(Some(&element)));
+            if !focused {
                 let _ = element.focus();
-            });
-        }
+            }
+        };
+        attempt();
+        request_animation_frame(attempt);
     }
 
     fn place(self, popup: &HtmlElement, placement: Placement<P::Part>) {
@@ -312,6 +308,7 @@ fn key_from_dom(key: &str) -> Option<Key> {
         " " => Key::Space,
         "Escape" => Key::Escape,
         "Tab" => Key::Tab,
+        "Backspace" => Key::Backspace,
         other => {
             let mut chars = other.chars();
             match (chars.next(), chars.next()) {
@@ -347,7 +344,17 @@ fn aria_role(role: Role) -> &'static str {
         Role::Dialog => "dialog",
         Role::List => "list",
         Role::ListItem => "listitem",
+        Role::Separator => "separator",
     }
+}
+
+/// The primitive owned by the nearest `Root`, for what only it knows, such as a
+/// calendar's weeks or a slider's fraction. Call it from a component inside the `Root`.
+pub fn use_primitive<P>() -> ReadSignal<P>
+where
+    P: Primitive + Send + Sync,
+{
+    expect_context::<Context<P>>().machine.read_only()
 }
 
 /// Owns one primitive's state and makes it available to the `Part`s inside.
@@ -634,6 +641,19 @@ where
         Focusable::Programmatic => Some("-1"),
         Focusable::TabStop => Some("0"),
     };
+    // Related parts find each other by id. Parts that share an item share its key.
+    let id_of = {
+        let (instance, item) = (ctx.instance, item.clone());
+        move |part: K| match &item {
+            Some(item) => format!("armature-{instance}-{part:?}-{item}"),
+            None => format!("armature-{instance}-{part:?}"),
+        }
+    };
+    let relations = K::Primitive::relations(part);
+    let controls = relations.controls.map(&id_of);
+    let labelled_by = relations.labelled_by.map(&id_of);
+    let own_id = id_of(part);
+
     // State that changes often is written straight onto the element. The view layer
     // caps how many attributes one element may declare.
     Effect::new(move |_| {
@@ -660,6 +680,8 @@ where
                 (state.role == Some(Role::ComboBox)).then(|| "listbox".to_string()),
             ),
             ("aria-modal", state.modal.then(|| "true".to_string())),
+            ("aria-controls", controls.clone()),
+            ("aria-labelledby", labelled_by.clone()),
             ("data-active", state.active.then(String::new)),
         ];
         for (name, value) in attributes {
@@ -704,6 +726,7 @@ where
                 aria-disabled=move || semantics.get().disabled.then_some("true")
                 autocomplete="off"
                 prop:value=text
+                id=own_id
                 data-armature=instance
                 data-armature-part=part_name
                 data-value=item
@@ -718,6 +741,7 @@ where
     view! {
         <div
             node_ref=element
+            id=own_id
             role=move || semantics.get().role.map(aria_role)
             aria-label=label_text
             hidden=move || semantics.get().hidden

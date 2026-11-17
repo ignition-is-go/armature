@@ -59,6 +59,32 @@
       [data-armature-part="Backdrop"] { position: fixed; inset: 0; background: rgba(20, 24, 40, 0.35); }
       [role="dialog"] { position: fixed; top: 30%; left: 50%; transform: translateX(-50%); width: 18rem; padding: 1rem; background: white; border-radius: 10px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25); outline: none; }
       [role="dialog"] [role="button"], [role="button"][aria-expanded][data-armature-part="Trigger"] { display: inline-block; width: auto; padding: 5px 10px; border: 1px solid #bbb; border-radius: 6px; cursor: default; }
+      .calendar-head { display: flex; gap: 8px; align-items: center; width: 14rem; justify-content: space-between; }
+      .calendar-head [role="button"] { padding: 2px 8px; border: 1px solid #bbb; border-radius: 6px; cursor: default; outline: none; }
+      .calendar-head [role="button"]:focus-visible { box-shadow: 0 0 0 2px #3b6fe0; }
+      [role="grid"] { display: grid; grid-template-columns: repeat(7, 2rem); gap: 2px; margin-top: 6px; }
+      [role="gridcell"] { height: 2rem; line-height: 2rem; text-align: center; border-radius: 6px; cursor: default; outline: none; color: #aab; }
+      [role="gridcell"][data-active] { color: inherit; }
+      [role="gridcell"][aria-selected="true"] { background: #3b6fe0; color: white; }
+      [role="gridcell"]:focus-visible { box-shadow: 0 0 0 2px #3b6fe0; }
+      [role="gridcell"][aria-disabled="true"] { text-decoration: line-through; }
+      [role="toolbar"] { display: flex; gap: 4px; }
+      [role="toolbar"] [role="button"] { padding: 4px 10px; border: 1px solid #bbb; border-radius: 6px; cursor: default; outline: none; }
+      [role="toolbar"] [role="button"]:focus-visible { box-shadow: 0 0 0 2px #3b6fe0; }
+      [role="toolbar"] [aria-disabled="true"] { color: #bbb; }
+      .otp { position: relative; width: 9.5rem; height: 2.4rem; }
+      .otp input { position: absolute; inset: 0; width: 100%; opacity: 0; }
+      .otp-cells { display: flex; gap: 6px; pointer-events: none; }
+      .otp-cells span { width: 2rem; height: 2.2rem; line-height: 2.2rem; text-align: center; border: 1px solid #bbb; border-radius: 6px; font-size: 18px; }
+      .otp:focus-within .otp-cells span { border-color: #3b6fe0; }
+      [role="group"] { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; width: 16rem; padding: 4px; border: 1px solid #bbb; border-radius: 6px; }
+      [role="group"] input { border: none; outline: none; width: 6rem; padding: 3px; }
+      [role="group"] [role="button"] { padding: 2px 8px; background: #e8eefc; border-radius: 10px; cursor: default; }
+      [data-armature-part="Root"]:has(> .panel) { display: flex; width: 16rem; height: 5rem; border: 1px solid #bbb; border-radius: 6px; overflow: hidden; }
+      .panel { padding: 6px; box-sizing: border-box; overflow: hidden; }
+      .panel.grow { flex: 1; }
+      [role="separator"] { width: 6px; background: #ccd; cursor: col-resize; outline: none; flex: none; }
+      [role="separator"]:focus-visible, [role="separator"][data-active] { background: #3b6fe0; }
     </style>
   </head>
   <body></body>

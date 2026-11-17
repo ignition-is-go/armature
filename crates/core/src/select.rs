@@ -3,7 +3,9 @@ use crate::change::Gate;
 use crate::keys::{Key, Modifiers};
 use crate::listbox::{self, Listbox};
 use crate::popup::{Align, Placement, Side};
-use crate::primitive::{Focusable, Input, Item, PartOf, Primitive, Reaction, Role, Semantics};
+use crate::primitive::{
+    Focusable, Input, Item, PartOf, Primitive, Reaction, Relations, Role, Semantics,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Part {
@@ -108,6 +110,16 @@ impl Primitive for Select {
             align: Align::Start,
             gap: 4.0,
         })
+    }
+
+    fn relations(part: Part) -> Relations<Part> {
+        match part {
+            Part::Trigger => Relations {
+                controls: Some(Part::Content),
+                ..Default::default()
+            },
+            _ => Relations::default(),
+        }
     }
 
     fn upsert_item(&mut self, item: Item) {

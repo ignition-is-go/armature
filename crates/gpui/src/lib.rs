@@ -672,6 +672,7 @@ fn key_from_keystroke(keystroke: &gpui::Keystroke) -> Option<Key> {
         "space" => Key::Space,
         "escape" => Key::Escape,
         "tab" => Key::Tab,
+        "backspace" => Key::Backspace,
         key => {
             let typed = keystroke.key_char.as_deref().unwrap_or(key);
             let mut chars = typed.chars();
@@ -716,6 +717,7 @@ fn accessibility_role(role: Role) -> gpui::Role {
         Role::Dialog => gpui::Role::Dialog,
         Role::List => gpui::Role::List,
         Role::ListItem => gpui::Role::ListItem,
+        Role::Separator => gpui::Role::Splitter,
     }
 }
 

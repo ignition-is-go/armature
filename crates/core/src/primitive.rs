@@ -180,6 +180,8 @@ pub enum Role {
     Dialog,
     List,
     ListItem,
+    /// A draggable divider between two panels.
+    Separator,
 }
 
 /// A number within limits, as a slider or stepper reports it.
@@ -222,6 +224,24 @@ pub struct Semantics {
     pub active: bool,
 }
 
+/// Links from one part to others.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Relations<Part> {
+    /// The part whose text names this one.
+    pub labelled_by: Option<Part>,
+    /// The part this one shows, hides or changes.
+    pub controls: Option<Part>,
+}
+
+impl<Part> Default for Relations<Part> {
+    fn default() -> Self {
+        Relations {
+            labelled_by: None,
+            controls: None,
+        }
+    }
+}
+
 /// Names the primitive a part belongs to, so adapters can infer it from the part.
 pub trait PartOf: Copy + Debug + Eq + Hash + Send + Sync + 'static {
     type Primitive: Primitive<Part = Self>;
@@ -235,6 +255,12 @@ pub trait Primitive: Clone + 'static {
 
     /// Whether a part is rendered once per item and registers that item.
     fn is_item(part: Self::Part) -> bool;
+
+    /// How a part relates to others, for assistive technology. A relation between
+    /// parts that take an item joins the two that share an item.
+    fn relations(_part: Self::Part) -> Relations<Self::Part> {
+        Relations::default()
+    }
 
     /// Where a part floats, if it is a popup. The adapter measures and positions it.
     fn popup_of(_part: Self::Part) -> Option<Placement<Self::Part>> {

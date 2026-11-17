@@ -12,6 +12,7 @@ pub enum Key {
     Space,
     Escape,
     Tab,
+    Backspace,
     Char(char),
 }
 

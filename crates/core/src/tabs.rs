@@ -2,7 +2,9 @@ use crate::agent::{ActError, Snapshot, SnapshotItem};
 use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::items::Items;
 use crate::keys::{Dir, Key, Orientation};
-use crate::primitive::{Focusable, Input, Item, PartOf, Primitive, Reaction, Role, Semantics};
+use crate::primitive::{
+    Focusable, Input, Item, PartOf, Primitive, Reaction, Relations, Role, Semantics,
+};
 use crate::roving;
 
 #[derive(Clone, Copy, Debug)]
@@ -84,6 +86,20 @@ impl Primitive for Tabs {
 
     fn is_item(part: Part) -> bool {
         part == Part::Tab
+    }
+
+    fn relations(part: Part) -> Relations<Part> {
+        match part {
+            Part::Tab => Relations {
+                controls: Some(Part::Panel),
+                ..Default::default()
+            },
+            Part::Panel => Relations {
+                labelled_by: Some(Part::Tab),
+                ..Default::default()
+            },
+            Part::List => Relations::default(),
+        }
     }
 
     fn upsert_item(&mut self, item: Item) {
