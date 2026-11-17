@@ -741,6 +741,8 @@ where
     let takes_text = matches!(role, Some(Role::TextBox | Role::SpinButton));
 
     let element = NodeRef::<leptos::html::Div>::new();
+    // A part the person types into is an input, not a div.
+    let field = NodeRef::<leptos::html::Input>::new();
     // A part that closes stays rendered until its exit animation, if it has one, ends.
     let presence = RwSignal::new(if semantics.get_untracked().hidden {
         Presence::Absent
@@ -929,7 +931,9 @@ where
     {
         let item = item.clone();
         Effect::new(move |_| {
-            let Some(element) = element.get() else { return };
+            let node = element.get().map(|node| web_sys::Element::clone(&node));
+            let node = node.or_else(|| field.get().map(|node| web_sys::Element::clone(&node)));
+            let Some(element) = node else { return };
             let item = item.clone();
             let for_context = item.clone();
             let for_wheel = item.clone();
@@ -1144,8 +1148,6 @@ where
 
     // State that changes often is written straight onto the element. The view layer
     // caps how many attributes one element may declare.
-    // A part the person types into is an input, not a div.
-    let field = NodeRef::<leptos::html::Input>::new();
     Effect::new(move |_| {
         let state = semantics.get();
         let node = element.get().map(|node| web_sys::Element::clone(&node));

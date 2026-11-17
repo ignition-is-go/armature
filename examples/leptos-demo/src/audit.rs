@@ -1,16 +1,23 @@
 //! The components and options added after comparing every option with UI SDK's.
 
 use armature_core::calendar::{self, Calendar, Selecting};
+use armature_core::combobox::{self, Combobox};
 use armature_core::command::{self, Command};
 use armature_core::date::Date;
+use armature_core::date_input::{self, DateInput};
 use armature_core::event_list::{self, EventList};
+use armature_core::geometry::Size;
+use armature_core::image_cropper::{self, ImageCropper};
 use armature_core::keys::Dir;
+use armature_core::number::NumberRange;
+use armature_core::number_input::{self, NumberInput};
 use armature_core::panel_group::{self, PanelGroup};
 use armature_core::range_slider::{self, RangeSlider};
 use armature_core::rating::{self, Rating};
 use armature_core::select::{self, Select};
 use armature_core::tree::tree_from_paths;
 use armature_core::tree_view::{self, TreeView};
+use armature_core::trigger_menu::{self, TriggerMenu};
 use armature_leptos::{Part, Root, ValueChange, use_primitive};
 use leptos::prelude::*;
 
@@ -125,6 +132,61 @@ fn LazyRows() -> impl IntoView {
 }
 
 #[component]
+fn ZoomCrop() -> impl IntoView {
+    let cropper = use_primitive::<ImageCropper>();
+    let side = move |at: usize| move || format!("{}%", cropper.with(|c| c.fractions()[at]) * 100.0);
+    view! {
+        <p id="zoom-value">"Zoom: " {move || format!("{:.2}", cropper.with(|c| c.zoom()))}</p>
+        <Part part=image_cropper::Part::Area>
+            <div class="crop-box" style:left=side(0) style:top=side(1) style:width=side(2) style:height=side(3)>
+                <Part part=image_cropper::Part::Selection label="Zoomed crop" />
+            </div>
+        </Part>
+    }
+}
+
+#[component]
+fn TimeParts() -> impl IntoView {
+    let input = use_primitive::<DateInput>();
+    view! {
+        <Part part=date_input::Part::Root>
+            <div class="segments">
+                <For each=move || input.with(|i| i.segments()) key=|segment| segment.name() let:segment>
+                    <Part part=date_input::Part::Segment item=segment.name() label=segment.name() />
+                </For>
+            </div>
+        </Part>
+    }
+}
+
+#[component]
+fn CityField() -> impl IntoView {
+    let combobox = use_primitive::<Combobox>();
+    view! {
+        <Part part=combobox::Part::Input />
+        <span id="city-completion" class="hint">{move || combobox.with(|c| c.completion()).unwrap_or_default()}</span>
+        <Part part=combobox::Part::List>
+            <Part part=combobox::Part::Option item="lisbon">"Lisbon"</Part>
+            <Part part=combobox::Part::Option item="lima">"Lima"</Part>
+            <Part part=combobox::Part::Option item="oslo">"Oslo"</Part>
+        </Part>
+    }
+}
+
+#[component]
+fn CommandField() -> impl IntoView {
+    let menu = use_primitive::<TriggerMenu>();
+    view! {
+        <Part part=trigger_menu::Part::Input />
+        <span id="command-hint" class="hint">{move || menu.with(|m| m.argument_hint().map(str::to_string)).unwrap_or_default()}</span>
+        <Part part=trigger_menu::Part::List>
+            <Part part=trigger_menu::Part::Option item="/deploy">"deploy"</Part>
+            <Part part=trigger_menu::Part::Option item="/rollback">"rollback"</Part>
+        </Part>
+    }
+}
+
+#[component]
 pub fn Audit() -> impl IntoView {
     let (price, on_price) = follow();
     let (panes, on_panes) = follow();
@@ -132,6 +194,11 @@ pub fn Audit() -> impl IntoView {
     let (stay, on_stay) = follow();
     let (sizes, on_sizes) = follow();
     let (palette, on_palette) = follow();
+    let (amount, on_amount) = follow();
+    let (time, on_time) = follow();
+    let (city, on_city) = follow();
+    let (line, on_line) = follow();
+    let (zoomed, on_zoomed) = follow();
     let step = RwSignal::new(vec![("current".to_string(), "packed".to_string())]);
     // The children of a folder arrive when it is first opened.
     let loaded = RwSignal::new(Vec::<(String, String)>::new());
@@ -218,6 +285,34 @@ pub fn Audit() -> impl IntoView {
                     <Part part=command::Part::Option item="dark">"Dark"</Part>
                 </Part>
             </Root>
+        </Section>
+
+        <Section title="Number scrub and wheel">
+            <p id="amount-value">"Amount: " {move || amount.get().join("")}</p>
+            <Root machine=NumberInput::new(NumberRange::new(0.0, 100.0, 1.0), 20.0) label="Amount" on_value_change=on_amount>
+                <Part part=number_input::Part::Scrub><span class="scrub">"⇔ Amount"</span></Part>
+                <Part part=number_input::Part::Input />
+            </Root>
+        </Section>
+
+        <Section title="Twelve-hour time">
+            <p id="time-value">"Time: " {move || time.get().join("")}</p>
+            <Root machine=DateInput::new(true).twelve_hour() label="Meeting" on_value_change=on_time><TimeParts /></Root>
+        </Section>
+
+        <Section title="Completion and more">
+            <p id="city-value">"City: " {move || city.get().join(", ")}</p>
+            <Root machine=Combobox::new(combobox::Options { load_more: true, ..Default::default() }) label="City" on_value_change=on_city><CityField /></Root>
+        </Section>
+
+        <Section title="Command arguments">
+            <p id="line-value">"Line: " {move || line.get().join("")}</p>
+            <Root machine=TriggerMenu::new(&['/']).arguments("/deploy", &["environment", "version"]) label="Command line" on_value_change=on_line><CommandField /></Root>
+        </Section>
+
+        <Section title="Zoomed crop">
+            <p id="zoomed-value">"Crop: " {move || zoomed.get().join("")}</p>
+            <Root machine=ImageCropper::new(Size { width: 800.0, height: 600.0 }, Some(1.0)) label="Zoomed crop" on_value_change=on_zoomed><ZoomCrop /></Root>
         </Section>
     }
 }

@@ -7,8 +7,11 @@ use armature_core::command::{self, Command};
 use armature_core::data_grid::{self, DataGrid};
 use armature_core::dialog::{self, Dialog};
 use armature_core::editable::{self, Editable};
+use armature_core::file_input::{self, FileInput};
 use armature_core::keys::Dir;
 use armature_core::menu::{self, Entry, Kind as EntryKind, Menu};
+use armature_core::number::NumberRange;
+use armature_core::number_input::{self, NumberInput};
 use armature_core::picker::{self, Picker};
 use armature_core::popover::{self, Popover};
 use armature_core::primitive::{Item, Primitive};
@@ -746,4 +749,71 @@ fn a_right_click_opens_a_menu_where_the_pointer_is(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("down enter");
     cx.run_until_parked();
     assert!(!menu.read_with(cx, |m, _| m.primitive().is_open()));
+}
+
+#[gpui::test]
+fn the_wheel_steps_a_number_field_only_while_it_has_focus(cx: &mut TestAppContext) {
+    let (amount, cx) = open(
+        cx,
+        NumberInput::new(NumberRange::new(0.0, 100.0, 1.0), 20.0),
+        |amount: &Entity<Machine<NumberInput>>, cx: &mut App| {
+            part(amount, number_input::Part::Input, None, cx).size(px(100.))
+        },
+    );
+    let wheel = |cx: &mut VisualTestContext| {
+        cx.simulate_event(gpui::ScrollEvent {
+            position: point(px(50.), px(50.)),
+            delta: gpui::ScrollDelta::Lines(point(0., 1.)),
+            ..Default::default()
+        });
+        cx.run_until_parked();
+    };
+    wheel(cx);
+    assert_eq!(
+        amount.read_with(cx, |m, _| m.value()),
+        ["20"],
+        "scrolling past it leaves it alone"
+    );
+    focus(&amount, cx, number_input::Part::Input, None);
+    cx.simulate_keystrokes("up");
+    wheel(cx);
+    assert_eq!(
+        amount.read_with(cx, |m, _| m.value()),
+        ["22"],
+        "one from the key, one from the wheel"
+    );
+}
+
+#[gpui::test]
+fn files_dragged_over_a_dropzone_light_it_up_and_dropping_takes_them(cx: &mut TestAppContext) {
+    let (files, cx) = open(
+        cx,
+        FileInput::default(),
+        |files: &Entity<Machine<FileInput>>, cx: &mut App| {
+            div()
+                .size_full()
+                .child(part(files, file_input::Part::Dropzone, None, cx).size(px(100.)))
+        },
+    );
+    let over = |cx: &mut VisualTestContext| {
+        files.read_with(cx, |m, _| {
+            m.semantics(file_input::Part::Dropzone, None).active
+        })
+    };
+    let paths = gpui::ExternalPaths(vec![std::path::PathBuf::from("/nowhere/report.pdf")].into());
+    cx.simulate_event(gpui::FileDropEvent::Entered {
+        position: point(px(300.), px(300.)),
+        paths,
+    });
+    cx.simulate_event(gpui::FileDropEvent::Pending {
+        position: point(px(50.), px(50.)),
+    });
+    cx.run_until_parked();
+    assert!(over(cx), "the files are over the dropzone");
+    cx.simulate_event(gpui::FileDropEvent::Submit {
+        position: point(px(50.), px(50.)),
+    });
+    cx.run_until_parked();
+    assert_eq!(files.read_with(cx, |m, _| m.value()), ["report.pdf"]);
+    assert!(!over(cx));
 }

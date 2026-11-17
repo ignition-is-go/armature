@@ -401,6 +401,30 @@
       "page": "light,dark field=\"\" ran=\"Ran: \"",
       "ran": "Ran: dark",
       "back": "save,change-theme"
+    },
+    "numberScrubAndWheel": {
+      "scrubbed": "Amount: 30",
+      "wheelIgnoredWithoutFocus": true,
+      "wheelTakenWithFocus": true,
+      "after": "Amount: 31"
+    },
+    "twelveHour": {
+      "morning": "Time: 2026-11-02T02:30 | 2026 11 02 02 30 AM | focus=period",
+      "afternoon": "Time: 2026-11-02T14:30 | 2026 11 02 02 30 PM"
+    },
+    "completionAndMore": {
+      "suggested": "sbon",
+      "askedForMore": "City: more:li",
+      "tabTakesIt": "City: oslo field=\"Oslo\""
+    },
+    "commandArguments": {
+      "first": "\"/deploy \" needs environment",
+      "second": "version",
+      "done": true
+    },
+    "cropZoom": {
+      "before": "Zoom: 1.00 width=75%",
+      "after": "Zoom: 1.46 selectionLooksLarger=true"
     }
   },
   "accessibility": {

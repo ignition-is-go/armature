@@ -90,5 +90,59 @@ async () => {
     return { start, page, ran, back: options() };
   });
 
+  await step('numberScrubAndWheel', async () => {
+    const box = within('amount-value');
+    const scrub = box.querySelector('[data-armature-part="Scrub"]'); const input = box.querySelector('input');
+    const at = scrub.getBoundingClientRect();
+    ptr(scrub, 'pointerdown', at.left + 5, at.top + 5); ptr(window, 'pointermove', at.left + 45, at.top + 5); await frame(); ptr(window, 'pointerup', 0, 0); await frame();
+    const scrubbed = text('amount-value');
+    const wheel = () => { const e = new WheelEvent('wheel', { deltaY: -100, bubbles: true, cancelable: true }); input.dispatchEvent(e); return e.defaultPrevented; };
+    const unfocused = wheel(); await frame();
+    input.focus(); await frame(); const focused = wheel(); await frame();
+    return { scrubbed, wheelIgnoredWithoutFocus: !unfocused, wheelTakenWithFocus: focused, after: text('amount-value') };
+  });
+
+  await step('twelveHour', async () => {
+    const box = within('time-value');
+    const fields = () => [...box.querySelectorAll('input')].map(i => i.value).join(' ');
+    box.querySelector('input').focus(); await frame();
+    for (const digit of '202611020230') { keyHere(digit); await frame(); }
+    const morning = `${text('time-value')} | ${fields()} | focus=${document.activeElement.getAttribute('aria-label')}`;
+    keyHere('p'); await frame();
+    return { morning, afternoon: `${text('time-value')} | ${fields()}` };
+  });
+
+  await step('completionAndMore', async () => {
+    const box = within('city-value');
+    const input = box.querySelector('input');
+    await type(input, 'li');
+    const suggested = document.getElementById('city-completion').textContent;
+    key(input, 'ArrowDown'); await frame(); key(input, 'ArrowDown'); await frame();
+    const askedForMore = text('city-value');
+    await type(input, 'os'); key(input, 'Tab'); await frame();
+    return { suggested, askedForMore, tabTakesIt: `${text('city-value')} field="${input.value}"` };
+  });
+
+  await step('commandArguments', async () => {
+    const box = within('line-value');
+    const input = box.querySelector('input');
+    const hint = () => document.getElementById('command-hint').textContent;
+    await type(input, '/dep'); key(input, 'Enter'); await frame();
+    const first = `"${input.value}" needs ${hint()}`;
+    await type(input, '/deploy prod ');
+    const second = hint();
+    await type(input, '/deploy prod 1.2 ');
+    return { first, second, done: hint() === '' };
+  });
+
+  await step('cropZoom', async () => {
+    const box = within('zoomed-value');
+    const area = box.querySelector('[data-armature-part="Area"]');
+    const crop = box.querySelector('.crop-box');
+    const before = `${text('zoom-value')} width=${crop.style.width}`;
+    for (let i = 0; i < 4; i++) { area.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true, cancelable: true })); await frame(); }
+    return { before, after: `${text('zoom-value')} selectionLooksLarger=${parseFloat(crop.style.width) > 75}` };
+  });
+
   return out;
 }
