@@ -185,6 +185,7 @@ mod tests {
         let ctrl = Modifiers {
             shift: false,
             ctrl: true,
+            alt: false,
         };
         let none = Modifiers::default();
         assert_eq!(nav_for_key(Key::End, none, Dir::Ltr), Some(GridNav::RowEnd));

@@ -187,6 +187,7 @@ mod tests {
         let shift = Modifiers {
             shift: true,
             ctrl: false,
+            alt: false,
         };
         assert_eq!(
             key_delta(Key::ArrowUp, Modifiers::default(), 1., 10.),

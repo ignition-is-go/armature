@@ -402,6 +402,7 @@ fn modifiers(modifiers: gpui::Modifiers) -> Modifiers {
     Modifiers {
         shift: modifiers.shift,
         ctrl: modifiers.control || modifiers.platform,
+        alt: modifiers.alt,
     }
 }
 

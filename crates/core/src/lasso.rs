@@ -61,10 +61,12 @@ mod tests {
         let shift = Modifiers {
             shift: true,
             ctrl: false,
+            alt: false,
         };
         let ctrl = Modifiers {
             shift: false,
             ctrl: true,
+            alt: false,
         };
         assert_eq!(
             lasso_selection(&before, &hits, Modifiers::default()),

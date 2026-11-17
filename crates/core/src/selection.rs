@@ -51,10 +51,12 @@ mod tests {
     const SHIFT: Modifiers = Modifiers {
         shift: true,
         ctrl: false,
+        alt: false,
     };
     const CTRL: Modifiers = Modifiers {
         shift: false,
         ctrl: true,
+        alt: false,
     };
 
     fn strings(keys: &[&str]) -> Vec<String> {

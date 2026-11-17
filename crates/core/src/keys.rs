@@ -18,6 +18,7 @@ pub struct Modifiers {
     pub shift: bool,
     /// Ctrl, or Cmd on macOS.
     pub ctrl: bool,
+    pub alt: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

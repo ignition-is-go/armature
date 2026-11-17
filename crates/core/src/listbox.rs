@@ -56,6 +56,7 @@ impl Listbox {
                     let range = Modifiers {
                         shift: true,
                         ctrl: false,
+                        alt: false,
                     };
                     self.select(key, range, Reason::Keyboard, gate);
                 }
@@ -285,6 +286,7 @@ impl Primitive for Listbox {
                             Modifiers {
                                 ctrl: true,
                                 shift: false,
+                                alt: false,
                             },
                         )
                     }
@@ -358,10 +360,12 @@ mod tests {
     const NONE: Modifiers = Modifiers {
         shift: false,
         ctrl: false,
+        alt: false,
     };
     const SHIFT: Modifiers = Modifiers {
         shift: true,
         ctrl: false,
+        alt: false,
     };
 
     #[test]

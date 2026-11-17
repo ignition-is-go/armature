@@ -340,6 +340,7 @@ where
             let mods = Modifiers {
                 shift: ev.shift_key(),
                 ctrl: ev.ctrl_key() || ev.meta_key(),
+                alt: ev.alt_key(),
             };
             ctx.dispatch(Input::Press {
                 part,
@@ -369,6 +370,7 @@ where
         let mods = Modifiers {
             shift: ev.shift_key(),
             ctrl: ev.ctrl_key() || ev.meta_key(),
+            alt: ev.alt_key(),
         };
         let now_ms = js_sys::Date::now() as u64;
         if ctx.dispatch(Input::Key { key, mods, now_ms }) {
