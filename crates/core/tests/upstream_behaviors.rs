@@ -309,3 +309,412 @@ fn rating_behaviors() {
         Some(Role::Image)
     );
 }
+
+use armature_core::calendar::{self, Calendar, Selecting};
+use armature_core::collapsible::{self, Collapsible};
+use armature_core::date::Date;
+use armature_core::otp_input::{self, Accept, OtpInput};
+use armature_core::primitive::Focusable;
+use armature_core::timing::Hold;
+use armature_core::toggle_group::{self, ToggleGroup};
+
+fn focused_code(length: usize) -> OtpInput {
+    let mut code = OtpInput::new(length);
+    code.send(
+        Input::Focus {
+            part: otp_input::Part::Input,
+            item: None,
+        },
+        &mut |_| true,
+    );
+    code
+}
+
+fn type_keys(code: &mut OtpInput, keys: &str) {
+    for ch in keys.chars() {
+        key(code, Key::Char(ch));
+    }
+}
+
+// otp-input.test.ts
+#[test]
+fn otp_input_behaviors() {
+    // "accepts characters by preset"
+    let mut digits = focused_code(4);
+    type_keys(&mut digits, "1a2");
+    assert_eq!(digits.value(), ["12"]);
+    let mut letters = OtpInput::new(4).accepting(Accept::Alphanumeric);
+    letters.send(
+        Input::Focus {
+            part: otp_input::Part::Input,
+            item: None,
+        },
+        &mut |_| true,
+    );
+    type_keys(&mut letters, "a1-");
+    assert_eq!(letters.value(), ["a1"]);
+    // "tests each character against a custom expression"
+    let mut vowels = OtpInput::new(4).accepting(Accept::Custom(|ch| "aeiou".contains(ch)));
+    vowels.set_value(vec!["hello".into()]);
+    assert_eq!(vowels.value(), ["eo"]);
+    // "drops spaces and dashes from a paste, and ignores one with anything else"
+    let mut pasted = focused_code(6);
+    pasted.send(
+        Input::Paste {
+            text: "123 4-56".into(),
+        },
+        &mut |_| true,
+    );
+    assert_eq!(pasted.value(), ["123456"]);
+    pasted.send(
+        Input::Paste {
+            text: "12x4".into(),
+        },
+        &mut |_| true,
+    );
+    assert_eq!(pasted.value(), ["123456"]);
+    // "a whole code replaces the value, wherever the caret is"
+    key(&mut pasted, Key::Home);
+    pasted.send(
+        Input::Paste {
+            text: "654321".into(),
+        },
+        &mut |_| true,
+    );
+    assert_eq!(pasted.value(), ["654321"]);
+    // "a caret at the end of a full code selects its last character"
+    assert_eq!(pasted.active_cell(), Some(5));
+    // "focus goes after the code, or onto its last character when full"
+    let mut partial = focused_code(4);
+    type_keys(&mut partial, "12");
+    assert_eq!(partial.active_cell(), Some(2));
+    // "ArrowLeft from the empty slot at the end selects the last character"
+    key(&mut partial, Key::ArrowLeft);
+    assert_eq!(partial.active_cell(), Some(1));
+    // "inserts over the selection": typing replaces the selected character
+    type_keys(&mut partial, "9");
+    assert_eq!(partial.value(), ["19"]);
+    // "arrows move a slot at a time, and past the code to the empty slot after it"
+    key(&mut partial, Key::ArrowRight);
+    key(&mut partial, Key::ArrowRight);
+    assert_eq!(
+        partial.active_cell(),
+        Some(2),
+        "no further than the empty slot after the code"
+    );
+    // "Home selects the first character and End the slot after the code"
+    key(&mut partial, Key::Home);
+    assert_eq!(partial.active_cell(), Some(0));
+    key(&mut partial, Key::End);
+    assert_eq!(partial.active_cell(), Some(2));
+    // "right to left, the arrows swap"
+    let mut rtl = OtpInput::new(4).direction(Dir::Rtl);
+    rtl.set_value(vec!["12".into()]);
+    rtl.send(
+        Input::Focus {
+            part: otp_input::Part::Input,
+            item: None,
+        },
+        &mut |_| true,
+    );
+    key(&mut rtl, Key::ArrowRight);
+    assert_eq!(rtl.active_cell(), Some(1));
+    // "a press selects that slot's character, or the slot after the code"
+    rtl.send(
+        Input::Press {
+            part: otp_input::Part::Cell,
+            item: Some("3".into()),
+            mods: Modifiers::default(),
+        },
+        &mut |_| true,
+    );
+    assert_eq!(rtl.active_cell(), Some(2));
+    // "nothing is active without focus"
+    assert_eq!(OtpInput::new(4).active_cell(), None);
+    // "a canceled change keeps the code"
+    let mut refused = focused_code(4);
+    refused.send(
+        Input::Key {
+            key: Key::Char('1'),
+            mods: Modifiers::default(),
+            now_ms: 0,
+        },
+        &mut |_| false,
+    );
+    assert_eq!(refused.value(), [""]);
+    // "other keys are left to the browser"
+    let tab = refused.send(
+        Input::Key {
+            key: Key::Tab,
+            mods: Modifiers::default(),
+            now_ms: 0,
+        },
+        &mut |_| true,
+    );
+    assert!(!tab.handled);
+}
+
+fn toggles(opts: toggle_group::Options) -> ToggleGroup {
+    let mut group = ToggleGroup::new(opts);
+    for (name, disabled) in [("bold", false), ("italic", true), ("under", false)] {
+        group.upsert_item(item(name, disabled));
+    }
+    group
+}
+
+fn press_toggle(group: &mut ToggleGroup, key: &str, allow: bool) {
+    let input = Input::Press {
+        part: toggle_group::Part::Toggle,
+        item: Some(key.into()),
+        mods: Modifiers::default(),
+    };
+    group.send(input, &mut |_| allow);
+}
+
+// toggle.test.ts
+#[test]
+fn toggle_behaviors() {
+    // "single mode presses one toggle at a time"
+    let mut single = toggles(toggle_group::Options::default());
+    press_toggle(&mut single, "bold", true);
+    press_toggle(&mut single, "under", true);
+    assert_eq!(single.value(), ["under"]);
+    // "a canceled change keeps it as it was"
+    press_toggle(&mut single, "bold", false);
+    assert_eq!(single.value(), ["under"]);
+    // "a disabled toggle ignores presses"
+    press_toggle(&mut single, "italic", true);
+    assert_eq!(single.value(), ["under"]);
+    // "deselectable={false} keeps the pressed toggle pressed"
+    let mut kept = toggles(toggle_group::Options {
+        deselectable: false,
+        ..Default::default()
+    });
+    press_toggle(&mut kept, "bold", true);
+    press_toggle(&mut kept, "bold", true);
+    assert_eq!(kept.value(), ["bold"]);
+    // "values keep document order with multiple"
+    let mut several = toggles(toggle_group::Options {
+        multiple: true,
+        ..Default::default()
+    });
+    press_toggle(&mut several, "under", true);
+    press_toggle(&mut several, "bold", true);
+    assert_eq!(several.value(), ["bold", "under"]);
+    // "the tab stop starts on the first pressed enabled toggle, else the first enabled one"
+    let fresh = toggles(toggle_group::Options::default());
+    assert_eq!(
+        fresh
+            .semantics(toggle_group::Part::Toggle, Some("bold"))
+            .focusable,
+        Focusable::TabStop
+    );
+    let mut pressed = toggles(toggle_group::Options::default());
+    pressed.set_value(vec!["under".into()]);
+    assert_eq!(
+        pressed
+            .semantics(toggle_group::Part::Toggle, Some("under"))
+            .focusable,
+        Focusable::TabStop
+    );
+    assert_eq!(
+        pressed
+            .semantics(toggle_group::Part::Toggle, Some("bold"))
+            .focusable,
+        Focusable::Programmatic
+    );
+    // "disabled toggles in a group stay focusable with aria-disabled"
+    let italic = fresh.semantics(toggle_group::Part::Toggle, Some("italic"));
+    assert!(italic.disabled && italic.focusable != Focusable::No);
+}
+
+// collapsible.test.ts
+#[test]
+fn collapsible_behaviors() {
+    let press = |section: &mut Collapsible, allow: bool| {
+        section.send(
+            Input::Press {
+                part: collapsible::Part::Trigger,
+                item: None,
+                mods: Modifiers::default(),
+            },
+            &mut |_| allow,
+        );
+    };
+    // "renders closed by default, with the panel out of the page"
+    let mut section = Collapsible::default();
+    assert!(section.semantics(collapsible::Part::Panel, None).hidden);
+    // "open renders the panel and the open attributes"
+    press(&mut section, true);
+    assert_eq!(
+        section.semantics(collapsible::Part::Trigger, None).expanded,
+        Some(true)
+    );
+    assert!(!section.semantics(collapsible::Part::Panel, None).hidden);
+    // "toggling calls back with the reason, and can be canceled"
+    press(&mut section, false);
+    assert!(section.is_open());
+    // "a kept or findable panel stays in the page, hidden"
+    let findable = Collapsible::default().findable();
+    let panel = findable.semantics(collapsible::Part::Panel, None);
+    assert!(panel.hidden && panel.findable);
+    // "disabled marks every part and keeps the trigger focusable"
+    let disabled = Collapsible::default().disabled();
+    let trigger = disabled.semantics(collapsible::Part::Trigger, None);
+    assert!(trigger.disabled && trigger.focusable != Focusable::No);
+}
+
+// hold.test.ts
+#[test]
+fn hold_behaviors() {
+    // "holds once a press lasts past its delay"
+    let mut hold = Hold::new(500);
+    assert_eq!(hold.start(1000), 1500);
+    assert!(!hold.tick(1400));
+    assert!(hold.tick(1500));
+    assert!(!hold.tick(2000), "once per press");
+    // "a short press isn't held"
+    let mut short = Hold::new(500);
+    short.start(0);
+    short.release();
+    assert!(!short.tick(600));
+    // "a pointer that moves past the tolerance before it's held cancels the press"
+    let mut moved = Hold::new(500);
+    moved.start(0);
+    moved.moved(40.0);
+    assert!(!moved.tick(600));
+    // A small drift within the tolerance does not.
+    let mut steady = Hold::new(500);
+    steady.start(0);
+    steady.moved(4.0);
+    assert!(steady.tick(600));
+}
+
+// calendar.test.ts
+#[test]
+fn calendar_behaviors() {
+    let start = Date::new(2026, 10, 16).unwrap();
+    let on = |calendar: &Calendar| calendar.semantics(calendar::Part::Day, None);
+    let _ = on;
+    let focus_of = |calendar: &mut Calendar, pressed: Key, mods: Modifiers| {
+        calendar
+            .send(
+                Input::Key {
+                    key: pressed,
+                    mods,
+                    now_ms: 0,
+                },
+                &mut |_| true,
+            )
+            .focus_item()
+            .map(str::to_string)
+    };
+    let plain = Modifiers::default();
+    // "arrow keys move by day and week, into the next month as it renders"
+    let mut calendar = Calendar::new(calendar::Options::default(), start);
+    assert_eq!(
+        focus_of(&mut calendar, Key::ArrowRight, plain).as_deref(),
+        Some("2026-10-17")
+    );
+    assert_eq!(
+        focus_of(&mut calendar, Key::ArrowDown, plain).as_deref(),
+        Some("2026-10-24")
+    );
+    assert_eq!(
+        focus_of(&mut calendar, Key::ArrowDown, plain).as_deref(),
+        Some("2026-10-31")
+    );
+    assert_eq!(
+        focus_of(&mut calendar, Key::ArrowDown, plain).as_deref(),
+        Some("2026-11-07")
+    );
+    assert_eq!(calendar.month(), (2026, 11));
+    // "Page Up and Down turn months, with Shift years, and Home and End go to the week's ends"
+    assert_eq!(
+        focus_of(&mut calendar, Key::PageUp, plain).as_deref(),
+        Some("2026-10-07")
+    );
+    assert_eq!(
+        focus_of(
+            &mut calendar,
+            Key::PageDown,
+            Modifiers {
+                shift: true,
+                ..plain
+            }
+        )
+        .as_deref(),
+        Some("2027-10-07")
+    );
+    assert_eq!(
+        focus_of(&mut calendar, Key::Home, plain).as_deref(),
+        Some("2027-10-03")
+    );
+    assert_eq!(
+        focus_of(&mut calendar, Key::End, plain).as_deref(),
+        Some("2027-10-09")
+    );
+    // "Left and Right swap in a right-to-left page"
+    let mut rtl = Calendar::new(
+        calendar::Options {
+            dir: Dir::Rtl,
+            ..Default::default()
+        },
+        start,
+    );
+    assert_eq!(
+        focus_of(&mut rtl, Key::ArrowLeft, plain).as_deref(),
+        Some("2026-10-17")
+    );
+    // "keys stop at min and max"
+    let limits = calendar::Options {
+        min: Date::new(2026, 10, 15),
+        max: Date::new(2026, 10, 17),
+        ..Default::default()
+    };
+    let mut bounded = Calendar::new(limits, start);
+    focus_of(&mut bounded, Key::ArrowRight, plain);
+    assert_eq!(
+        focus_of(&mut bounded, Key::ArrowRight, plain),
+        None,
+        "no further than the last day allowed"
+    );
+    // "a press or Enter selects one date"
+    let mut picking = Calendar::new(calendar::Options::default(), start);
+    focus_of(&mut picking, Key::Enter, plain);
+    assert_eq!(picking.value(), ["2026-10-16"]);
+    // "multiple mode toggles dates and keeps them sorted"
+    let mut several = Calendar::new(
+        calendar::Options {
+            mode: Selecting::Multiple,
+            ..Default::default()
+        },
+        start,
+    );
+    for day in ["2026-10-20", "2026-10-12", "2026-10-20", "2026-10-14"] {
+        several.act("select", Some(day), &mut |_| true).unwrap();
+    }
+    assert_eq!(several.value(), ["2026-10-12", "2026-10-14"]);
+    // "a range ends before its start, which then becomes its end"
+    let mut range = Calendar::new(
+        calendar::Options {
+            mode: Selecting::Range,
+            ..Default::default()
+        },
+        start,
+    );
+    range
+        .act("select", Some("2026-10-20"), &mut |_| true)
+        .unwrap();
+    range
+        .act("select", Some("2026-10-12"), &mut |_| true)
+        .unwrap();
+    assert_eq!(range.value(), ["2026-10-12", "2026-10-20"]);
+    // "the tab stop starts on the selection"
+    assert_eq!(
+        range
+            .semantics(calendar::Part::Day, Some("2026-10-12"))
+            .focusable,
+        Focusable::TabStop
+    );
+}

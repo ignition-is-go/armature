@@ -1,11 +1,36 @@
 use crate::agent::{ActError, Snapshot};
 use crate::change::{Gate, Reason, Source, ValueChange};
+use crate::keys::{Dir, Key};
 use crate::primitive::{Focusable, Input, Item, PartOf, Primitive, Reaction, Role, Semantics};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Part {
     /// The one real text field. Draw the code's cells from `cells`.
     Input,
+    /// One cell of the code, keyed by its place from 0. Pressing it puts the caret
+    /// on that character, or after the code if the cell is still empty.
+    Cell,
+}
+
+/// Which characters a code is made of.
+#[derive(Clone, Copy, Debug, Default)]
+pub enum Accept {
+    #[default]
+    Digits,
+    /// Letters and digits.
+    Alphanumeric,
+    /// Whatever this says yes to, one character at a time.
+    Custom(fn(char) -> bool),
+}
+
+impl Accept {
+    fn takes(self, ch: char) -> bool {
+        match self {
+            Accept::Digits => ch.is_ascii_digit(),
+            Accept::Alphanumeric => ch.is_ascii_alphanumeric(),
+            Accept::Custom(test) => test(ch),
+        }
+    }
 }
 
 const ACTIONS: &[&str] = &["set", "clear"];
@@ -16,6 +41,12 @@ const ACTIONS: &[&str] = &["set", "clear"];
 pub struct OtpInput {
     length: usize,
     code: String,
+    accept: Accept,
+    dir: Dir,
+    /// The cell the next key acts on: a character to replace, or the empty cell
+    /// after the code.
+    slot: usize,
+    focused: bool,
 }
 
 impl Default for OtpInput {
@@ -29,7 +60,47 @@ impl OtpInput {
         OtpInput {
             length,
             code: String::new(),
+            accept: Accept::Digits,
+            dir: Dir::Ltr,
+            slot: 0,
+            focused: false,
         }
+    }
+
+    pub fn accepting(mut self, accept: Accept) -> Self {
+        self.accept = accept;
+        self
+    }
+
+    pub fn direction(mut self, dir: Dir) -> Self {
+        self.dir = dir;
+        self
+    }
+
+    /// The cell that has the caret or the selection, while the field has focus.
+    pub fn active_cell(&self) -> Option<usize> {
+        self.focused.then_some(self.slot)
+    }
+
+    /// The furthest the caret goes: the empty cell after the code, or the last
+    /// character once the code is full.
+    fn end(&self) -> usize {
+        self.code.chars().count().min(self.length.saturating_sub(1))
+    }
+
+    fn commit(&mut self, code: String, source: Source, reason: Reason, gate: Gate) -> bool {
+        if code == self.code {
+            return true;
+        }
+        let allowed = gate(&ValueChange {
+            value: vec![code.clone()],
+            source,
+            reason,
+        });
+        if allowed {
+            self.code = code;
+        }
+        allowed
     }
 
     pub fn is_complete(&self) -> bool {
@@ -49,7 +120,7 @@ impl OtpInput {
 
     fn cleaned(&self, text: &str) -> String {
         text.chars()
-            .filter(char::is_ascii_digit)
+            .filter(|ch| self.accept.takes(*ch))
             .take(self.length)
             .collect()
     }
@@ -79,7 +150,7 @@ impl Primitive for OtpInput {
     type Part = Part;
 
     fn parts() -> &'static [Part] {
-        &[Part::Input]
+        &[Part::Input, Part::Cell]
     }
 
     fn is_item(_: Part) -> bool {
@@ -90,11 +161,17 @@ impl Primitive for OtpInput {
     fn remove_item(&mut self, _: &str) {}
     fn set_order(&mut self, _: &[(String, String)]) {}
 
-    fn semantics(&self, _: Part, _: Option<&str>) -> Semantics {
-        Semantics {
-            role: Some(Role::TextBox),
-            focusable: Focusable::TabStop,
-            ..Default::default()
+    fn semantics(&self, part: Part, item: Option<&str>) -> Semantics {
+        match part {
+            Part::Input => Semantics {
+                role: Some(Role::TextBox),
+                focusable: Focusable::TabStop,
+                ..Default::default()
+            },
+            Part::Cell => Semantics {
+                active: item.and_then(|at| at.parse().ok()) == self.active_cell(),
+                ..Default::default()
+            },
         }
     }
 
@@ -102,7 +179,109 @@ impl Primitive for OtpInput {
         match input {
             Input::Text { value, .. } => {
                 self.set(&value, Source::User, Reason::Text, gate);
+                self.slot = self.end();
                 Reaction::handled()
+            }
+            // Focus goes after the code, or onto its last character when full.
+            Input::Focus {
+                part: Part::Input, ..
+            } => {
+                self.focused = true;
+                self.slot = self.end();
+                Reaction::default()
+            }
+            Input::Blur { .. } => {
+                self.focused = false;
+                Reaction::default()
+            }
+            Input::Press {
+                part: Part::Cell,
+                item: Some(at),
+                ..
+            } => {
+                self.slot = at.parse::<usize>().unwrap_or(0).min(self.end());
+                Reaction::focusing(Part::Input)
+            }
+            // A whole code replaces the value wherever the caret is. Spaces and
+            // dashes in it are dropped, and a paste with anything else is ignored.
+            Input::Paste { text } => {
+                let stripped: String = text
+                    .chars()
+                    .filter(|ch| !ch.is_whitespace() && *ch != '-')
+                    .collect();
+                if stripped.is_empty() || !stripped.chars().all(|ch| self.accept.takes(ch)) {
+                    return Reaction::handled();
+                }
+                let code: String = stripped.chars().take(self.length).collect();
+                if self.commit(code, Source::User, Reason::Text, gate) {
+                    self.slot = self.end();
+                }
+                Reaction::handled()
+            }
+            Input::Key { key, mods, .. } if !mods.ctrl && !mods.alt => {
+                let mut cells: Vec<char> = self.code.chars().collect();
+                let (back, forward) = if self.dir == Dir::Rtl {
+                    (Key::ArrowRight, Key::ArrowLeft)
+                } else {
+                    (Key::ArrowLeft, Key::ArrowRight)
+                };
+                match key {
+                    Key::Char(ch) if self.accept.takes(ch) => {
+                        // Typing replaces the character under the caret, or adds one.
+                        if self.slot < cells.len() {
+                            cells[self.slot] = ch;
+                        } else if cells.len() < self.length {
+                            cells.push(ch);
+                        }
+                        let at = self.slot;
+                        if self.commit(
+                            cells.into_iter().collect(),
+                            Source::User,
+                            Reason::Text,
+                            gate,
+                        ) {
+                            self.slot = (at + 1).min(self.end());
+                        }
+                        Reaction::handled()
+                    }
+                    Key::Backspace => {
+                        let at = if self.slot < cells.len() {
+                            self.slot
+                        } else {
+                            cells.len().saturating_sub(1)
+                        };
+                        if !cells.is_empty() {
+                            cells.remove(at);
+                            if self.commit(
+                                cells.into_iter().collect(),
+                                Source::User,
+                                Reason::Text,
+                                gate,
+                            ) {
+                                self.slot = at.min(self.end());
+                            }
+                        }
+                        Reaction::handled()
+                    }
+                    k if k == back => {
+                        self.slot = self.slot.saturating_sub(1);
+                        Reaction::handled()
+                    }
+                    k if k == forward => {
+                        self.slot = (self.slot + 1).min(self.end());
+                        Reaction::handled()
+                    }
+                    Key::Home => {
+                        self.slot = 0;
+                        Reaction::handled()
+                    }
+                    Key::End => {
+                        self.slot = self.end();
+                        Reaction::handled()
+                    }
+                    // Other keys are left to the platform.
+                    _ => Reaction::default(),
+                }
             }
             _ => Reaction::default(),
         }
@@ -118,6 +297,7 @@ impl Primitive for OtpInput {
 
     fn set_value(&mut self, value: Vec<String>) {
         self.code = self.cleaned(value.first().map(String::as_str).unwrap_or_default());
+        self.slot = self.end();
     }
 
     fn snapshot(&self, label: &str) -> Snapshot {

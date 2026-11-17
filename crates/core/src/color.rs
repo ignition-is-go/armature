@@ -208,6 +208,8 @@ pub enum Notation {
     /// `oklch(0.628 0.2577 29.23)`: lightness, colourfulness and hue as the eye
     /// judges them.
     Oklch,
+    /// `lab(54.29 80.8 69.89)`: CIE Lab, measured against daylight at D50.
+    Lab,
 }
 
 impl Rgb {
@@ -238,6 +240,11 @@ impl Rgb {
                     (hsl.l * 100.0).round()
                 )
             }
+            Notation::Lab => {
+                let (lightness, a, b) = self.to_lab();
+                let round = |value: f64| (value * 100.0).round() / 100.0;
+                format!("lab({} {} {})", round(lightness), round(a), round(b))
+            }
             Notation::Oklch => {
                 let (lightness, chroma, hue) = self.to_oklch();
                 let round = |value: f64, places: i32| {
@@ -252,6 +259,33 @@ impl Rgb {
                 format!("oklch({} {} {})", round(lightness, 3), chroma, hue)
             }
         }
+    }
+
+    /// Lightness from 0 to 100 and the two colour axes of CIE Lab.
+    pub fn to_lab(self) -> (f64, f64, f64) {
+        let [r, g, b] = [self.r, self.g, self.b].map(|part| to_linear(part as f64 / 255.0));
+        // To XYZ under D65, then adapted to the D50 white Lab is measured against,
+        // with the matrices CSS Color gives.
+        let (x, y, z) = (
+            506752.0 / 1228815.0 * r + 87881.0 / 245763.0 * g + 12673.0 / 70218.0 * b,
+            87098.0 / 409605.0 * r + 175762.0 / 245763.0 * g + 12673.0 / 175545.0 * b,
+            7918.0 / 409605.0 * r + 87881.0 / 737289.0 * g + 1001167.0 / 1053270.0 * b,
+        );
+        let adapted = [
+            1.0479297925449969 * x + 0.022946870601609652 * y - 0.05019226628920524 * z,
+            0.02962780877005599 * x + 0.9904344267538799 * y - 0.017073799063418826 * z,
+            -0.009243040646204504 * x + 0.015055191490298152 * y + 0.7518742814281371 * z,
+        ];
+        let white = [0.3457 / 0.3585, 1.0, (1.0 - 0.3457 - 0.3585) / 0.3585];
+        let curve = |t: f64| {
+            if t > 216.0 / 24389.0 {
+                t.cbrt()
+            } else {
+                (24389.0 / 27.0 * t + 16.0) / 116.0
+            }
+        };
+        let [fx, fy, fz] = [0, 1, 2].map(|at| curve(adapted[at] / white[at]));
+        (116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz))
     }
 
     /// Lightness from 0 to 1, colourfulness, and hue in degrees, in OKLCH.

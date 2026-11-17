@@ -104,11 +104,8 @@ impl Primitive for Collapsible {
                 role: Some(Role::Button),
                 expanded: Some(self.open),
                 disabled: self.disabled,
-                focusable: if self.disabled {
-                    Focusable::No
-                } else {
-                    Focusable::TabStop
-                },
+                // A disabled trigger can still be reached, so it can be read and explained.
+                focusable: Focusable::TabStop,
                 ..Default::default()
             },
             Part::Panel => Semantics {

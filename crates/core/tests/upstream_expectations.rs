@@ -579,6 +579,7 @@ fn colour_notations() {
     assert_eq!(red.write(Notation::Hex), "#ff0000");
     assert_eq!(red.write(Notation::Hsl), "hsl(0 100% 50%)");
     assert_eq!(red.write(Notation::Oklch), "oklch(0.628 0.2577 29.23)");
+    assert_eq!(red.write(Notation::Lab), "lab(54.29 80.8 69.89)");
     assert_eq!(
         Rgb::read("white").unwrap().write(Notation::Oklch),
         "oklch(1 0 0)"

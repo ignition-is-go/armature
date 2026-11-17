@@ -182,6 +182,11 @@ impl Calendar {
     }
 
     fn move_to(&mut self, date: Date) -> Reaction<Part> {
+        // The keys stop at the earliest and latest days allowed.
+        let date = date.clamped(self.opts.min, self.opts.max);
+        if date == self.focused {
+            return Reaction::handled();
+        }
         self.focused = date;
         Reaction::item(Part::Day, true, Some(date.format()))
     }
@@ -282,12 +287,17 @@ impl Primitive for Calendar {
                 }
                 Reaction::handled()
             }
+            // PageUp and PageDown turn the month, and with Shift the year.
             Input::Key {
-                key: Key::PageUp, ..
-            } => self.move_to(self.focused.add_months(-1)),
+                key: Key::PageUp,
+                mods,
+                ..
+            } => self.move_to(self.focused.add_months(if mods.shift { -12 } else { -1 })),
             Input::Key {
-                key: Key::PageDown, ..
-            } => self.move_to(self.focused.add_months(1)),
+                key: Key::PageDown,
+                mods,
+                ..
+            } => self.move_to(self.focused.add_months(if mods.shift { 12 } else { 1 })),
             Input::Key { key, mods, .. } => {
                 match date_for_key(self.focused, key, mods, self.opts.dir, self.opts.week_start) {
                     Some(date) => self.move_to(date),
