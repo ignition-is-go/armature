@@ -97,6 +97,7 @@ fn inputs<P: Primitive>(items: &[Item]) -> Vec<Input<P::Part>> {
             item: item.clone(),
             value: "12".into(),
         });
+        all.push(Input::Loaded { part, ok: true });
         all.push(Input::Blur {
             part,
             item: item.clone(),

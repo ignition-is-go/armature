@@ -38,6 +38,8 @@ pub enum Input<Part> {
     Blur { part: Part, item: Option<String> },
     /// The platform's find-in-page matched text inside a hidden part.
     Found { part: Part, item: Option<String> },
+    /// A picture or other media inside a part finished loading, or failed to.
+    Loaded { part: Part, ok: bool },
     /// A press landed outside every part of this primitive.
     PressOutside,
     /// The window stopped being the one the person is working in.
