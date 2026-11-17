@@ -83,6 +83,7 @@ pub mod transfer;
 pub mod transfer_list;
 pub mod tree;
 pub mod tree_view;
+pub mod trigger_menu;
 pub mod typeahead;
 pub mod undo;
 pub mod viewport;
