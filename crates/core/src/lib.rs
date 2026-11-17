@@ -42,6 +42,7 @@ pub mod roving;
 pub mod scroll;
 pub mod select;
 pub mod selection;
+pub mod sheet;
 pub mod shortcut;
 pub mod slider;
 pub mod sortable;

@@ -17,6 +17,7 @@ use armature_core::radio::{self, Radio};
 use armature_core::resizable::{self, Resizable};
 use armature_core::select::{self, Select};
 use armature_core::selection::Mode;
+use armature_core::sheet::{self, Sheet};
 use armature_core::slider::{self, Slider};
 use armature_core::sortable::{self, Sortable};
 use armature_core::swipe_row::{self, SwipeRow};
@@ -29,7 +30,9 @@ use armature_core::tooltip::{self, Tooltip};
 use armature_core::tree::tree_from_paths;
 use armature_core::tree_view::{self, TreeView};
 use armature_core::virtual_list::{self, VirtualList};
-use armature_leptos::{Part, Root, Source, ValueChange, agent, use_primitive};
+use armature_leptos::{
+    Part, Root, Source, ValueChange, agent, use_primitive, use_visible_viewport,
+};
 use leptos::prelude::*;
 
 /// A signal that follows a component's value, and the gate that feeds it.
@@ -112,6 +115,22 @@ fn ColorParts() -> impl IntoView {
         <div class="color-row">
             <span id="swatch" class="swatch" style:background-color=move || picker.with(|p| p.color().to_hex())></span>
             <Part part=color_picker::Part::Input />
+        </div>
+    }
+}
+
+/// A sheet sized by its own height.
+#[component]
+fn SheetParts() -> impl IntoView {
+    let panel = use_primitive::<Sheet>();
+    view! {
+        <Part part=sheet::Part::Trigger>"Open sheet"</Part>
+        <Part part=sheet::Part::Backdrop />
+        <div class="sheet-slot" style:height=move || format!("{}px", panel.with(|s| s.height()))>
+            <Part part=sheet::Part::Content>
+                <Part part=sheet::Part::Handle label="Resize sheet" />
+                <p>"Drag the grip, or use the arrow keys."</p>
+            </Part>
         </div>
     }
 }
@@ -287,6 +306,8 @@ fn App() -> impl IntoView {
     let (day_plan, on_day_plan) = follow();
     let (cells, on_cells) = follow();
     let (layout, on_layout) = follow();
+    let (rest, on_rest) = follow();
+    let visible = use_visible_viewport();
     let sheet = ["a1", "b1", "c1", "a2", "b2", "c2", "a3", "b3", "c3"]
         .chunks(3)
         .map(|row| row.iter().map(|text| text.to_string()).collect())
@@ -593,6 +614,16 @@ fn App() -> impl IntoView {
                 <p id="layout-value">{move || layout.get().join(" ")}</p>
                 <Root machine=Canvas::new(nodes) label="Board" on_value_change=on_layout>
                     <CanvasParts />
+                </Root>
+            </Section>
+
+            <Section title="Sheet">
+                <p id="sheet-value">"Rests at: " {move || rest.get().join("")}</p>
+                <p id="visible-value">
+                    {move || format!("Visible: {}x{}", visible.get().width.round(), visible.get().height.round())}
+                </p>
+                <Root machine=Sheet::new(vec![120.0, 300.0], true) label="Details" on_value_change=on_rest>
+                    <SheetParts />
                 </Root>
             </Section>
 

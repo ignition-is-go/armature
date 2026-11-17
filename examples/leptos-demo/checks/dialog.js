@@ -4,7 +4,7 @@ async () => {
   const key = (key, init = {}) => { const e = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init }); document.activeElement.dispatchEvent(e); return e.defaultPrevented; };
   const trigger = document.querySelector('[data-armature-part="Trigger"][aria-label="Confirm"]');
   const dialog = document.getElementById(trigger.getAttribute('aria-controls'));
-  const backdrop = document.querySelector('[data-armature-part="Backdrop"]');
+  const backdrop = dialog.previousElementSibling;
   const shown = () => getComputedStyle(dialog).display !== 'none';
   const who = () => document.activeElement.getAttribute('data-armature-part') || document.activeElement.id || document.activeElement.tagName;
   out.start = `shown=${shown()} backdrop=${getComputedStyle(backdrop).display}`;

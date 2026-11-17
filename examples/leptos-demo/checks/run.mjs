@@ -12,9 +12,11 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const dist = join(here, "..", "dist");
-const checks = ["basics", "inputs", "gestures", "dialog", "agent"];
+const checks = ["basics", "inputs", "gestures", "dialog", "sheet", "agent"];
 // What a check observes that depends on how fast the machine is.
 const unstable = ["basics.number.heldFor700ms", "basics.number.field"];
+// What a check observes about the whole page, which changes whenever the demo grows.
+const incidental = ["basics.labels", "basics.agent", "basics.accordion.after", "agent.labels", "agent.secretRun.ref", "inputs.calendar.cells"];
 const record = process.argv.includes("--record");
 
 const types = { ".html": "text/html", ".js": "text/javascript", ".wasm": "application/wasm", ".css": "text/css" };
@@ -111,7 +113,7 @@ try {
     console.log(problems.length ? `FAIL ${name}\n  ${problems.join("\n  ")}` : `ok   ${name}`);
   }
   if (record) {
-    await writeFile(expectedPath, JSON.stringify(without(observed, unstable), null, 2) + "\n");
+    await writeFile(expectedPath, JSON.stringify(without(observed, [...unstable, ...incidental]), null, 2) + "\n");
     console.log(`recorded ${expectedPath}`);
   }
 } finally {

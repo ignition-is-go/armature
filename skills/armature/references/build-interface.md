@@ -23,6 +23,15 @@ Each lives in `armature_core::<module>` and exports a `Part` enum.
 | Calendar | `calendar` | `Grid`, `Day`, `PreviousMonth`, `NextMonth` | The day as `YYYY-MM-DD`. Draw days from `weeks()`. |
 | Resizable panels | `resizable` | `Root`, `Handle` | The first panel's share, in percent. |
 | Dialog | `dialog` | `Trigger`, `Backdrop`, `Content`, `Close` | `["open"]` or empty. |
+| Popover | `popover` | `Trigger`, `Content`, `Title`, `Description`, `Arrow`, `Close` | None. `Content` is a popup. |
+| Tooltip | `tooltip` | `Trigger`, `Content` | None. Shows on hover after a delay, and on focus. |
+| Sheet | `sheet` | `Trigger`, `Backdrop`, `Content`, `Handle` | The index of the height it rests at. Size it to `height()`. |
+| Colour picker | `color_picker` | `Area`, `AreaThumb`, `Hue`, `HueThumb`, `Input` | The colour as `#rrggbb`. |
+| Swipe row | `swipe_row` | `Row`, `Action` | None. A pressed action is offered to the gate. Move the row by `offset()`. |
+| Virtual list | `virtual_list` | `Viewport`, `Row` | The selected row's index. Draw rows from `rows()`. |
+| Timeline | `timeline` | `Track`, `Span`, `SpanEnd` | Each span as `key:start-end`. |
+| Data grid | `data_grid` | `Root`, `Cell` | The selected cells as `row,column`. Edits arrive with `Reason::Edit`. |
+| Canvas | `canvas` | `Surface`, `Node`, `Resize`, `PortOut`, `PortIn` | Each node as `key:x,y,width,height`. |
 
 A part marked as an item part (`Primitive::is_item`) is rendered once per item and takes
 that item's key. Some other parts also take a key: a tab's panel, an accordion's panel,
@@ -63,6 +72,12 @@ view! {
 - A popup part is positioned for you and follows its anchor on scroll and resize.
   `data-side` reports `top` or `bottom` after a flip.
 - A modal part keeps Tab inside itself while it is shown.
+- A popup's arrow is placed for you through the `--armature-arrow-x` custom property
+  on the popup.
+- A part that scrolls reports its offset, and is scrolled when the primitive asks.
+- Copy and paste reach a primitive that handles them through the clipboard.
+- `use_visible_viewport()` follows the part of the window an on-screen keyboard leaves
+  showing, and `keyboard_lift` says how far to lift a field clear of it.
 - `LocalStorage` implements `armature_core::preference::Storage`.
 - Call `armature_leptos::agent::install()` once at startup to expose the agent bridge.
 
@@ -92,12 +107,14 @@ div()
   `machine.set_value(value, cx)` to set the value yourself.
 - Read `machine.primitive()` for what only the primitive knows, and
   `machine.text(part, item)` for the text of a part the person types into. GPUI has no
-  text field element, so you draw that text yourself. Typing appends and Backspace
-  removes the last character; there is no caret.
+  text field element, so you draw that text yourself, with the caret at
+  `machine.caret(part, item)`. Typing, Backspace, Delete, the arrows, Home and End all
+  edit at the caret.
 - For parts whose items appear over time, such as calendar days or tokens, call
   `machine.track(part, keys, cx)` before rendering them.
 - Subscribe to the `Machine` for `Announcement` events and deliver them to assistive
   technology yourself. GPUI has no live regions.
 - Tab traversal is the application's job. Bind `tab` and `shift-tab` to actions that
   call `window.focus_next(cx)` and `window.focus_prev(cx)`, as `examples/gpui-demo`
-  does. A modal part does not trap Tab in GPUI.
+  does. While a modal part is shown, Tab cycles among that primitive's own parts. Other
+  focusable elements you put inside it are not part of the cycle.

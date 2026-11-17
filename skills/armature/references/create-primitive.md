@@ -2,8 +2,9 @@
 
 A primitive is one file in `crates/core/src`. It needs no adapter change. Use
 `toggle.rs` as the model for the simplest one, `tabs.rs` for a collection, `select.rs`
-for a popup, `slider.rs` for a pointer gesture and `number_input.rs` for text and
-timers.
+for a popup, `slider.rs` for a pointer gesture, `number_input.rs` for text and timers,
+`tooltip.rs` for hover, `virtual_list.rs` for scrolling and `canvas.rs` for several
+gestures at once.
 
 ## Steps
 
@@ -18,12 +19,15 @@ timers.
    - `semantics(part, item)` returns role, selected, checked, expanded, level, range,
      hidden, modal, disabled, focusable and active. A focusable part receives presses
      and keys. Make exactly one item of a composite control a `TabStop`.
-   - `send(input, gate)` handles `Key`, `Press`, `Focus`, `PressOutside`, `Tick` and
-     `Text`. Return `handled: true` only when the platform default must be suppressed.
+   - `send(input, gate)` handles `Key`, `Press`, `Focus`, `PressOutside`, `Tick`,
+     `Text`, `Hover`, `Scrolled` and `Paste`. Return `handled: true` only when the platform default must be suppressed.
      Return a focus target when focus must move, and effects for anything else.
    - `tracks_pointer(part)` and `pointer(pointer, measure, gate)` handle drags. Return
      `Effect::CapturePointer` on the press to keep receiving moves. Ask `measure` for
      any part's box.
+   - `hovers(part)` asks for `Hover` inputs. `scrolls(part)` asks for `Scrolled`
+     inputs and makes the adapter carry out `Effect::ScrollTo`. Return the offset you
+     want from `wanted_scroll` too, so an agent action can scroll.
    - `text(part, item)` gives the text of a part the person types into. Its role must
      be `TextBox` or `SpinButton`.
    - `popup_of(part)` returns a `Placement` for a popup part. `relations(part)` links
@@ -63,6 +67,8 @@ timers.
 | Pan and zoom, connections between ports | `viewport`, `connect` |
 | Tree lookups, visible rows, checked states | `tree` |
 | Popup placement, layer stack, focus trapping | `popup`, `layers` |
+| Editing a line of text at a caret | `text_edit` |
+| Image crop geometry, language tags and direction | `image`, `locale` |
 | Staying rendered through an exit animation | `presence` |
 | Undo, entry recall, try-then-commit, edit in place | `undo`, `input_history`, `preview`, `inline_edit` |
 | Dates, colours, numbers | `date`, `color`, `number` |

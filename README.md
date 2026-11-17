@@ -11,7 +11,7 @@ Status: experimental. The API will change.
 
 | Path | Holds |
 | --- | --- |
-| `crates/core` | `armature-core`: behaviors, the `Primitive` contract, 17 primitives, the agent registry, a conformance harness. No dependencies. |
+| `crates/core` | `armature-core`: about fifty behavior modules, the `Primitive` contract, 26 primitives, the agent registry, a conformance harness. No dependencies. |
 | `crates/leptos` | `armature-leptos`: one generic adapter for Leptos. |
 | `crates/gpui` | `armature-gpui`: one generic adapter for GPUI. |
 | `examples/leptos-demo` | Every primitive in a browser. Run `trunk serve` there. |
@@ -21,8 +21,9 @@ Status: experimental. The API will change.
 ## How it fits together
 
 A primitive is a state machine with named parts. It takes neutral inputs (keys,
-presses, pointer gestures with measured boxes, typed text, timer ticks) and answers
-with what the adapter must do (move focus, announce, wake later, capture the pointer)
+presses, pointer gestures with measured boxes, hover, scrolling, typed and pasted text,
+timer ticks) and answers with what the adapter must do (move focus, announce, wake
+later, capture the pointer, scroll, copy)
 and with the semantics of each part (role, state, visibility, focusability). An adapter
 turns those into its framework's elements, events and accessibility tree. No adapter
 names a primitive, so a new primitive needs no adapter work.
@@ -33,7 +34,11 @@ names a primitive, so a new primitive needs no adapter work.
 cargo test -p armature-core -p armature-gpui
 cargo clippy -p armature-core -p armature-gpui --all-targets
 cargo clippy -p armature-leptos --target wasm32-unknown-unknown
+(cd examples/leptos-demo && trunk build && node checks/run.mjs)
 ```
+
+The last line drives the built demo in headless Chrome and compares what it observes
+with `checks/expected.json`. It needs Node 22 and Chrome, and no packages.
 
 ## Publishing
 

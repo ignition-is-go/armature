@@ -1,6 +1,6 @@
 ---
 name: armature
-description: Build interfaces with armature, the Rust library of headless UI behaviors and primitives (listbox, select, tabs, dialog, slider, calendar, tree, command palette and more) that runs in Leptos and GPUI from one core. Use when a project depends on armature-core, armature-leptos or armature-gpui, when asked to render or style an armature primitive, to create a primitive armature does not ship, to add a framework adapter, or to make an interface operable by agents through the armature agent bridge.
+description: Build interfaces with armature, the Rust library of headless UI behaviors and primitives (listbox, select, tabs, dialog, popover, slider, calendar, tree, data grid, canvas, command palette and more) that runs in Leptos and GPUI from one core. Use when a project depends on armature-core, armature-leptos or armature-gpui, when asked to render or style an armature primitive, to create a primitive armature does not ship, to add a framework adapter, or to make an interface operable by agents through the armature agent bridge.
 ---
 
 # Build with armature
@@ -59,7 +59,9 @@ Both paths then continue to [references/agent-ready.md](references/agent-ready.m
 2. Run `cargo clippy -p armature-core -p armature-gpui --all-targets` and
    `cargo clippy -p armature-leptos --target wasm32-unknown-unknown`.
 3. Run `cargo fmt --all --check`.
-4. Drive the result in a real renderer. Headless tests do not catch layout, styling or
+4. Run the browser checks: `trunk build` in `examples/leptos-demo`, then
+   `node checks/run.mjs`. Add a check for anything new you put in the demo.
+5. Drive the result in a real renderer. Headless tests do not catch layout, styling or
    focus faults. For Leptos, run `trunk serve` in `examples/leptos-demo`. For GPUI, run
    `cargo run -p gpui-demo` and operate the window through its agent socket.
-5. Report each command with its result, and name anything you did not verify.
+6. Report each command with its result, and name anything you did not verify.

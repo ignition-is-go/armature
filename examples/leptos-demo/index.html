@@ -124,6 +124,10 @@
       [data-armature-part="PortOut"] { right: 2px; }
       [data-armature-part="PortOut"][data-active] { color: #3b6fe0; }
       .lasso { position: absolute; border: 1px dashed #3b6fe0; background: rgba(59, 111, 224, 0.1); pointer-events: none; }
+      .sheet-slot { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; pointer-events: none; }
+      .sheet-slot [role="dialog"] { position: static; transform: none; width: auto; height: 100%; box-sizing: border-box; border-radius: 14px 14px 0 0; pointer-events: auto; }
+      .sheet-slot [role="slider"] { width: 44px; height: 6px; margin: 0 auto 10px; border: none; border-radius: 3px; background: #bbc; cursor: ns-resize; }
+      [data-armature-part="Trigger"][aria-label="Details"] { display: inline-block; width: auto; padding: 5px 10px; border: 1px solid #bbb; border-radius: 6px; }
     </style>
   </head>
   <body></body>

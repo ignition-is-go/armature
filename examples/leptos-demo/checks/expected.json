@@ -11,7 +11,6 @@
     "switch": "On checked=true -> Off",
     "accordion": {
       "start": "none,none",
-      "after": "Open: returns | none,block | false,true,false,false",
       "arrowMovesFocus": true
     },
     "rating": {
@@ -36,13 +35,10 @@
       "dragging": "true",
       "drag": "Order: eggs, bread, milk, jam | dom=eggs,bread,milk,jam,a,b,c | said=\"milk dropped at position 3 of 4.\"",
       "keyboard": "dom=eggs,bread,jam,milk,a,b,c | said=\"jam dropped at position 3 of 4.\""
-    },
-    "labels": "combobox=Size | tablist=Settings | listbox=Fruit | listbox=Access | slider=Volume | switch=Wi-Fi | radiogroup=Rating | tree=Files | input=Commands | button=Decrease | spinbutton=Quantity | button=Increase | list=Groceries | button=Previous month | button=Next month | grid=Date | toolbar=Formatting | input=Code | input=Tags | separator=Panels | button=Share | button=Close | tooltip=Help | slider=Saturation and brightness | slider=Hue | input=Colour | listbox=Rows | list=Day | grid=Sheet | group=Board | button=Into a | button=Out of a | button=Into b | button=Out of b | button=Into c | button=Out of c | button=Confirm | switch=Delete account | switch=Admin mode | spinbutton=PIN",
-    "agent": "select:Size=[] tabs:Settings=[fruit] listbox:Fruit=[] listbox:Access=[] slider:Volume=[89] switch:Wi-Fi=[] accordion:Questions=[returns] radio:Rating=[4] tree:Files=[src/main.rs] command:Commands=[save] number:Quantity=[14] sortable:Groceries=[eggs,bread,jam,milk] calendar:Date=[] toolbar:Formatting=[] otp:Code=[] tokens:Tags=[] resizable:Panels=[50] popover:Share=[] tooltip:Help=[] color:Colour=[#3b6fe0] swipe-row:Message=[] virtual-list:Rows=[] timeline:Day=[] grid:Sheet=[0,0] canvas:Board=[a:10,10,90,50,b:150,10,90,50,c:10,100,90,50] dialog:Confirm=[] switch:Delete account=[] number:PIN=[[redacted]]"
+    }
   },
   "inputs": {
     "calendar": {
-      "cells": 44,
       "stop": "2026-11-17",
       "arrow": "2026-11-18",
       "crossedIntoDecember": "2026-12 focus=2026-12-02",
@@ -149,8 +145,15 @@
     "close": "shown=false focus=Trigger",
     "agentOpen": "shown=true expanded=true"
   },
+  "sheet": {
+    "visible": true,
+    "opened": "Rests at: 0 height=120 modal=true gripFocused=true gripName=Resize sheet",
+    "following": 200,
+    "snappedTall": "Rests at: 1 height=300",
+    "arrowDown": "Rests at: 0 height=120",
+    "dismissed": "Rests at:  shown=false focusOnTrigger=true"
+  },
   "agent": {
-    "labels": "Size, Settings, Fruit, Access, Volume, Wi-Fi, Questions, Rating, Files, Commands, Quantity, Groceries, Date, Formatting, Code, Tags, Panels, Share, Help, Colour, Message, Rows, Day, Sheet, Board, Confirm, Delete account, PIN",
     "hiddenIsAbsent": true,
     "secret": "[\"[redacted]\"]",
     "query": "Blueberry@e3:blueberry",
@@ -180,7 +183,6 @@
       "asked": "Delete account/check: Delete the account"
     },
     "secretRun": {
-      "ref": "e29",
       "label": "PIN",
       "before": [
         "[redacted]"
