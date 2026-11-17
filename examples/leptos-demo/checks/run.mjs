@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const dist = join(here, "..", "dist");
-const checks = ["basics", "inputs", "gestures", "dialog", "sheet", "agent", "parity", "components"];
+const checks = ["basics", "inputs", "gestures", "dialog", "sheet", "agent", "parity", "components", "depth"];
 // What a check observes that depends on how fast the machine is.
 const unstable = ["basics.number.heldFor700ms", "basics.number.field"];
 // What a check observes about the whole page, which changes whenever the demo grows.

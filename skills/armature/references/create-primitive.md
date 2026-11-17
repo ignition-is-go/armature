@@ -21,8 +21,8 @@ gestures at once.
      disabled, focusable and active. A focusable part receives presses
      and keys. Make exactly one item of a composite control a `TabStop`.
    - `send(input, gate)` handles `Key`, `Press`, `Focus`, `Blur`, `Found`, `Loaded`,
-     `Files`, `DragOver`, `PressOutside`, `WindowBlur`, `Tick`, `Text`, `Hover`,
-     `Scrolled` and `Paste`. `Blur` arrives
+     `Files`, `DragOver`, `Hotkey`, `ContextMenu`, `PressOutside`, `WindowBlur`,
+     `Tick`, `Text`, `Hover`, `Scrolled` and `Paste`. `Blur` arrives
      when focus leaves the primitive, not when it moves between its parts. `Found`
      arrives when find-in-page matches inside a hidden part whose semantics set
      `findable`. Return `handled: true` only when the platform default must be suppressed.
@@ -35,6 +35,12 @@ gestures at once.
      want from `wanted_scroll` too, so an agent action can scroll.
    - `drops(part)` asks for `DragOver` and `Files` when files are dragged onto a
      part. Return `Effect::PickFiles` to show the platform's file picker.
+   - `set(name, value)` takes a setting the owner changes while the primitive runs.
+   - `hotkey()` names a key that reaches the primitive from anywhere, as
+     `Input::Hotkey`. Return `Effect::RestoreFocus` to send focus back.
+   - `context(part)` asks for `Input::ContextMenu` on a part, and `popup_point()`
+     places the popup at a point in place of its anchor.
+   - `scroll_axis()` says which way the scrolling part scrolls.
    - `wake_after()` asks for a `Tick` that nothing else will bring, such as after
      the owner set a value that starts a timer.
    - To build on another primitive, hold it as a field and hand it inputs with

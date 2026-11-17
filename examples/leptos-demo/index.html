@@ -55,6 +55,14 @@
       [data-armature-part="Handle"][data-value="se"] { bottom: -6px; right: -6px; } [data-armature-part="Handle"][data-value="sw"] { bottom: -6px; left: -6px; }
       [data-armature-part="Dropzone"] { display: block !important; padding: 16px !important; border-style: dashed !important; text-align: center; }
       [data-armature-part="Dropzone"][data-active] { background: #e8eefc; }
+      .context-area { display: inline-block; margin: 6px 0; padding: 10px; border: 1px dashed #bbb; border-radius: 6px; color: #667; }
+      .problem { color: #b3261e; font-size: 13px; margin: 0; min-height: 1em; }
+      .scroll-wide { position: relative; width: 12rem; margin-top: 8px; }
+      .scroll-wide [data-armature-part="Viewport"] { width: 12rem; padding: 0 0 12px; overflow-x: scroll; scrollbar-width: none; }
+      .wide-strip { display: flex; gap: 12px; white-space: nowrap; }
+      .scroll-wide [data-armature-part="Scrollbar"] { position: absolute; left: 0; bottom: 0; width: 192px; height: 8px; background: #eef; border-radius: 4px; }
+      .thumb-across { position: absolute; top: 0; height: 8px; }
+      .thumb-across [data-armature-part="Thumb"] { height: 100%; background: #889; border-radius: 4px; }
       .trace-row { display: flex; align-items: center; gap: 8px; }
       .trace-name { width: 6rem; } .trace-name [role="treeitem"] { padding: 2px 4px; outline: none; cursor: default; }
       .trace-name [role="treeitem"][aria-selected="true"] { font-weight: 600; } .trace-name [role="treeitem"]:focus-visible { background: #e8eefc; }

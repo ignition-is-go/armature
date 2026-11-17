@@ -46,8 +46,8 @@ Each lives in `armature_core::<module>` and exports a `Part` enum.
 | Avatar | `avatar` | `Root`, `Image`, `Fallback` | None. Put the picture inside `Image`. Read `status()`. |
 | Pagination | `pagination` | `Root`, `First`, `Previous`, `Page`, `Next`, `Last` | The page, from 1. Draw the row from `range()`. |
 | Text field, password, multi-line, label and field | `text_field` | `Root`, `Label`, `Input`, `Description`, `Error`, `Clear`, `Reveal` | The text. A submit arrives with `Reason::Keyboard`. Fill `Error` from `error()`. |
-| Combobox and autocomplete | `combobox` | `Input`, `List`, `Option`, `Chip`, `Clear`, `Empty` | The chosen keys, or the text with `custom`. Render every option: the primitive hides those that do not match. |
-| Menu | `menu` | `Trigger`, `Content`, `Item` | The checked entries, with `group=key` for radios. Running an action offers `run:<key>`. Draw the entries of `shown()`. |
+| Combobox and autocomplete | `combobox` | `Input`, `List`, `Option`, `Chip`, `Clear`, `Empty`, `Status` | The chosen keys, or the text with `custom`. Render every option: the primitive hides those that do not match. |
+| Menu | `menu` | `Trigger`, `Content`, `Item`, `Area` | The checked entries, with `group=key` for radios. Running an action offers `run:<key>`. Draw the entries of `shown()`. |
 | Menubar | `menubar` | `Root`, `Trigger`, `Content`, `Item` | As a menu, with entries keyed `menu/entry`. Draw each menu from `shown(menu)`. |
 | Navigation menu | `navigation_menu` | `Root`, `Trigger`, `Link`, `Panel` | The open panel. Following a link offers `link:<key>`. |
 | Hover card | `tooltip` (`Tooltip::hover_card()`) | `Trigger`, `Content` | None. |
@@ -56,7 +56,7 @@ Each lives in `armature_core::<module>` and exports a `Part` enum.
 | Date input | `date_input` | `Root`, `Segment` | `YYYY-MM-DD`, with `THH:MM` for a time. Key segments `year`, `month`, `day`, `hour`, `minute`. |
 | Date picker | `date_picker` | `Segment`, `Trigger`, `Content`, `Grid`, `Day`, `PreviousMonth`, `NextMonth` | `YYYY-MM-DD`. Draw days from `calendar().weeks()`. |
 | Carousel | `carousel` | `Root`, `Viewport`, `Slide`, `Previous`, `Next`, `Indicator`, `Play` | The slide on show. Move the strip by `position()`. |
-| Scroll area | `scroll_area` | `Root`, `Viewport`, `Scrollbar`, `Thumb` | None. Place the grip with `thumb(track_length)`. |
+| Scroll area | `scroll_area` | `Root`, `Viewport`, `Scrollbar`, `Thumb` | None. Place the grip with `thumb(track_length)`. `ScrollArea::horizontal()` scrolls sideways. |
 | Image cropper | `image_cropper` | `Area`, `Selection`, `Handle` | `x,y,width,height` in the picture's pixels. Place the selection with `fractions()`. Key handles by compass point. |
 | File input | `file_input` | `Dropzone`, `Trigger`, `List`, `File`, `Remove` | The file names. Draw from `files()`, and `rejected()` says what was turned away. |
 | Waterfall | `waterfall` | `Root`, `Row`, `Bar`, `Axis` | The selected span. Draw from `rows()`, `bar(key)` and `ticks(most)`. |
@@ -113,6 +113,9 @@ view! {
 - While a modal part is shown, a press outside it does not reach popups beneath it.
 - An accordion built with `findable: true` hides its panels with
   `hidden="until-found"`, so find-in-page searches them and opens the one it matches.
+- Pass `settings` to `Root`, a signal of names and values, for what the owner
+  changes while a component runs, such as a combobox's `status` (`loading`, `error`
+  or `idle`).
 - `use_shortcut("mod+k", action)` runs an action from anywhere on the page.
 - `chosen_file(name)` returns the browser `File` behind a name in a file input's
   value, to read or upload.
@@ -162,6 +165,7 @@ div()
   `KeyBinding::new` takes.
 - Parts that name, control or describe one another are linked in the accessibility
   tree for you.
+- `machine.set(name, value, cx)` changes a setting while the component runs.
 - A file dropped on a part that takes drops, or chosen in the picker, arrives with
   its path. Call `machine.loaded(part, ok, window, cx)` when a picture inside a part
   loads or fails, since GPUI's `img` does not report it.

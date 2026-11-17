@@ -10,6 +10,7 @@ use armature_core::date::Date;
 use armature_core::date_input::{self, DateInput};
 use armature_core::date_picker::{self, DatePicker};
 use armature_core::file_input::{self, FileInput};
+use armature_core::form::Form;
 use armature_core::gauge::{Meter, MeterPart, Progress, ProgressPart, Separator, SeparatorPart};
 use armature_core::geometry::Size;
 use armature_core::image_cropper::{self, HANDLES, ImageCropper};
@@ -181,6 +182,26 @@ fn ScrollParts() -> impl IntoView {
 }
 
 #[component]
+fn WideParts() -> impl IntoView {
+    let area = use_primitive::<ScrollArea>();
+    let thumb = move || area.with(|a| a.thumb(192.0));
+    view! {
+        <Part part=scroll_area::Part::Root>
+            <div class="scroll-wide">
+                <Part part=scroll_area::Part::Viewport>
+                    <div class="wide-strip">{(1..=20).map(|n| view! { <span>"Day " {n}</span> }).collect_view()}</div>
+                </Part>
+                <Part part=scroll_area::Part::Scrollbar>
+                    <div class="thumb-across" style:left=move || format!("{}px", thumb().0) style:width=move || format!("{}px", thumb().1)>
+                        <Part part=scroll_area::Part::Thumb />
+                    </div>
+                </Part>
+            </div>
+        </Part>
+    }
+}
+
+#[component]
 fn CropParts() -> impl IntoView {
     let cropper = use_primitive::<ImageCropper>();
     let side = move |at: usize| move || format!("{}%", cropper.with(|c| c.fractions()[at]) * 100.0);
@@ -266,6 +287,61 @@ pub fn More() -> impl IntoView {
     let (span, on_span) = follow();
     let (files, on_files) = follow();
     let (nav, on_nav) = follow();
+    let loading = RwSignal::new(false);
+    let fruit_settings = Signal::derive(move || {
+        vec![(
+            "status".to_string(),
+            if loading.get() { "loading" } else { "idle" }.to_string(),
+        )]
+    });
+    let toggle_loading = Callback::new(move |_: ValueChange| {
+        loading.update(|on| *on = !*on);
+        true
+    });
+    // A form keeps its fields' values together and says what stops a submit.
+    let form = StoredValue::new(
+        Form::default()
+            .field("name", &[], true)
+            .field("team", &[], false),
+    );
+    let outcome = RwSignal::new("Not sent".to_string());
+    let name_problem = RwSignal::new(String::new());
+    let field = move |name: &'static str| {
+        Callback::new(move |change: ValueChange| {
+            form.update_value(|form| form.set(name, change.value));
+            name_problem.set(
+                form.with_value(|form| form.error("name"))
+                    .unwrap_or_default(),
+            );
+            true
+        })
+    };
+    let submit = Callback::new(move |_: ValueChange| {
+        let result = form.try_update_value(|form| form.submit());
+        outcome.set(match result {
+            Some(Ok(fields)) => format!(
+                "Sent: {}",
+                fields
+                    .iter()
+                    .map(|(name, value)| format!("{name}={}", value.join("")))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Some(Err(invalid)) => format!("Fix: {}", invalid.first),
+            None => String::new(),
+        });
+        name_problem.set(
+            form.with_value(|form| form.error("name"))
+                .unwrap_or_default(),
+        );
+        true
+    });
+    let reset = Callback::new(move |_: ValueChange| {
+        form.update_value(Form::reset);
+        outcome.set("Not sent".to_string());
+        name_problem.set(String::new());
+        true
+    });
     let toasts = RwSignal::new(Vec::<String>::new());
     let count = RwSignal::new(0);
     let on_toasts = Callback::new(move |change: ValueChange| {
@@ -376,6 +452,7 @@ pub fn More() -> impl IntoView {
             <p id="menu-value">"Menu: " {move || ran.get().join(", ")}</p>
             <Root machine=Menu::new(entries()) label="File actions" on_value_change=on_ran>
                 <Part part=menu::Part::Trigger>"Actions"</Part>
+                <Part part=menu::Part::Area><span class="context-area">"Or right-click here"</span></Part>
                 <MenuItems />
             </Root>
         </Section>
@@ -400,13 +477,20 @@ pub fn More() -> impl IntoView {
 
         <Section title="Combobox">
             <p id="combo-value">"Fruit: " {move || fruit.get().join(", ")}</p>
-            <Root machine=Combobox::new(combobox::Options { auto_highlight: true, ..Default::default() }) label="Favourite fruit" on_value_change=on_fruit>
+            <Root machine=Button::default() label="Load fruit" on_value_change=toggle_loading><Part part=button::Part::Root>"Load"</Part></Root>
+            <Root
+                machine=Combobox::new(combobox::Options { auto_highlight: true, ..Default::default() })
+                label="Favourite fruit"
+                on_value_change=on_fruit
+                settings=fruit_settings
+            >
                 <Part part=combobox::Part::Input />
                 <Part part=combobox::Part::List>
                     <Part part=combobox::Part::Option item="apple">"Apple"</Part>
                     <Part part=combobox::Part::Option item="apricot">"Apricot"</Part>
                     <Part part=combobox::Part::Option item="banana">"Banana"</Part>
                     <Part part=combobox::Part::Empty>"Nothing matches."</Part>
+                    <Part part=combobox::Part::Status>"Loading…"</Part>
                 </Part>
             </Root>
         </Section>
@@ -470,6 +554,22 @@ pub fn More() -> impl IntoView {
 
         <Section title="Scroll area">
             <Root machine=ScrollArea::default() label="Log"><ScrollParts /></Root>
+            <Root machine=ScrollArea::horizontal() label="Timeline strip"><WideParts /></Root>
+        </Section>
+
+        <Section title="Form">
+            <p id="form-value">{move || outcome.get()}</p>
+            <Root machine=TextField::new(Kind::Text) label="Name" on_value_change=field("name")>
+                <Part part=text_field::Part::Label>"Name"</Part>
+                <Part part=text_field::Part::Input />
+            </Root>
+            <p id="form-name-error" class="problem">{move || name_problem.get()}</p>
+            <Root machine=TextField::new(Kind::Text) label="Team" on_value_change=field("team")>
+                <Part part=text_field::Part::Label>"Team"</Part>
+                <Part part=text_field::Part::Input />
+            </Root>
+            <Root machine=Button::default() label="Create" on_value_change=submit><Part part=button::Part::Root>"Create"</Part></Root>
+            <Root machine=Button::default() label="Reset" on_value_change=reset><Part part=button::Part::Root>"Reset"</Part></Root>
         </Section>
 
         <Section title="Image cropper">

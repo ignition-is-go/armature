@@ -345,6 +345,31 @@
       "selected": "Span: api"
     }
   },
+  "depth": {
+    "comboboxLoading": {
+      "loading": "status=true empty=false said=\"Loading\"",
+      "idle": "status=false empty=true"
+    },
+    "contextMenu": {
+      "opened": "shown=true browserMenuStopped=true atPointer=true focus=new",
+      "closed": "shown=false"
+    },
+    "sidewaysScroll": {
+      "start": "left=0px narrow=true",
+      "thumbReachesTheEnd": true,
+      "orientation": "horizontal"
+    },
+    "toastHotkey": {
+      "into": "Dismiss",
+      "back": "Notify"
+    },
+    "form": {
+      "refused": "Fix: name | This field is required.",
+      "fixed": "error=\"\"",
+      "sent": "Sent: name=Ada, team=Engines",
+      "reset": "Not sent"
+    }
+  },
   "accessibility": {
     "dialog \"Share this page\"": {
       "modal": "false",
