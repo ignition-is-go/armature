@@ -219,6 +219,10 @@ impl Primitive for Select {
         self.list.value()
     }
 
+    fn set_value(&mut self, value: Vec<String>) {
+        self.list.set_value(value);
+    }
+
     fn snapshot(&self, label: &str) -> Snapshot {
         Snapshot {
             name: "select",

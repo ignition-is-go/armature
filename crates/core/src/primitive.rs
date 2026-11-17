@@ -7,6 +7,7 @@ use std::hash::Hash;
 
 use crate::agent::{ActError, Snapshot};
 use crate::change::Gate;
+use crate::geometry::{Point, Rect};
 use crate::keys::{Key, Modifiers, Orientation};
 use crate::popup::Placement;
 
@@ -35,6 +36,49 @@ pub enum Input<Part> {
     Focus { part: Part, item: Option<String> },
     /// A press landed outside every part of this primitive.
     PressOutside,
+    /// The time asked for by `Effect::Wake` has arrived.
+    Tick { now_ms: u64 },
+    /// The person edited a text part.
+    Text {
+        part: Part,
+        item: Option<String>,
+        value: String,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PointerPhase {
+    Down,
+    Move,
+    Up,
+    /// The platform took the pointer away.
+    Cancel,
+}
+
+/// A pointer gesture on a part that tracks the pointer.
+#[derive(Clone, Debug)]
+pub struct Pointer<Part> {
+    pub phase: PointerPhase,
+    pub part: Part,
+    pub item: Option<String>,
+    /// In the same space as the boxes `Measure` reports.
+    pub at: Point,
+    pub mods: Modifiers,
+    pub now_ms: u64,
+}
+
+/// Reports where a part is right now, if it is rendered.
+pub type Measure<'a, Part> = &'a dyn Fn(Part, Option<&str>) -> Option<Rect>;
+
+/// Something the adapter must do beyond moving focus.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Effect {
+    /// Read a message to assistive technology.
+    Announce { message: String, assertive: bool },
+    /// Send `Input::Tick` at this time.
+    Wake { at_ms: u64 },
+    /// Keep sending this pointer's moves here until it is released, wherever it goes.
+    CapturePointer,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -49,6 +93,7 @@ pub struct Reaction<Part> {
     /// The input was consumed; suppress the platform's default for it.
     pub handled: bool,
     pub focus: Option<FocusTarget<Part>>,
+    pub effects: Vec<Effect>,
 }
 
 impl<Part> Default for Reaction<Part> {
@@ -56,6 +101,7 @@ impl<Part> Default for Reaction<Part> {
         Reaction {
             handled: false,
             focus: None,
+            effects: Vec::new(),
         }
     }
 }
@@ -65,6 +111,7 @@ impl<Part> Reaction<Part> {
         Reaction {
             handled: true,
             focus: None,
+            effects: Vec::new(),
         }
     }
 
@@ -76,6 +123,7 @@ impl<Part> Reaction<Part> {
                 part,
                 item: Some(item),
             }),
+            effects: Vec::new(),
         }
     }
 
@@ -83,7 +131,20 @@ impl<Part> Reaction<Part> {
         Reaction {
             handled: true,
             focus: Some(FocusTarget { part, item: None }),
+            effects: Vec::new(),
         }
+    }
+
+    pub fn with(mut self, effect: Effect) -> Self {
+        self.effects.push(effect);
+        self
+    }
+
+    pub fn announcing(self, message: impl Into<String>) -> Self {
+        self.with(Effect::Announce {
+            message: message.into(),
+            assertive: false,
+        })
     }
 
     pub fn focus_item(&self) -> Option<&str> {
@@ -100,6 +161,33 @@ pub enum Role {
     TabPanel,
     /// A control that opens a popup to choose a value.
     ComboBox,
+    Button,
+    Switch,
+    RadioGroup,
+    Radio,
+    Toolbar,
+    Slider,
+    SpinButton,
+    TextBox,
+    Tree,
+    TreeItem,
+    /// A set of related parts, such as the children of a tree item.
+    Group,
+    /// A titled section of content, such as an accordion panel.
+    Region,
+    Grid,
+    GridCell,
+    Dialog,
+    List,
+    ListItem,
+}
+
+/// A number within limits, as a slider or stepper reports it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ValueRange {
+    pub now: f64,
+    pub min: f64,
+    pub max: f64,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -114,11 +202,15 @@ pub enum Focusable {
 /// Renderer-neutral description of one rendered part. A web adapter maps it to ARIA
 /// attributes, a native one to its accessibility tree. A part that is focusable also
 /// reports presses and keys.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Semantics {
     pub role: Option<Role>,
     pub selected: Option<bool>,
     pub expanded: Option<bool>,
+    pub checked: Option<bool>,
+    /// Depth in a tree, starting at 1.
+    pub level: Option<u32>,
+    pub range: Option<ValueRange>,
     pub multiselectable: Option<bool>,
     pub orientation: Option<Orientation>,
     pub disabled: bool,
@@ -147,6 +239,12 @@ pub trait Primitive: Clone + 'static {
         None
     }
 
+    /// Whether presses on a part are gestures to follow with `pointer`, such as a
+    /// slider thumb, and not plain presses.
+    fn tracks_pointer(_part: Self::Part) -> bool {
+        false
+    }
+
     fn upsert_item(&mut self, item: Item);
     fn remove_item(&mut self, key: &str);
     /// Aligns items with the rendered order. `rendered` is `(key, text)`; the text
@@ -156,7 +254,25 @@ pub trait Primitive: Clone + 'static {
     fn semantics(&self, part: Self::Part, item: Option<&str>) -> Semantics;
     fn send(&mut self, input: Input<Self::Part>, gate: Gate) -> Reaction<Self::Part>;
 
+    /// Handles a gesture on a part that tracks the pointer.
+    fn pointer(
+        &mut self,
+        _pointer: Pointer<Self::Part>,
+        _measure: Measure<Self::Part>,
+        _gate: Gate,
+    ) -> Reaction<Self::Part> {
+        Reaction::default()
+    }
+
+    /// The text to show in a text-entry part.
+    fn text(&self, _part: Self::Part, _item: Option<&str>) -> Option<String> {
+        None
+    }
+
     fn value(&self) -> Vec<String>;
+    /// Sets the value on the owner's say-so, without asking the gate. Keys that are
+    /// not valid choices are dropped.
+    fn set_value(&mut self, value: Vec<String>);
     fn snapshot(&self, label: &str) -> Snapshot;
     /// Runs an agent action through the same change gate a user's input goes through.
     fn act(&mut self, action: &str, item: Option<&str>, gate: Gate) -> Result<(), ActError>;

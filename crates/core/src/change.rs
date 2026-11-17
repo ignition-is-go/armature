@@ -8,6 +8,10 @@ pub enum Source {
 pub enum Reason {
     Press,
     Keyboard,
+    /// A pointer gesture, such as dragging a slider.
+    Drag,
+    /// Typed into a text part.
+    Text,
     Action,
 }
 

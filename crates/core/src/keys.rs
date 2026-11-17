@@ -6,6 +6,8 @@ pub enum Key {
     ArrowRight,
     Home,
     End,
+    PageUp,
+    PageDown,
     Enter,
     Space,
     Escape,

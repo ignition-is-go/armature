@@ -101,6 +101,8 @@ fn key_named(name: &str) -> Option<Key> {
         "right" => Key::ArrowRight,
         "home" => Key::Home,
         "end" => Key::End,
+        "pageup" => Key::PageUp,
+        "pagedown" => Key::PageDown,
         other => {
             let mut chars = other.chars();
             match (chars.next(), chars.next()) {
@@ -123,6 +125,8 @@ fn key_label(key: Key) -> String {
         Key::ArrowRight => "ArrowRight".into(),
         Key::Home => "Home".into(),
         Key::End => "End".into(),
+        Key::PageUp => "PageUp".into(),
+        Key::PageDown => "PageDown".into(),
         Key::Char(ch) => ch.to_uppercase().collect(),
     }
 }

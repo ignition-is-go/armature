@@ -232,6 +232,21 @@ impl Primitive for Listbox {
         self.selected.clone()
     }
 
+    fn set_value(&mut self, value: Vec<String>) {
+        let limit = if self.opts.mode == Mode::Single {
+            1
+        } else {
+            usize::MAX
+        };
+        self.selected = self
+            .items
+            .iter()
+            .filter(|item| value.contains(&item.key))
+            .map(|item| item.key.clone())
+            .take(limit)
+            .collect();
+    }
+
     fn snapshot(&self, label: &str) -> Snapshot {
         Snapshot {
             name: "listbox",
@@ -425,6 +440,16 @@ mod tests {
         let reaction = key(&mut lb, Key::Char('d'), NONE);
         assert_eq!(reaction.focus_item(), Some("date"));
         assert!(!key(&mut lb, Key::Char('z'), NONE).handled);
+    }
+
+    #[test]
+    fn the_owner_can_set_the_value_but_only_to_real_items() {
+        let mut lb = listbox(Mode::Multiple);
+        lb.set_value(vec!["date".into(), "ghost".into(), "apple".into()]);
+        assert_eq!(lb.value(), ["apple", "date"]);
+        let mut single = listbox(Mode::Single);
+        single.set_value(vec!["date".into(), "apple".into()]);
+        assert_eq!(single.value(), ["apple"]);
     }
 
     #[test]

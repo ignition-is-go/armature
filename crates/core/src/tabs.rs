@@ -178,6 +178,12 @@ impl Primitive for Tabs {
         self.current().map(str::to_string).into_iter().collect()
     }
 
+    fn set_value(&mut self, value: Vec<String>) {
+        if let Some(key) = value.into_iter().find(|key| self.items.is_enabled(key)) {
+            self.selected = Some(key);
+        }
+    }
+
     fn snapshot(&self, label: &str) -> Snapshot {
         Snapshot {
             name: "tabs",
