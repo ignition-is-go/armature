@@ -1,0 +1,13 @@
+[package]
+name = "armature-gpui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "GPUI adapter for armature-core"
+
+[dependencies]
+armature-core.workspace = true
+gpui = { package = "gpui-unofficial", version = "1.28" }
+
+[dev-dependencies]
+gpui = { package = "gpui-unofficial", version = "1.28", features = ["test-support"] }
