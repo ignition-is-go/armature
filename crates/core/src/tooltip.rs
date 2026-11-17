@@ -1,10 +1,12 @@
 use crate::agent::{ActError, Snapshot};
-use crate::change::Gate;
+use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::keys::Key;
 use crate::popup::{Align, Placement, Side};
 use crate::primitive::{
     Effect, Focusable, Input, Item, PartOf, Primitive, Reaction, Relations, Role, Semantics,
 };
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Part {
@@ -22,6 +24,28 @@ pub struct Options {
     /// A card of richer content that the pointer can move into and use, such as a
     /// preview of a link, in place of a short description.
     pub card: bool,
+    /// A disabled tooltip ignores the pointer and focus. An agent or the owner can
+    /// still show it.
+    pub disabled: bool,
+}
+
+/// Shared by tooltips that sit together, such as a toolbar's. Once one has been
+/// shown, moving to the next shows it at once instead of waiting again.
+#[derive(Clone, Debug, Default)]
+pub struct Warmth(Arc<AtomicU64>);
+
+impl Warmth {
+    /// How long after one tooltip hides the next still opens at once.
+    pub const WINDOW_MS: u64 = 300;
+
+    fn closed(&self, now_ms: u64) {
+        self.0.store(now_ms + 1, Ordering::Relaxed);
+    }
+
+    pub fn is_warm(&self, now_ms: u64) -> bool {
+        let closed = self.0.load(Ordering::Relaxed);
+        closed > 0 && now_ms + 1 >= closed && now_ms + 1 - closed <= Self::WINDOW_MS
+    }
 }
 
 impl Default for Options {
@@ -30,6 +54,7 @@ impl Default for Options {
             open_delay_ms: 500,
             close_delay_ms: 0,
             card: false,
+            disabled: false,
         }
     }
 }
@@ -44,6 +69,7 @@ pub struct Tooltip {
     open: bool,
     /// When a pending show or hide takes effect, and which it is.
     due: Option<(u64, bool)>,
+    warmth: Option<Warmth>,
 }
 
 impl Tooltip {
@@ -61,6 +87,7 @@ impl Tooltip {
             open_delay_ms: 600,
             close_delay_ms: 300,
             card: true,
+            disabled: false,
         })
     }
 
@@ -68,9 +95,54 @@ impl Tooltip {
         self.open
     }
 
+    /// Joins the tooltips that share `warmth`.
+    pub fn sharing(mut self, warmth: Warmth) -> Self {
+        self.warmth = Some(warmth);
+        self
+    }
+
+    /// Shows or hides now, unless the owner refuses.
+    fn change(
+        &mut self,
+        open: bool,
+        source: Source,
+        reason: Reason,
+        now_ms: Option<u64>,
+        gate: Gate,
+    ) -> bool {
+        self.due = None;
+        if open == self.open {
+            return true;
+        }
+        let value = if open {
+            vec!["open".to_string()]
+        } else {
+            Vec::new()
+        };
+        let allowed = gate(&ValueChange {
+            value,
+            source,
+            reason,
+        });
+        if allowed {
+            self.open = open;
+            if let (false, Some(warmth), Some(now_ms)) = (open, &self.warmth, now_ms) {
+                warmth.closed(now_ms);
+            }
+        }
+        allowed
+    }
+
     /// Shows or hides after a delay, or at once when there is none.
-    fn schedule(&mut self, open: bool, now_ms: u64) -> Reaction<Part> {
-        let delay = if open {
+    fn schedule(&mut self, open: bool, now_ms: u64, gate: Gate) -> Reaction<Part> {
+        let delay = if open
+            && self
+                .warmth
+                .as_ref()
+                .is_some_and(|warmth| warmth.is_warm(now_ms))
+        {
+            0
+        } else if open {
             self.opts.open_delay_ms
         } else {
             self.opts.close_delay_ms
@@ -80,8 +152,7 @@ impl Tooltip {
             return Reaction::default();
         }
         if delay == 0 {
-            self.due = None;
-            self.open = open;
+            self.change(open, Source::User, Reason::Hover, Some(now_ms), gate);
             return Reaction::default();
         }
         let at_ms = now_ms + delay;
@@ -150,22 +221,23 @@ impl Primitive for Tooltip {
         }
     }
 
-    fn send(&mut self, input: Input<Part>, _: Gate) -> Reaction<Part> {
+    fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
         match input {
-            Input::Hover { inside, now_ms, .. } => self.schedule(inside, now_ms),
+            Input::Hover { inside: true, .. } | Input::Focus { .. } if self.opts.disabled => {
+                Reaction::default()
+            }
+            Input::Hover { inside, now_ms, .. } => self.schedule(inside, now_ms, gate),
             // Keyboard focus shows it at once: there is no pointer to wait for.
             Input::Focus {
                 part: Part::Trigger,
                 ..
             } => {
-                self.due = None;
-                self.open = true;
+                self.change(true, Source::User, Reason::Keyboard, None, gate);
                 Reaction::default()
             }
             Input::Tick { now_ms } => {
                 if let Some((_, open)) = self.due.filter(|(at_ms, _)| now_ms >= *at_ms) {
-                    self.open = open;
-                    self.due = None;
+                    self.change(open, Source::User, Reason::Hover, Some(now_ms), gate);
                 }
                 Reaction::default()
             }
@@ -176,8 +248,7 @@ impl Primitive for Tooltip {
             | Input::Press { .. }
             | Input::PressOutside
             | Input::WindowBlur => {
-                self.due = None;
-                self.open = false;
+                self.change(false, Source::User, Reason::Press, None, gate);
                 Reaction::default()
             }
             _ => Reaction::default(),
@@ -201,8 +272,8 @@ impl Primitive for Tooltip {
         }
     }
 
-    fn act(&mut self, action: &str, _: Option<&str>, _: Gate) -> Result<(), ActError> {
-        self.open = match action {
+    fn act(&mut self, action: &str, _: Option<&str>, gate: Gate) -> Result<(), ActError> {
+        let open = match action {
             "show" => true,
             "hide" => false,
             other => {
@@ -212,8 +283,11 @@ impl Primitive for Tooltip {
                 });
             }
         };
-        self.due = None;
-        Ok(())
+        if self.change(open, Source::Agent, Reason::Action, None, gate) {
+            Ok(())
+        } else {
+            Err(ActError::Refused)
+        }
     }
 }
 

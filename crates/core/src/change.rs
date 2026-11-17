@@ -17,6 +17,8 @@ pub enum Reason {
     Action,
     /// Time ran out, as when a notification has been shown for long enough.
     Timer,
+    /// The pointer came to rest on something, or left it.
+    Hover,
 }
 
 /// A value change offered to the owner before it is committed.

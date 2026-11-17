@@ -840,3 +840,82 @@ fn dialog_behaviors() {
         "the owner's own refusal is not counted again"
     );
 }
+
+use armature_core::tooltip::{self, Tooltip, Warmth};
+
+// tooltip.test.ts
+#[test]
+fn tooltip_behaviors() {
+    let hover = |tip: &mut Tooltip, inside: bool, now_ms: u64, allow: bool| {
+        tip.send(
+            Input::Hover {
+                part: tooltip::Part::Trigger,
+                item: None,
+                inside,
+                now_ms,
+            },
+            &mut |_| allow,
+        );
+    };
+    let tick = |tip: &mut Tooltip, now_ms: u64, allow: bool| {
+        tip.send(Input::Tick { now_ms }, &mut |_| allow);
+    };
+    // "opens after the delay, and at once for 0"
+    let mut tip = Tooltip::default();
+    hover(&mut tip, true, 0, true);
+    assert!(!tip.is_open());
+    tick(&mut tip, 500, true);
+    assert!(tip.is_open());
+    let mut instant = Tooltip::new(tooltip::Options {
+        open_delay_ms: 0,
+        ..Default::default()
+    });
+    hover(&mut instant, true, 0, true);
+    assert!(instant.is_open());
+    // "leaving before the delay drops the open"
+    let mut left = Tooltip::default();
+    hover(&mut left, true, 0, true);
+    hover(&mut left, false, 200, true);
+    tick(&mut left, 500, true);
+    assert!(!left.is_open());
+    // "the content is always present, hidden while closed, so the reference resolves"
+    assert!(left.semantics(tooltip::Part::Content, None).hidden);
+    // "a canceled change keeps the card closed"
+    let mut refused = Tooltip::default();
+    hover(&mut refused, true, 0, true);
+    tick(&mut refused, 500, false);
+    assert!(!refused.is_open());
+    // "a disabled tooltip refuses hover and focus but obeys its controller"
+    let mut disabled = Tooltip::new(tooltip::Options {
+        open_delay_ms: 0,
+        disabled: true,
+        ..Default::default()
+    });
+    hover(&mut disabled, true, 0, true);
+    disabled.send(
+        Input::Focus {
+            part: tooltip::Part::Trigger,
+            item: None,
+        },
+        &mut |_| true,
+    );
+    assert!(!disabled.is_open());
+    disabled.act("show", None, &mut |_| true).unwrap();
+    assert!(disabled.is_open());
+    // "a tooltip that opens while another is warm opens instantly"
+    let warmth = Warmth::default();
+    let mut first = Tooltip::default().sharing(warmth.clone());
+    let mut second = Tooltip::default().sharing(warmth);
+    hover(&mut first, true, 0, true);
+    tick(&mut first, 500, true);
+    hover(&mut first, false, 900, true);
+    hover(&mut second, true, 1000, true);
+    assert!(
+        !first.is_open() && second.is_open(),
+        "no second wait while the group is warm"
+    );
+    // Once it has cooled, the next waits again.
+    hover(&mut second, false, 1100, true);
+    hover(&mut first, true, 5000, true);
+    assert!(!first.is_open());
+}
