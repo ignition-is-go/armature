@@ -378,13 +378,10 @@ impl Primitive for CheckboxGroup {
             }
             Input::Key {
                 key: Key::Space, ..
-            } => match self.focused.clone() {
-                Some(key) => {
-                    self.toggle(&key, Source::User, Reason::Keyboard, gate);
-                    Reaction::handled()
-                }
-                None => Reaction::default(),
-            },
+            } => self.focused.clone().map_or_else(Reaction::default, |key| {
+                self.toggle(&key, Source::User, Reason::Keyboard, gate);
+                Reaction::handled()
+            }),
             _ => Reaction::default(),
         }
     }

@@ -386,10 +386,7 @@ pub fn carry_layout(
     let wanted: Vec<f64> = ids
         .iter()
         .zip(panels)
-        .map(|(id, panel)| match kept_size(id) {
-            Some(size) => size * scale,
-            None => new_size(panel),
-        })
+        .map(|(id, panel)| kept_size(id).map_or_else(|| new_size(panel), |size| size * scale))
         .collect();
     fit_layout(&wanted, panels)
 }

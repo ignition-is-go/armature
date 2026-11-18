@@ -317,13 +317,10 @@ impl Primitive for TriggerMenu {
             Input::Key {
                 key: Key::Enter | Key::Tab,
                 ..
-            } if open => match self.active.clone() {
-                Some(key) => {
-                    self.insert(&key, Source::User, Reason::Keyboard, gate);
-                    Reaction::handled()
-                }
-                None => Reaction::default(),
-            },
+            } if open => self.active.clone().map_or_else(Reaction::default, |key| {
+                self.insert(&key, Source::User, Reason::Keyboard, gate);
+                Reaction::handled()
+            }),
             // Escape closes the suggestions and leaves the text as typed.
             Input::Key {
                 key: Key::Escape, ..

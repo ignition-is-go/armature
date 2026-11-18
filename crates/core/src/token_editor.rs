@@ -374,10 +374,8 @@ impl TokenEditor {
                 self.caret = self.length();
                 Reaction::handled()
             }
-            'c' => match copy_selection(self) {
-                Some(copy) => Reaction::handled().with(copy),
-                None => Reaction::handled(),
-            },
+            'c' => copy_selection(self)
+                .map_or_else(Reaction::handled, |copy| Reaction::handled().with(copy)),
             'x' if may_edit => match (copy_selection(self), self.selection()) {
                 (Some(copy), Some(selected)) => {
                     self.delete(selected, Cause::TYPED, gate);

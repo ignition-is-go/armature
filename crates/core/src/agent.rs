@@ -104,10 +104,10 @@ impl<Cx> Target<Cx> {
     /// Runs one action. A component that needs approval refuses; use `run` with an
     /// approver for those.
     pub fn act(&self, cx: &mut Cx, action: &str, item: Option<&str>) -> Result<Vec<String>, Error> {
-        match &self.access.confirm {
-            Some(what) => Err(Error::NeedsApproval(what.clone())),
-            None => self.act_approved(cx, action, item),
-        }
+        self.access.confirm.as_ref().map_or_else(
+            || self.act_approved(cx, action, item),
+            |what| Err(Error::NeedsApproval(what.clone())),
+        )
     }
 
     fn act_approved(

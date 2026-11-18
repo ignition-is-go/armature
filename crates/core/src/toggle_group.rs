@@ -178,17 +178,14 @@ impl Primitive for ToggleGroup {
             Input::Key {
                 key: Key::Enter | Key::Space,
                 ..
-            } => match self
+            } => self
                 .focused
                 .clone()
                 .or_else(|| self.tab_stop().map(str::to_string))
-            {
-                Some(key) => {
+                .map_or_else(Reaction::default, |key| {
                     self.toggle(&key, Source::User, Reason::Keyboard, gate);
                     Reaction::handled()
-                }
-                None => Reaction::default(),
-            },
+                }),
             // Arrows only move. Unlike a radio group, moving presses nothing.
             Input::Key { key, .. } => {
                 let Some(nav) = roving::nav_for_key(key, self.opts.orientation, self.opts.dir)

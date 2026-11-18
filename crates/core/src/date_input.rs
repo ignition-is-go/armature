@@ -402,12 +402,9 @@ impl Primitive for DateInput {
                         self.put(segment, Some(next), Source::User, Reason::Keyboard, gate);
                         Reaction::handled()
                     }
-                    Key::ArrowRight | Key::ArrowLeft => {
-                        match self.neighbour(key == Key::ArrowRight) {
-                            Some(next) => self.move_to(next),
-                            None => Reaction::handled(),
-                        }
-                    }
+                    Key::ArrowRight | Key::ArrowLeft => self
+                        .neighbour(key == Key::ArrowRight)
+                        .map_or_else(Reaction::handled, |next| self.move_to(next)),
                     Key::Backspace => {
                         self.typed.clear();
                         self.put(segment, None, Source::User, Reason::Keyboard, gate);
@@ -450,10 +447,9 @@ impl Primitive for DateInput {
                         }
                     }
                     // A separator typed out of habit moves on, as it would in plain text.
-                    Key::Char('/' | '-' | '.' | ':') => match self.neighbour(true) {
-                        Some(next) => self.move_to(next),
-                        None => Reaction::handled(),
-                    },
+                    Key::Char('/' | '-' | '.' | ':') => self
+                        .neighbour(true)
+                        .map_or_else(Reaction::handled, |next| self.move_to(next)),
                     _ => Reaction::default(),
                 }
             }
@@ -469,10 +465,10 @@ impl Primitive for DateInput {
         if segment == Segment::Period {
             return Some(if self.pm { "PM" } else { "AM" }.to_string());
         }
-        Some(match self.get(segment) {
-            Some(number) => format!("{number:0width$}", width = segment.width()),
-            None => "-".repeat(segment.width()),
-        })
+        Some(self.get(segment).map_or_else(
+            || "-".repeat(segment.width()),
+            |number| format!("{number:0width$}", width = segment.width()),
+        ))
     }
 
     fn value(&self) -> Vec<String> {

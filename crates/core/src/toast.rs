@@ -251,10 +251,13 @@ impl Toaster {
     }
 
     fn wake(&self) -> Reaction<Part> {
-        match self.deadlines.iter().map(|(_, at)| *at).min() {
-            Some(at_ms) => Reaction::default().with(Effect::Wake { at_ms }),
-            None => Reaction::default(),
-        }
+        self.deadlines
+            .iter()
+            .map(|(_, at)| *at)
+            .min()
+            .map_or_else(Reaction::default, |at_ms| {
+                Reaction::default().with(Effect::Wake { at_ms })
+            })
     }
 }
 

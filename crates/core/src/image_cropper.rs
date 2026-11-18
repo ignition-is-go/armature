@@ -365,12 +365,12 @@ impl Primitive for ImageCropper {
                     (pointer.at.x - from.x) * scale,
                     (pointer.at.y - from.y) * scale,
                 );
-                let next = match grip {
-                    Some(grip) => {
+                let next = grip.map_or_else(
+                    || moved(start, delta, Some(self.bounds()), None),
+                    |grip| {
                         self.proportioned(resized(start, grip, delta, self.limits()), start, grip)
-                    }
-                    None => moved(start, delta, Some(self.bounds()), None),
-                };
+                    },
+                );
                 self.commit(next, Source::User, Reason::Drag, gate);
                 Reaction::handled()
             }

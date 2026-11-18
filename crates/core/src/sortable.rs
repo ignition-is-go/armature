@@ -120,10 +120,11 @@ impl Sortable {
                 Reaction::handled().alerting(message)
             }
             (Key::Space | Key::Enter, Some(_)) => match self.session.drop() {
-                Some(reorder) => match self.apply(reorder, Source::User, Reason::Keyboard, gate) {
-                    Some(message) => Reaction::handled().alerting(message),
-                    None => Reaction::handled(),
-                },
+                Some(reorder) => self
+                    .apply(reorder, Source::User, Reason::Keyboard, gate)
+                    .map_or_else(Reaction::handled, |message| {
+                        Reaction::handled().alerting(message)
+                    }),
                 None => Reaction::handled(),
             },
             // Tab puts the item back and lets focus move on.
@@ -314,12 +315,11 @@ impl Primitive for Sortable {
                     .session
                     .drop()
                     .filter(|_| matches!(ended, Some(DragEvent::End { .. })));
-                match reorder
+                reorder
                     .and_then(|reorder| self.apply(reorder, Source::User, Reason::Drag, gate))
-                {
-                    Some(message) => Reaction::handled().alerting(message),
-                    None => Reaction::handled(),
-                }
+                    .map_or_else(Reaction::handled, |message| {
+                        Reaction::handled().alerting(message)
+                    })
             }
             PointerPhase::Cancel => {
                 self.pressed = None;

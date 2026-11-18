@@ -247,10 +247,9 @@ impl Primitive for NumberInput {
                 if steps > 0 {
                     self.step(self.held * f64::from(steps), Reason::Press, gate);
                 }
-                match next {
-                    Some(at_ms) => Reaction::handled().with(Effect::Wake { at_ms }),
-                    None => Reaction::default(),
-                }
+                next.map_or_else(Reaction::default, |at_ms| {
+                    Reaction::handled().with(Effect::Wake { at_ms })
+                })
             }
             _ => Reaction::default(),
         }

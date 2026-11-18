@@ -317,10 +317,8 @@ impl Primitive for Calendar {
                 ..
             } => self.move_to(self.focused.add_months(if mods.shift { 12 } else { 1 })),
             Input::Key { key, mods, .. } => {
-                match date_for_key(self.focused, key, mods, self.opts.dir, self.opts.week_start) {
-                    Some(date) => self.move_to(date),
-                    None => Reaction::default(),
-                }
+                date_for_key(self.focused, key, mods, self.opts.dir, self.opts.week_start)
+                    .map_or_else(Reaction::default, |date| self.move_to(date))
             }
             Input::Focus {
                 part: Part::Day,
@@ -336,13 +334,12 @@ impl Primitive for Calendar {
                 part: Part::Day,
                 item: Some(day),
                 ..
-            } => match Date::parse(&day).filter(|date| self.allowed(*date)) {
-                Some(date) => {
+            } => Date::parse(&day)
+                .filter(|date| self.allowed(*date))
+                .map_or_else(Reaction::default, |date| {
                     self.select(date, Source::User, Reason::Press, gate);
                     self.move_to(date)
-                }
-                None => Reaction::default(),
-            },
+                }),
             // The month buttons keep focus, so a person can press them repeatedly.
             Input::Press {
                 part: Part::PreviousMonth,

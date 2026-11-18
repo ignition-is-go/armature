@@ -51,10 +51,10 @@ impl TriggerRule {
     }
 
     fn takes(&self, ch: char) -> bool {
-        match self.accepts {
-            Some(accepts) => accepts(ch),
-            None => ch.is_alphanumeric() || is_mark(ch) || matches!(ch, '_' | '-' | '.'),
-        }
+        self.accepts.map_or_else(
+            || ch.is_alphanumeric() || is_mark(ch) || matches!(ch, '_' | '-' | '.'),
+            |accepts| accepts(ch),
+        )
     }
 }
 

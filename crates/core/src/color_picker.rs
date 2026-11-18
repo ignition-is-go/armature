@@ -273,13 +273,10 @@ impl Primitive for ColorPicker {
                 self.focused = Some(thumb);
                 Reaction::focusing(thumb).with(Effect::CapturePointer)
             }
-            PointerPhase::Move => match self.dragging {
-                Some(part) => {
-                    self.drag(part, &pointer, measure, gate);
-                    Reaction::handled()
-                }
-                None => Reaction::default(),
-            },
+            PointerPhase::Move => self.dragging.map_or_else(Reaction::default, |part| {
+                self.drag(part, &pointer, measure, gate);
+                Reaction::handled()
+            }),
             PointerPhase::Up | PointerPhase::Cancel => {
                 self.dragging = None;
                 Reaction::handled()

@@ -79,12 +79,9 @@ impl Virtualizer {
             }
             start = end + self.gap;
         }
-        match first {
-            Some(first) => {
-                first.saturating_sub(overscan)..(last.saturating_add(overscan)).min(self.count)
-            }
-            None => 0..0,
-        }
+        first.map_or(0..0, |first| {
+            first.saturating_sub(overscan)..(last.saturating_add(overscan)).min(self.count)
+        })
     }
 
     /// The scroll offset that brings row `index` into view at `align`.

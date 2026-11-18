@@ -261,10 +261,10 @@ impl Primitive for DataGrid {
                 let Some(nav) = nav_for_key(key, mods, self.dir) else {
                     return Reaction::default();
                 };
-                match step(self.rows(), self.cols(), self.range.focus, nav, |_| true) {
-                    Some(cell) => self.go_to(cell, mods.shift, Reason::Keyboard, gate),
-                    None => Reaction::handled(),
-                }
+                step(self.rows(), self.cols(), self.range.focus, nav, |_| true)
+                    .map_or_else(Reaction::handled, |cell| {
+                        self.go_to(cell, mods.shift, Reason::Keyboard, gate)
+                    })
             }
             Input::Paste { text } => {
                 let edits = self.pasted(&text);
@@ -275,10 +275,11 @@ impl Primitive for DataGrid {
                 part: Part::Cell,
                 item,
                 mods,
-            } => match self.parse(item.as_deref()) {
-                Some(cell) => self.go_to(cell, mods.shift, Reason::Press, gate),
-                None => Reaction::default(),
-            },
+            } => self
+                .parse(item.as_deref())
+                .map_or_else(Reaction::default, |cell| {
+                    self.go_to(cell, mods.shift, Reason::Press, gate)
+                }),
             _ => Reaction::default(),
         }
     }

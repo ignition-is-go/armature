@@ -114,10 +114,7 @@ impl Picker {
             .as_deref()
             .and_then(|key| self.items.index_of(key));
         let place = current.and_then(|at| enabled.iter().position(|index| *index == at));
-        let next = match place {
-            Some(place) => place.saturating_add_signed(by).min(last),
-            None => 0,
-        };
+        let next = place.map_or(0, |place| place.saturating_add_signed(by).min(last));
         self.choose(
             Some(
                 self.items

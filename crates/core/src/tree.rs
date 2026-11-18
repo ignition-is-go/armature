@@ -380,15 +380,16 @@ pub fn slot_target(
         .rev()
         .find(|row| row.level < depth)
         .filter(|row| row.level.saturating_add(1) == depth);
-    let siblings: Vec<&str> = match parent {
-        Some(parent) => tree.children(&parent.key),
-        None => tree
-            .roots()
-            .into_iter()
-            .filter_map(|at| tree.nodes.get(at))
-            .map(|node| node.key.as_str())
-            .collect(),
-    };
+    let siblings: Vec<&str> = parent.map_or_else(
+        || {
+            tree.roots()
+                .into_iter()
+                .filter_map(|at| tree.nodes.get(at))
+                .map(|node| node.key.as_str())
+                .collect()
+        },
+        |parent| tree.children(&parent.key),
+    );
     // A closed parent shows none of its children, so the row goes after them all.
     let closed = parent.is_some() && !rows.iter().any(|row| siblings.contains(&row.key.as_str()));
     let before = if closed {

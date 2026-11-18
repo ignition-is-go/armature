@@ -464,10 +464,10 @@ impl Outline {
             return None;
         }
         self.rows = landed.rows;
-        let place = match &landed.parent {
-            Some(parent) => format!("under {}", self.label(parent)),
-            None => "at the top level".to_string(),
-        };
+        let place = landed.parent.as_ref().map_or_else(
+            || "at the top level".to_string(),
+            |parent| format!("under {}", self.label(parent)),
+        );
         Some(format!(
             "{} moved {place}, position {}",
             self.label(&landed.key),
@@ -482,9 +482,12 @@ impl Outline {
                 return Reaction::default();
             };
             let at = self.rows.iter().position(|row| row.key == focused);
-            let to = |index: Option<usize>| match index.and_then(|index| self.rows.get(index)) {
-                Some(row) => Reaction::item(Part::Row, true, Some(row.key.clone())),
-                None => Reaction::handled(),
+            let to = |index: Option<usize>| {
+                index
+                    .and_then(|index| self.rows.get(index))
+                    .map_or_else(Reaction::handled, |row| {
+                        Reaction::item(Part::Row, true, Some(row.key.clone()))
+                    })
             };
             return match key {
                 Key::Space | Key::Enter => {
@@ -527,12 +530,11 @@ impl Outline {
                     .moving
                     .take()
                     .and_then(|moving| moving.dropped(&self.rows));
-                return match landed
+                return landed
                     .and_then(|landed| self.commit(landed, Source::User, Reason::Keyboard, gate))
-                {
-                    Some(message) => Reaction::handled().alerting(message),
-                    None => Reaction::handled(),
-                };
+                    .map_or_else(Reaction::handled, |message| {
+                        Reaction::handled().alerting(message)
+                    });
             }
             // Every other key is swallowed while a row is up.
             _ => {}
@@ -670,12 +672,11 @@ impl Primitive for Outline {
                     .take()
                     .filter(|_| matches!(ended, Some(DragEvent::End { .. })))
                     .and_then(|moving| moving.dropped(&self.rows));
-                match landed
+                landed
                     .and_then(|landed| self.commit(landed, Source::User, Reason::Drag, gate))
-                {
-                    Some(message) => Reaction::handled().alerting(message),
-                    None => Reaction::handled(),
-                }
+                    .map_or_else(Reaction::handled, |message| {
+                        Reaction::handled().alerting(message)
+                    })
             }
             PointerPhase::Cancel => {
                 self.pressed = None;
