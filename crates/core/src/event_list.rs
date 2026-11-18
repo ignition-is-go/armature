@@ -43,9 +43,11 @@ impl Default for Options {
     }
 }
 
-/// Events in order: the steps of a process, a history, or a feed of activity. The
-/// arrows move between them. It has no value. The owner marks the step in progress
-/// with `set("current", key)` and a feed that is loading with `set("busy", "true")`.
+/// Events in order:
+///
+/// the steps of a process, a history, or a feed of activity. The arrows move between
+/// them. It has no value. The owner marks the step in progress with `set("current",
+/// key)` and a feed that is loading with `set("busy", "true")`.
 #[derive(Clone, Debug, Default)]
 pub struct EventList {
     opts: Options,

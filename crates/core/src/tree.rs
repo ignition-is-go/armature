@@ -344,9 +344,11 @@ pub fn tree_reorder_message(label: &str, target: &str, position: DropPosition) -
 /// How far sideways a dragged row moves to change depth by one level.
 pub const TREE_INDENT: f64 = 24.0;
 
-/// The depth a dragged row lands at. Dragging sideways changes it one level per
-/// `indent`. It can be no deeper than a child of the row above, and no shallower than
-/// the row below, which would otherwise be adopted. Depths start at 1.
+/// The depth a dragged row lands at.
+///
+/// Dragging sideways changes it one level per `indent`. It can be no deeper than a
+/// child of the row above, and no shallower than the row below, which would otherwise
+/// be adopted. Depths start at 1.
 #[must_use]
 pub fn drop_depth(
     start: usize,
@@ -401,8 +403,10 @@ pub fn slot_target(
 }
 
 /// Moves node `key`, with everything beneath it, to be child number `index` of
-/// `parent`, or a root when there is none. Returns `false` and changes nothing if
-/// either is missing or `parent` is inside the moved subtree.
+/// `parent`, or a root when there is none.
+///
+/// Returns `false` and changes nothing if either is missing or `parent` is inside the
+/// moved subtree.
 pub fn place_node(
     items: &mut Vec<TreeItem>,
     key: &str,

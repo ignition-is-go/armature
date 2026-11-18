@@ -142,9 +142,11 @@ impl Shortcut {
     }
 }
 
-/// Whether a shortcut may run. `order` is the layer it belongs to: 0 for the page,
-/// and `None` for a popup that is closed. `blocking` is the lowest layer that is
-/// modal, if any: only shortcuts at or above it run.
+/// Whether a shortcut may run.
+///
+/// `order` is the layer it belongs to: 0 for the page, and `None` for a popup that is
+/// closed. `blocking` is the lowest layer that is modal, if any: only shortcuts at or
+/// above it run.
 #[must_use]
 pub fn shortcut_allowed(order: Option<u32>, blocking: Option<u32>) -> bool {
     order.is_some_and(|order| blocking.is_none_or(|blocking| order >= blocking))

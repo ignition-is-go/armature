@@ -152,8 +152,10 @@ impl Spring {
 }
 
 /// How dark the backdrop behind a sheet should be, from 0 to 1, when the sheet is
-/// `extent` tall. It darkens between the last height that leaves the page usable
-/// (`largest_undimmed`, an index into `heights`, or `None` for closed) and the next.
+/// `extent` tall.
+///
+/// It darkens between the last height that leaves the page usable (`largest_undimmed`,
+/// an index into `heights`, or `None` for closed) and the next.
 #[must_use]
 pub fn dim_amount(extent: f64, heights: &[f64], largest_undimmed: Option<usize>) -> f64 {
     let lower = largest_undimmed

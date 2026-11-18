@@ -11,10 +11,11 @@ pub enum Direction {
     Right,
 }
 
-/// The item nearest to `from` in a direction. Only items that lie that way are
-/// considered. One within 45 degrees of straight ahead always beats one outside that
-/// cone; otherwise distance decides, with sideways distance counted double. On a tie
-/// the earlier item wins.
+/// The item nearest to `from` in a direction.
+///
+/// Only items that lie that way are considered. One within 45 degrees of straight ahead
+/// always beats one outside that cone; otherwise distance decides, with sideways
+/// distance counted double. On a tie the earlier item wins.
 pub fn nearest_in_direction<K: Clone>(
     items: &[(K, Rect)],
     from: Rect,

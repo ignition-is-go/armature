@@ -18,10 +18,11 @@ pub enum Part {
     Remove,
 }
 
-/// Whether a file is one of the kinds taken. Each rule is an extension such as
-/// `.csv`, a media type such as `application/pdf`, or a family such as `image/*`.
-/// An extension goes by the file's name, whatever type the platform reports, and
-/// no rules at all takes anything.
+/// Whether a file is one of the kinds taken.
+///
+/// Each rule is an extension such as `.csv`, a media type such as `application/pdf`, or
+/// a family such as `image/*`. An extension goes by the file's name, whatever type the
+/// platform reports, and no rules at all takes anything.
 #[must_use]
 pub fn accepts_file(name: &str, kind: &str, accept: &[String]) -> bool {
     let rules: Vec<String> = accept

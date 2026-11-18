@@ -78,10 +78,11 @@ pub enum Part {
 
 const ACTIONS: &[&str] = &["set", "clear"];
 
-/// A date typed one piece at a time. Up and Down step a piece, digits fill it and
-/// move on when it is full, and Left and Right move between pieces. The value is
-/// the date as `YYYY-MM-DD`, with `THH:MM` when it carries a time, once every piece
-/// holds something.
+/// A date typed one piece at a time.
+///
+/// Up and Down step a piece, digits fill it and move on when it is full, and Left and
+/// Right move between pieces. The value is the date as `YYYY-MM-DD`, with `THH:MM` when
+/// it carries a time, once every piece holds something.
 #[derive(Clone, Debug)]
 pub struct DateInput {
     with_time: bool,

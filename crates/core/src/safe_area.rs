@@ -1,7 +1,8 @@
-//! The path a pointer takes from a trigger to the popup it opened. While the pointer
-//! stays inside the triangle from where it left the trigger to the popup's near
-//! edge, and keeps getting closer, the popup stays open, even though the pointer is
-//! over neither.
+//! The path a pointer takes from a trigger to the popup it opened.
+//!
+//! While the pointer stays inside the triangle from where it left the trigger to the
+//! popup's near edge, and keeps getting closer, the popup stays open, even though the
+//! pointer is over neither.
 
 use crate::geometry::{Point, Rect};
 

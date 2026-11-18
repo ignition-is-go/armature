@@ -46,9 +46,10 @@ impl Default for Options {
 
 const ACTIONS: &[&str] = &["set"];
 
-/// Any number of panels side by side with a divider between each pair. Moving a
-/// divider takes from the panel on one side and gives to the other. The value is
-/// each panel's share in percent, which always add up to a hundred.
+/// Any number of panels side by side with a divider between each pair.
+///
+/// Moving a divider takes from the panel on one side and gives to the other. The value
+/// is each panel's share in percent, which always add up to a hundred.
 #[derive(Clone, Debug)]
 pub struct PanelGroup {
     opts: Options,

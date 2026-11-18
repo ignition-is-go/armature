@@ -18,8 +18,10 @@ const ACTIONS: &[&str] = &["confirm"];
 const CONFIRMED: &str = "confirmed";
 
 /// A button that acts only once it has been held down, for things that should not
-/// happen by accident. Letting go early, or drifting off it, does nothing. From the
-/// keyboard, Enter and Space confirm at once: holding a key is not asked of anyone.
+/// happen by accident.
+///
+/// Letting go early, or drifting off it, does nothing. From the keyboard, Enter and
+/// Space confirm at once: holding a key is not asked of anyone.
 #[derive(Clone, Debug)]
 pub struct HoldButton {
     hold: Hold,

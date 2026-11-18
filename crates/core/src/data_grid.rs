@@ -16,8 +16,10 @@ pub enum Part {
 const ACTIONS: &[&str] = &["select", "paste", "clear"];
 
 /// A grid of text cells with a rectangular selection that copies and pastes like a
-/// spreadsheet. The value is the selected cells. Edits to the cells themselves are
-/// offered to the owner as `row,column=text` with `Reason::Edit`.
+/// spreadsheet.
+///
+/// The value is the selected cells. Edits to the cells themselves are offered to the
+/// owner as `row,column=text` with `Reason::Edit`.
 #[derive(Clone, Debug)]
 pub struct DataGrid {
     cells: Vec<Vec<String>>,

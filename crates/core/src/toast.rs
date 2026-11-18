@@ -126,10 +126,11 @@ const ACTIONS: &[&str] = &["dismiss", "action", "dismiss_all"];
 /// How far sideways a notification is dragged before letting go dismisses it.
 const SWIPE: f64 = 60.0;
 
-/// A stack of notifications. The value is the notifications, each written with
-/// `Toast::encode`, oldest first: the owner adds to it, and the toaster offers the
-/// list without a notification when its time is up or it is dismissed. Pressing an
-/// action offers `action:<id>` first.
+/// A stack of notifications.
+///
+/// The value is the notifications, each written with `Toast::encode`, oldest first: the
+/// owner adds to it, and the toaster offers the list without a notification when its
+/// time is up or it is dismissed. Pressing an action offers `action:<id>` first.
 #[derive(Clone, Debug)]
 pub struct Toaster {
     toasts: Vec<Toast>,

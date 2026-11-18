@@ -20,10 +20,11 @@ pub enum Key {
     Char(char),
 }
 
-/// What a key means on Apple platforms where it differs: Cmd with the up or down
-/// arrow goes to the first or last item, and Ctrl+P and Ctrl+N step up and down a
-/// list, as they do in every text field there. `None` leaves the key as it is. An
-/// adapter on those platforms passes keys through this first.
+/// What a key means on Apple platforms where it differs:
+///
+/// Cmd with the up or down arrow goes to the first or last item, and Ctrl+P and Ctrl+N
+/// step up and down a list, as they do in every text field there. `None` leaves the key
+/// as it is. An adapter on those platforms passes keys through this first.
 #[must_use]
 pub const fn apple_key(key: Key, ctrl: bool, cmd: bool, others: bool) -> Option<Key> {
     match (key, ctrl, cmd, others) {

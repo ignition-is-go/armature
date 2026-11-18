@@ -14,9 +14,10 @@ pub enum PageItem {
 }
 
 /// The pages to show for `page` of `count`, with `siblings` on each side of the
-/// current page and `boundaries` at each end. The row is the same length on every
-/// page, so links do not shift under the pointer while paging, and a gap of a single
-/// page shows that page.
+/// current page and `boundaries` at each end.
+///
+/// The row is the same length on every page, so links do not shift under the pointer
+/// while paging, and a gap of a single page shows that page.
 pub fn page_range(page: usize, count: usize, siblings: usize, boundaries: usize) -> Vec<PageItem> {
     if count == 0 {
         return Vec::new();

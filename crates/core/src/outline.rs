@@ -53,9 +53,10 @@ pub fn place_of(rows: &[OutlineRow], index: usize) -> Place {
     Place { parent, position }
 }
 
-/// How shallow and how deep a row may sit between two neighbours: no deeper than
-/// a child of the row above, and no shallower than the row below, which it would
-/// otherwise take from its parent. Returns `(min, max)`.
+/// How shallow and how deep a row may sit between two neighbours:
+///
+/// no deeper than a child of the row above, and no shallower than the row below, which
+/// it would otherwise take from its parent. Returns `(min, max)`.
 #[must_use]
 pub fn depth_range(
     above: Option<&OutlineRow>,
@@ -159,8 +160,10 @@ fn block_max_depth(rows: &[OutlineRow], from: usize, max_depth: Option<usize>) -
 }
 
 /// Moves a row and its children before `before`, or to the end, as near `depth`
-/// as fits between its new neighbours, in one step. `None` when that changes
-/// nothing or cannot be done, such as moving a row into itself.
+/// as fits between its new neighbours, in one step.
+///
+/// `None` when that changes nothing or cannot be done, such as moving a row into
+/// itself.
 #[must_use]
 pub fn move_row(
     rows: &[OutlineRow],
@@ -383,9 +386,10 @@ impl Default for Options {
 const ACTIONS: &[&str] = &["move_up", "move_down", "indent", "outdent"];
 
 /// An outline whose rows are reordered and nested by dragging, or by the keyboard:
-/// Space picks a row up with everything under it, Up and Down move it, Left and
-/// Right take it out a level and in one, Space drops it and Escape puts it back.
-/// The value is the rows in order, each written `depth:key`.
+///
+/// Space picks a row up with everything under it, Up and Down move it, Left and Right
+/// take it out a level and in one, Space drops it and Escape puts it back. The value is
+/// the rows in order, each written `depth:key`.
 #[derive(Clone, Debug, Default)]
 pub struct Outline {
     opts: Options,

@@ -146,10 +146,11 @@ pub struct Stop<'a> {
     pub preferred: bool,
 }
 
-/// Which item of a group Tab lands on. The one focus was last on keeps it while it
-/// can still take focus. Otherwise it is the first preferred item that is enabled,
-/// then the first enabled one, then any that can take focus, so a group whose
-/// items are all disabled can still be reached.
+/// Which item of a group Tab lands on.
+///
+/// The one focus was last on keeps it while it can still take focus. Otherwise it is
+/// the first preferred item that is enabled, then the first enabled one, then any that
+/// can take focus, so a group whose items are all disabled can still be reached.
 #[must_use]
 pub fn roving_stop<'a>(items: &[Stop<'a>], remembered: Option<&str>) -> Option<&'a str> {
     let remembered =
@@ -180,8 +181,10 @@ pub struct FieldCaret {
 }
 
 /// Whether a key pressed in such a field is the field's own, or moves on to the
-/// next item of the group. Left and Right leave only from the end they point at,
-/// with nothing selected. Home and End always stay.
+/// next item of the group.
+///
+/// Left and Right leave only from the end they point at, with nothing selected. Home
+/// and End always stay.
 #[must_use]
 pub fn field_keeps_key(key: Key, field: FieldCaret) -> bool {
     let Some((start, end)) = field.selection else {

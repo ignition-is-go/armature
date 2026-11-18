@@ -11,9 +11,11 @@ pub enum Part {
 const ACTIONS: &[&str] = &["press"];
 const PRESSED: &str = "pressed";
 
-/// A button. A press is offered to the gate, which runs the action. It keeps no
-/// value, except that the owner may mark it pending with `set_value(["pending"])`
-/// while its action runs: it then ignores presses and says so to a screen reader.
+/// A button.
+///
+/// A press is offered to the gate, which runs the action. It keeps no value, except
+/// that the owner may mark it pending with `set_value(["pending"])` while its action
+/// runs: it then ignores presses and says so to a screen reader.
 #[derive(Clone, Debug)]
 pub struct Button {
     disabled: bool,

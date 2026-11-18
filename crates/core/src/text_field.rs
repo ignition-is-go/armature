@@ -32,9 +32,11 @@ pub enum Part {
 
 const ACTIONS: &[&str] = &["set", "clear", "submit", "reveal", "conceal"];
 
-/// A labelled text field with help text and an error. It covers a plain input, a
-/// password input and a multi-line one. The value is the text. Each edit is offered
-/// to the gate with `Reason::Text`, and a submit with `Reason::Keyboard`.
+/// A labelled text field with help text and an error.
+///
+/// It covers a plain input, a password input and a multi-line one. The value is the
+/// text. Each edit is offered to the gate with `Reason::Text`, and a submit with
+/// `Reason::Keyboard`.
 #[derive(Clone, Debug, Default)]
 pub struct TextField {
     kind: Kind,

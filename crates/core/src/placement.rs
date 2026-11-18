@@ -126,9 +126,11 @@ const fn held(value: f64, least: f64, most: f64) -> f64 {
 }
 
 /// Places a popup of `size` beside `anchor` within `viewport`, the part of the
-/// page on show. It flips to the other side when that overflows less, slides
-/// along the anchor to stay on screen without ever leaving the anchor behind, and
-/// goes inside an anchor bigger than it when neither side has room.
+/// page on show.
+///
+/// It flips to the other side when that overflows less, slides along the anchor to stay
+/// on screen without ever leaving the anchor behind, and goes inside an anchor bigger
+/// than it when neither side has room.
 #[must_use]
 pub fn compute_placement(
     anchor: Rect,

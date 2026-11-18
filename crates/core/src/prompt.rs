@@ -12,8 +12,10 @@ pub enum Part {
 const ACTIONS: &[&str] = &["submit"];
 
 /// A field for sending one entry after another, such as a chat box or a command
-/// line. Enter offers the entry to the owner and clears the field. `ArrowUp` and
-/// `ArrowDown` recall earlier entries. It keeps no value of its own.
+/// line.
+///
+/// Enter offers the entry to the owner and clears the field. `ArrowUp` and `ArrowDown`
+/// recall earlier entries. It keeps no value of its own.
 #[derive(Clone, Debug, Default)]
 pub struct Prompt {
     text: String,

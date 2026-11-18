@@ -66,8 +66,10 @@ const DRAG_SHARE: f64 = 0.25;
 const FLICK: f64 = 300.0;
 
 /// Slides shown one at a time, with buttons, dots, the arrow keys and dragging to
-/// move between them. It can advance on its own, and stops while the pointer or
-/// focus is on it. The value is the key of the slide on show.
+/// move between them.
+///
+/// It can advance on its own, and stops while the pointer or focus is on it. The value
+/// is the key of the slide on show.
 #[derive(Clone, Debug, Default)]
 pub struct Carousel {
     opts: Options,

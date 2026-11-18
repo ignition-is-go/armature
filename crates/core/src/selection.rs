@@ -114,10 +114,11 @@ pub fn keys_between(order: &[&str], from: &str, to: &str) -> Vec<String> {
     }
 }
 
-/// The selection after extending from an anchor to `to`. `base` is what was
-/// selected when the anchor was set: an additive range keeps it, first and in its
-/// own order, and extending again replaces only the range, so a range can shrink.
-/// Keys that cannot be chosen are skipped.
+/// The selection after extending from an anchor to `to`.
+///
+/// `base` is what was selected when the anchor was set: an additive range keeps it,
+/// first and in its own order, and extending again replaces only the range, so a range
+/// can shrink. Keys that cannot be chosen are skipped.
 pub fn range_selection(
     order: &[&str],
     anchor: &str,

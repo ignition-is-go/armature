@@ -1,7 +1,7 @@
-//! Text with tokens in it, such as a prompt that mentions people and files. A token
-//! counts as one character, so a caret offset means the same thing whether it
-//! passes text or tokens. The whole value can be written as plain text and read
-//! back.
+//! Text with tokens in it, such as a prompt that mentions people and files.
+//!
+//! A token counts as one character, so a caret offset means the same thing whether it
+//! passes text or tokens. The whole value can be written as plain text and read back.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 

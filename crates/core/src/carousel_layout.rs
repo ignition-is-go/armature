@@ -325,11 +325,12 @@ fn anchor_slide(boxes: &[SlideBox], view_start: f64, first: usize) -> usize {
     anchor
 }
 
-/// The rotation a looping carousel should take. At rest it moves the current
-/// page toward the middle of the track, so there is room to scroll either way.
-/// Heading for a page, it makes sure that page lies ahead; with `lazy` it leaves
-/// the track alone when it already does. `None` when the track is too short to
-/// rotate.
+/// The rotation a looping carousel should take.
+///
+/// At rest it moves the current page toward the middle of the track, so there is room
+/// to scroll either way. Heading for a page, it makes sure that page lies ahead; with
+/// `lazy` it leaves the track alone when it already does. `None` when the track is too
+/// short to rotate.
 #[must_use]
 pub fn loop_rotation(
     track: &Track,

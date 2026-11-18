@@ -1,6 +1,7 @@
-//! The arithmetic of a scroll area with its own scrollbars: how long the thumb is
-//! and where it sits, what a drag or a press on the track scrolls to, how near the
-//! ends the content is, and when a scrollbar shows.
+//! The arithmetic of a scroll area with its own scrollbars:
+//!
+//! how long the thumb is and where it sits, what a drag or a press on the track scrolls
+//! to, how near the ends the content is, and when a scrollbar shows.
 
 use crate::keys::Key;
 
@@ -165,8 +166,10 @@ pub fn scrollbar_shown(
 }
 
 /// Whether an area that sticks to its end keeps following after a scroll of
-/// `delta` leaves `after` pixels to the end. Moving away lets go, whatever moved
-/// it; reaching the end while moving toward it follows again.
+/// `delta` leaves `after` pixels to the end.
+///
+/// Moving away lets go, whatever moved it; reaching the end while moving toward it
+/// follows again.
 #[must_use]
 pub fn follows_end(following: bool, delta: f64, after: f64) -> bool {
     let at_end = after < EDGE_TOLERANCE;

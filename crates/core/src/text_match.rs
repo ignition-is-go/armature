@@ -2,9 +2,10 @@
 
 use std::ops::Range;
 
-/// The byte ranges of `text` that `query` matches, ignoring case. A whole-substring
-/// match is preferred, at a word start if there is one. Otherwise the query's
-/// characters are matched in order with gaps. `None` means no match.
+/// The byte ranges of `text` that `query` matches, ignoring case.
+///
+/// A whole-substring match is preferred, at a word start if there is one. Otherwise the
+/// query's characters are matched in order with gaps. `None` means no match.
 #[must_use]
 pub fn match_ranges(query: &str, text: &str) -> Option<Vec<Range<usize>>> {
     let query: Vec<char> = query.chars().collect();
@@ -23,12 +24,13 @@ pub fn match_ranges(query: &str, text: &str) -> Option<Vec<Range<usize>>> {
     Some(ranges)
 }
 
-/// How well `text` matches `query`, from 1 to 1000; `None` is no match. Case and
-/// accents are ignored. In order of preference: the whole text, a prefix, a word
-/// that starts with the query, any substring, then the query's letters in order,
-/// which score more at the start of a word or right after one another, so `gp`
-/// finds `Git push`. Among matches of one kind, covering more of the text ranks
-/// higher, so `set` puts `Set` above `Settings`.
+/// How well `text` matches `query`, from 1 to 1000; `None` is no match.
+///
+/// Case and accents are ignored. In order of preference: the whole text, a prefix, a
+/// word that starts with the query, any substring, then the query's letters in order,
+/// which score more at the start of a word or right after one another, so `gp` finds
+/// `Git push`. Among matches of one kind, covering more of the text ranks higher, so
+/// `set` puts `Set` above `Settings`.
 #[must_use]
 pub fn fuzzy_score(query: &str, text: &str) -> Option<u32> {
     let needle: Vec<char> = crate::fold::fold_text(query, None).chars().collect();

@@ -155,8 +155,9 @@ pub struct StoredAttribute<'a> {
 }
 
 /// A script for a web page's `<head>` that puts stored choices on the root element
-/// before anything is painted, so the page never flashes the default first. It reads
-/// `localStorage`, then a cookie of the same name. A colour scheme stored as
+/// before anything is painted, so the page never flashes the default first.
+///
+/// It reads `localStorage`, then a cookie of the same name. A colour scheme stored as
 /// `system` is resolved to what the operating system prefers.
 #[must_use]
 pub fn preferences_script(choices: &[StoredAttribute]) -> String {

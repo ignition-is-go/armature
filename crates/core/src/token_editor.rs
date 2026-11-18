@@ -71,9 +71,11 @@ struct Past {
     caret: usize,
 }
 
-/// Text with tokens set into it, edited at a caret: a prompt that mentions people
-/// and files, say. A token is one step for the caret and goes whole when deleted.
-/// The value is the content written as text, each token as `[@label](kind:value)`.
+/// Text with tokens set into it, edited at a caret:
+///
+/// a prompt that mentions people and files, say. A token is one step for the caret and
+/// goes whole when deleted. The value is the content written as text, each token as
+/// `[@label](kind:value)`.
 #[derive(Clone, Debug, Default)]
 pub struct TokenEditor {
     opts: Options,

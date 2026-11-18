@@ -21,9 +21,10 @@ pub enum Part {
 
 const ACTIONS: &[&str] = &["open", "close", "run", "toggle"];
 
-/// A row of menus, as at the top of a desktop application. Left and Right move
-/// along the bar, and with a menu open they move to the next menu. Entries are keyed
-/// `menu/entry`, in the value and in what is offered to the gate.
+/// A row of menus, as at the top of a desktop application.
+///
+/// Left and Right move along the bar, and with a menu open they move to the next menu.
+/// Entries are keyed `menu/entry`, in the value and in what is offered to the gate.
 #[derive(Clone, Debug, Default)]
 pub struct Menubar {
     menus: Vec<(String, String, Menu)>,

@@ -91,8 +91,9 @@ pub fn arrow_offset(anchor: Rect, placed: Placed, popup: Size, inset: f64) -> f6
 
 /// Where a popup's arrow starts along the edge facing the anchor, so that it
 /// points at the middle of the anchor, and whether it had to stop short of a
-/// corner to stay `padding` clear of it. Along the width for a popup above or
-/// below, and along the height for one beside.
+/// corner to stay `padding` clear of it.
+///
+/// Along the width for a popup above or below, and along the height for one beside.
 #[must_use]
 pub fn arrow_along(
     anchor: Rect,
@@ -121,9 +122,10 @@ pub fn arrow_along(
     (offset, offset != wanted)
 }
 
-/// Whether a point lies on the way between a trigger and its popup: inside the
-/// smallest shape with no dents that holds both, each grown by `padding`. A pointer
-/// there has not left, so the popup stays while it crosses the gap.
+/// Whether a point lies on the way between a trigger and its popup:
+///
+/// inside the smallest shape with no dents that holds both, each grown by `padding`. A
+/// pointer there has not left, so the popup stays while it crosses the gap.
 #[must_use]
 pub fn bridges(trigger: Rect, popup: Rect, padding: f64, point: Point) -> bool {
     let mut corners: Vec<Point> = [trigger, popup]

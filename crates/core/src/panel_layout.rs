@@ -97,8 +97,9 @@ fn allowed(panel: &PanelConstraints, size: f64) -> bool {
         || (panel.collapsible && same(size, panel.collapsed))
 }
 
-/// The size a panel takes when asked for `target` from `current`. Below its
-/// minimum it either stays at the minimum or shuts, depending on whether the
+/// The size a panel takes when asked for `target` from `current`.
+///
+/// Below its minimum it either stays at the minimum or shuts, depending on whether the
 /// target is past `threshold` of the way: half for a drag, all of it for a key.
 #[must_use]
 pub fn settle(panel: &PanelConstraints, target: f64, current: f64, threshold: f64) -> f64 {
@@ -160,11 +161,12 @@ fn shrinkable(count: usize, handle: usize, forward: bool, locked: &[bool]) -> Ve
     }
 }
 
-/// The layout after moving a handle by `delta` percent. The panel before it grows
-/// for a positive move and the one after for a negative one, taking from the
-/// panels on the other side in turn: one at its minimum passes the rest on.
-/// `locked` marks handles that cannot move, which the taking does not cross.
-/// `None` when nothing can move.
+/// The layout after moving a handle by `delta` percent.
+///
+/// The panel before it grows for a positive move and the one after for a negative one,
+/// taking from the panels on the other side in turn: one at its minimum passes the rest
+/// on. `locked` marks handles that cannot move, which the taking does not cross. `None`
+/// when nothing can move.
 #[must_use]
 pub fn resize_at(
     layout: &[f64],
