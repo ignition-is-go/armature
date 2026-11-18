@@ -96,11 +96,11 @@ fn TwoMonths() -> impl IntoView {
         <Part part=calendar::Part::NextMonth label="Later">"›"</Part>
         <Part part=calendar::Part::Grid>
             <div class="months">
-                <For each=months key=|month| *month let:month>
+                <For each=months key=|month| *month let((year, month))>
                     <div class="month">
-                        <p class="hint">{format!("{}-{:02}", month.0, month.1)}</p>
+                        <p class="hint">{format!("{year}-{month:02}")}</p>
                         {calendar
-                            .with_untracked(|c| c.weeks_of(month.0, month.1))
+                            .with_untracked(|c| c.weeks_of(year, month))
                             .into_iter()
                             .map(|week| {
                                 view! {
@@ -108,7 +108,7 @@ fn TwoMonths() -> impl IntoView {
                                         {week
                                             .map(|day| {
                                                 // A day is drawn once, in its own month.
-                                                if (day.year, day.month) == month {
+                                                if (day.year, day.month) == (year, month) {
                                                     view! { <Part part=calendar::Part::Day item=day.format()>{day.day}</Part> }.into_any()
                                                 } else {
                                                     view! { <span class="blank"></span> }.into_any()

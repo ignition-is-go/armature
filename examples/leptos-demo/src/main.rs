@@ -202,16 +202,20 @@ fn TimelineParts() -> impl IntoView {
     };
     view! {
         <Part part=timeline::Part::Track>
-            <For each=spans key=|(key, position, lane)| (key.clone(), position.0.to_bits(), position.1.to_bits(), *lane) let:entry>
+            <For
+                each=spans
+                key=|(key, (start, end), lane)| (key.clone(), start.to_bits(), end.to_bits(), *lane)
+                let((key, (start, end), lane))
+            >
                 <div
                     class="span-slot"
-                    style:left=format!("{}%", entry.1.0 * 100.0)
-                    style:width=format!("{}%", (entry.1.1 - entry.1.0) * 100.0)
-                    style:top=format!("{}px", entry.2.saturating_mul(22))
+                    style:left=format!("{}%", start * 100.0)
+                    style:width=format!("{}%", (end - start) * 100.0)
+                    style:top=format!("{}px", lane.saturating_mul(22))
                 >
-                    <Part part=timeline::Part::Span item=entry.0.clone()>
-                        {entry.0.clone()}
-                        <Part part=timeline::Part::SpanEnd item=entry.0.clone() />
+                    <Part part=timeline::Part::Span item=key.clone()>
+                        {key.clone()}
+                        <Part part=timeline::Part::SpanEnd item=key.clone() />
                     </Part>
                 </div>
             </For>

@@ -92,11 +92,12 @@ fn point(
 
 /// How far a popup at `at` runs past the view on `side`. Negative when it fits.
 fn overflow(side: PlaceSide, at: (f64, f64), popup: Size, viewport: Rect, padding: f64) -> f64 {
+    let (x, y) = at;
     match side {
-        PlaceSide::Bottom => at.1 + popup.height - (viewport.y + viewport.height - padding),
-        PlaceSide::Top => viewport.y + padding - at.1,
-        PlaceSide::Right => at.0 + popup.width - (viewport.x + viewport.width - padding),
-        PlaceSide::Left => viewport.x + padding - at.0,
+        PlaceSide::Bottom => y + popup.height - (viewport.y + viewport.height - padding),
+        PlaceSide::Top => viewport.y + padding - y,
+        PlaceSide::Right => x + popup.width - (viewport.x + viewport.width - padding),
+        PlaceSide::Left => viewport.x + padding - x,
     }
 }
 

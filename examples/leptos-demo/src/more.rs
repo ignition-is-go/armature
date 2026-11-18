@@ -54,8 +54,8 @@ fn MenuItems() -> impl IntoView {
     };
     view! {
         <Part part=menu::Part::Content>
-            <For each=shown key=|entry| entry.0.clone() let:entry>
-                <Part part=menu::Part::Item item=entry.0.clone()>{entry.1.clone()}</Part>
+            <For each=shown key=|(key, _)| key.clone() let((key, label))>
+                <Part part=menu::Part::Item item=key>{label}</Part>
             </For>
         </Part>
     }
@@ -91,11 +91,11 @@ fn PromptContent() -> impl IntoView {
     view! {
         <Part part=EditorPart::Root>
             <span id="prompt-content" style="display:inline-block;min-width:16rem;min-height:1.4em;white-space:pre-wrap;border:1px solid currentColor;padding:2px 4px">
-                <For each=pieces key=|piece| piece.0.clone() let:piece>
-                    {match (piece.0.as_str(), piece.1.clone()) {
+                <For each=pieces key=|(key, _, _)| key.clone() let((key, token, text))>
+                    {match (key.as_str(), token) {
                         ("caret", _) => view! { <span data-caret="" style="border-left:1px solid currentColor;margin-right:-1px"></span> }.into_any(),
-                        (_, Some(id)) => view! { <Part part=EditorPart::Token item=id><b>{piece.2.clone()}</b></Part> }.into_any(),
-                        _ => view! { <span>{piece.2.clone()}</span> }.into_any(),
+                        (_, Some(id)) => view! { <Part part=EditorPart::Token item=id><b>{text}</b></Part> }.into_any(),
+                        _ => view! { <span>{text}</span> }.into_any(),
                     }}
                 </For>
             </span>
@@ -117,9 +117,9 @@ fn OutlineRows() -> impl IntoView {
     };
     view! {
         <Part part=OutlinePart::Root>
-            <For each=rows key=|row| row.clone() let:row>
-                <Part part=OutlinePart::Row item=row.0.clone()>
-                    <span style=format!("display:block;padding-left:{}px", row.1.saturating_mul(24))>{row.0.clone()}</span>
+            <For each=rows key=|row| row.clone() let((key, depth))>
+                <Part part=OutlinePart::Row item=key.clone()>
+                    <span style=format!("display:block;padding-left:{}px", depth.saturating_mul(24))>{key}</span>
                 </Part>
             </For>
         </Part>
@@ -141,8 +141,8 @@ fn BarMenus() -> impl IntoView {
         view! {
             <Part part=menubar::Part::Trigger item=key>{title}</Part>
             <Part part=menubar::Part::Content item=key>
-                <For each=shown key=|entry| entry.0.clone() let:entry>
-                    <Part part=menubar::Part::Item item=format!("{key}/{}", entry.0)>{entry.1.clone()}</Part>
+                <For each=shown key=|(entry, _)| entry.clone() let((entry, label))>
+                    <Part part=menubar::Part::Item item=format!("{key}/{entry}")>{label}</Part>
                 </For>
             </Part>
         }

@@ -22,6 +22,10 @@ pub enum Part {
 
 const ACTIONS: &[&str] = &["add", "remove"];
 
+/// Where each list is kept among the two.
+const AVAILABLE: usize = 0;
+const CHOSEN: usize = 1;
+
 /// Two lists with buttons to move the selected items between them. The value is the
 /// keys in the chosen list.
 #[derive(Clone, Debug, Default)]
@@ -52,15 +56,15 @@ impl TransferList {
         }
     }
 
-    /// The keys in the available list (`false`) or the chosen one (`true`), in order.
-    /// One of the two lists: 0 for what is available, 1 for what is chosen.
+    /// One of the two lists, by its place: `AVAILABLE` or `CHOSEN`.
     fn side(&self, side: usize) -> &[String] {
         self.lists.get(side).map_or(&[], Vec::as_slice)
     }
 
+    /// The keys in the available list (`false`) or the chosen one (`true`), in order.
     #[must_use]
     pub fn list(&self, chosen: bool) -> &[String] {
-        self.side(usize::from(chosen))
+        self.side(if chosen { CHOSEN } else { AVAILABLE })
     }
 
     fn side_of(&self, key: &str) -> Option<usize> {
@@ -104,7 +108,7 @@ impl TransferList {
         let mut lists = self.lists.clone();
         transfer(&mut lists, &moving, to, None);
         if !gate(&ValueChange {
-            value: lists[1].clone(),
+            value: lists.get(CHOSEN).cloned().unwrap_or_default(),
             source,
             reason,
         }) {
@@ -329,18 +333,18 @@ impl Primitive for TransferList {
     }
 
     fn value(&self) -> Vec<String> {
-        self.lists[1].clone()
+        self.side(CHOSEN).to_vec()
     }
 
     fn set_value(&mut self, value: Vec<String>) {
         let all: Vec<String> = self.lists.concat();
         let chosen: Vec<String> = value.into_iter().filter(|key| all.contains(key)).collect();
-        self.lists[0] = all
+        let available = all
             .iter()
             .filter(|key| !chosen.contains(key))
             .cloned()
             .collect();
-        self.lists[1] = chosen;
+        self.lists = [available, chosen];
     }
 
     fn snapshot(&self, label: &str) -> Snapshot {
@@ -351,7 +355,7 @@ impl Primitive for TransferList {
             .map(|key| SnapshotItem {
                 label: self.label(&key),
                 disabled: false,
-                selected: self.lists[1].contains(&key),
+                selected: self.side(CHOSEN).contains(&key),
                 key,
             })
             .collect();

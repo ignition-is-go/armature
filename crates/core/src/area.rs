@@ -31,15 +31,14 @@ impl Area {
     /// Where on the pad a value sits, as fractions from its left and top edges.
     #[must_use]
     pub fn position_of(&self, value: (f64, f64), dir: Dir) -> (f64, f64) {
-        let across = self.x.fraction(value.0);
-        (
-            if dir == Dir::Rtl {
-                1.0 - across
-            } else {
-                across
-            },
-            1.0 - self.y.fraction(value.1),
-        )
+        let (x, y) = value;
+        let across = self.x.fraction(x);
+        let from_left = if dir == Dir::Rtl {
+            1.0 - across
+        } else {
+            across
+        };
+        (from_left, 1.0 - self.y.fraction(y))
     }
 
     /// The value after an arrow key. Shift moves ten steps.
@@ -51,13 +50,14 @@ impl Area {
         mods: Modifiers,
         dir: Dir,
     ) -> Option<(f64, f64)> {
+        let (x, y) = value;
         let steps = if mods.shift { 10.0 } else { 1.0 };
         let forward = if dir == Dir::Rtl { -steps } else { steps };
         Some(match key {
-            Key::ArrowRight => (self.x.nudge(value.0, forward), value.1),
-            Key::ArrowLeft => (self.x.nudge(value.0, -forward), value.1),
-            Key::ArrowUp => (value.0, self.y.nudge(value.1, steps)),
-            Key::ArrowDown => (value.0, self.y.nudge(value.1, -steps)),
+            Key::ArrowRight => (self.x.nudge(x, forward), y),
+            Key::ArrowLeft => (self.x.nudge(x, -forward), y),
+            Key::ArrowUp => (x, self.y.nudge(y, steps)),
+            Key::ArrowDown => (x, self.y.nudge(y, -steps)),
             _ => return None,
         })
     }
