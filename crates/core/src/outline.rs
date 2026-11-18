@@ -1,6 +1,17 @@
 //! An outline: rows in reading order, each with how deep it sits. A row's children
 //! are the deeper rows right after it. Moving a row takes its children along.
 
+use crate::agent::{ActError, Snapshot, SnapshotItem};
+use crate::change::{Gate, Reason, Source, ValueChange};
+use crate::convert::Cast;
+use crate::drag::{Drag, DragEvent};
+use crate::keys::{Dir, Key};
+use crate::primitive::{
+    Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction,
+    Role, Semantics,
+};
+use std::collections::HashMap;
+
 /// One row of an outline.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OutlineRow {
@@ -25,29 +36,36 @@ fn row_depth(rows: &[OutlineRow], index: usize) -> usize {
 #[must_use]
 pub fn subtree_end(rows: &[OutlineRow], index: usize) -> usize {
     let depth = row_depth(rows, index);
-    rows.get(index.saturating_add(1)..)
-        .unwrap_or_default()
+    let next_outside = rows
         .iter()
-        .position(|row| row.depth <= depth)
-        .map_or(rows.len(), |offset| {
-            (index.saturating_add(1)).saturating_add(offset)
-        })
+        .enumerate()
+        .skip(index.saturating_add(1))
+        .find(|(_, row)| row.depth <= depth);
+    next_outside.map_or(rows.len(), |(at, _)| at)
+}
+
+/// A row and everything under it.
+fn subtree(rows: &[OutlineRow], index: usize) -> &[OutlineRow] {
+    rows.get(index..subtree_end(rows, index))
+        .unwrap_or_default()
+}
+
+/// Every row but the one at `index` and those under it, in order.
+fn without_subtree(rows: &[OutlineRow], index: usize) -> impl Iterator<Item = &OutlineRow> {
+    let end = subtree_end(rows, index);
+    rows.iter().take(index).chain(rows.iter().skip(end))
 }
 
 /// The parent of the row at `index` and its place among that parent's children.
 #[must_use]
 pub fn place_of(rows: &[OutlineRow], index: usize) -> Place {
     let depth = row_depth(rows, index);
-    let parent = rows
-        .get(..index)
-        .unwrap_or_default()
+    let before = rows.get(..index).unwrap_or_default();
+    let parent = before.iter().rposition(|row| row.depth < depth);
+    let first_sibling = parent.map_or(0, |parent| parent.saturating_add(1));
+    let position = before
         .iter()
-        .rposition(|row| row.depth < depth);
-    let first = parent.map_or(0, |parent| parent.saturating_add(1));
-    let position = rows
-        .get(first..index)
-        .unwrap_or_default()
-        .iter()
+        .skip(first_sibling)
         .filter(|row| row.depth == depth)
         .count();
     Place { parent, position }
@@ -81,34 +99,20 @@ pub fn moved_rows(
     depth: usize,
 ) -> Option<Vec<OutlineRow>> {
     let from = rows.iter().position(|row| row.key == key)?;
-    let end = subtree_end(rows, from);
     let was = row_depth(rows, from);
-    let block: Vec<OutlineRow> = if depth >= was {
-        rows.get(from..end)
-            .unwrap_or_default()
-            .iter()
-            .map(|row| OutlineRow {
-                key: row.key.clone(),
-                depth: row.depth.saturating_add(depth.saturating_sub(was)),
-            })
-            .collect()
-    } else {
-        rows.get(from..end)
-            .unwrap_or_default()
-            .iter()
-            .map(|row| OutlineRow {
-                key: row.key.clone(),
-                depth: row.depth.saturating_sub(was.saturating_sub(depth)),
-            })
-            .collect()
+    // Every row of the block moves in or out by as many levels as its first row.
+    let shifted = |row_depth: usize| {
+        if depth >= was {
+            row_depth.saturating_add(depth.saturating_sub(was))
+        } else {
+            row_depth.saturating_sub(was.saturating_sub(depth))
+        }
     };
-    let mut rest: Vec<OutlineRow> = rows
-        .get(..from)
-        .unwrap_or_default()
-        .iter()
-        .chain(rows.get(end..).unwrap_or_default())
-        .cloned()
-        .collect();
+    let block = subtree(rows, from).iter().map(|row| OutlineRow {
+        key: row.key.clone(),
+        depth: shifted(row.depth),
+    });
+    let mut rest: Vec<OutlineRow> = without_subtree(rows, from).cloned().collect();
     let at = match before {
         None => rest.len(),
         Some(before) => rest.iter().position(|row| row.key == before)?,
@@ -149,7 +153,7 @@ fn landing(rows: Vec<OutlineRow>, key: &str) -> Option<Landing> {
 /// The deepest a row can go so that the deepest row under it stays within
 /// `max_depth`.
 fn block_max_depth(rows: &[OutlineRow], from: usize, max_depth: Option<usize>) -> Option<usize> {
-    let block = rows.get(from..subtree_end(rows, from)).unwrap_or_default();
+    let block = subtree(rows, from);
     let below = block
         .iter()
         .map(|row| row.depth)
@@ -173,13 +177,7 @@ pub fn move_row(
     max_depth: Option<usize>,
 ) -> Option<Landing> {
     let from = rows.iter().position(|row| row.key == key)?;
-    let end = subtree_end(rows, from);
-    let rest: Vec<&OutlineRow> = rows
-        .get(..from)
-        .unwrap_or_default()
-        .iter()
-        .chain(rows.get(end..).unwrap_or_default())
-        .collect();
+    let rest: Vec<&OutlineRow> = without_subtree(rows, from).collect();
     let at = match before {
         None => rest.len(),
         Some(before) => rest.iter().position(|row| row.key == before)?,
@@ -213,9 +211,7 @@ impl OutlineMove {
     #[must_use]
     pub fn grab(rows: &[OutlineRow], key: &str, max_depth: Option<usize>) -> Option<Self> {
         let at = rows.iter().position(|row| row.key == key)?;
-        let keys = rows
-            .get(at..subtree_end(rows, at))
-            .unwrap_or_default()
+        let keys = subtree(rows, at)
             .iter()
             .map(|row| row.key.clone())
             .collect();
@@ -250,13 +246,7 @@ impl OutlineMove {
     /// The other rows on screen, and how many of them come before the moved row.
     fn others(&self, shown: &dyn Fn(&str) -> bool) -> (Vec<&OutlineRow>, usize) {
         let other = |row: &&OutlineRow| !self.keys.contains(&row.key) && shown(&row.key);
-        let slot = self
-            .rows
-            .get(..self.at())
-            .unwrap_or_default()
-            .iter()
-            .filter(other)
-            .count();
+        let slot = self.rows.iter().take(self.at()).filter(other).count();
         (self.rows.iter().filter(other).collect(), slot)
     }
 
@@ -345,17 +335,6 @@ pub fn depth_at(start_depth: usize, moved_x: f64, indent: f64) -> usize {
     let levels = (moved_x / indent).round().cast::<i64>();
     start_depth.cast::<i64>().saturating_add(levels).cast()
 }
-
-use crate::agent::{ActError, Snapshot, SnapshotItem};
-use crate::change::{Gate, Reason, Source, ValueChange};
-use crate::convert::Cast;
-use crate::drag::{Drag, DragEvent};
-use crate::keys::{Dir, Key};
-use crate::primitive::{
-    Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction,
-    Role, Semantics,
-};
-use std::collections::HashMap;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Part {
