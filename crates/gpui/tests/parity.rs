@@ -174,6 +174,91 @@ fn a_tooltip_shows_after_the_pointer_rests_and_hides_when_it_leaves(cx: &mut Tes
 }
 
 #[gpui::test]
+fn a_tooltip_stays_while_the_pointer_crosses_onto_it(cx: &mut TestAppContext) {
+    let (help, cx) = open(
+        cx,
+        Tooltip::default(),
+        |help: &Entity<Machine<Tooltip>>, cx: &mut App| {
+            // The tooltip opens above its trigger, so the trigger sits a little way down.
+            div()
+                .size_full()
+                .pt(px(60.))
+                .child(
+                    part(help, tooltip::Part::Trigger, None, cx)
+                        .w(px(100.))
+                        .h(px(ROW)),
+                )
+                .child(
+                    part(help, tooltip::Part::Content, None, cx)
+                        .w(px(100.))
+                        .h(px(ROW))
+                        .child("Saves your work"),
+                )
+        },
+    );
+    let shown = |cx: &mut VisualTestContext| help.update(cx, |h, _| h.primitive().is_open());
+
+    cx.simulate_mouse_move(point(px(10.), px(70.)), None, Modifiers::default());
+    cx.executor().advance_clock(Duration::from_millis(600));
+    cx.run_until_parked();
+    assert!(shown(cx));
+
+    // Off the trigger, over the gap, and onto the tooltip above it.
+    cx.simulate_mouse_move(point(px(10.), px(57.)), None, Modifiers::default());
+    cx.simulate_mouse_move(point(px(10.), px(44.)), None, Modifiers::default());
+    cx.executor().advance_clock(Duration::from_millis(600));
+    cx.run_until_parked();
+    assert!(shown(cx), "arriving on the tooltip keeps it");
+
+    cx.simulate_mouse_move(point(px(300.), px(300.)), None, Modifiers::default());
+    cx.executor().advance_clock(Duration::from_millis(600));
+    cx.run_until_parked();
+    assert!(!shown(cx), "and leaving the tooltip closes it");
+}
+
+#[gpui::test]
+fn a_tooltip_stays_when_the_pointer_lands_on_it_in_one_move(cx: &mut TestAppContext) {
+    let (help, cx) = open(
+        cx,
+        Tooltip::default(),
+        |help: &Entity<Machine<Tooltip>>, cx: &mut App| {
+            // The tooltip opens above its trigger, so the trigger sits a little way down.
+            div()
+                .size_full()
+                .pt(px(60.))
+                .child(
+                    part(help, tooltip::Part::Trigger, None, cx)
+                        .w(px(100.))
+                        .h(px(ROW)),
+                )
+                .child(
+                    part(help, tooltip::Part::Content, None, cx)
+                        .w(px(100.))
+                        .h(px(ROW))
+                        .child("Saves your work"),
+                )
+        },
+    );
+    let shown = |cx: &mut VisualTestContext| help.update(cx, |h, _| h.primitive().is_open());
+
+    cx.simulate_mouse_move(point(px(10.), px(70.)), None, Modifiers::default());
+    cx.executor().advance_clock(Duration::from_millis(600));
+    cx.run_until_parked();
+    assert!(shown(cx));
+
+    // Straight from the trigger onto the tooltip, with no move in between.
+    cx.simulate_mouse_move(point(px(10.), px(44.)), None, Modifiers::default());
+    cx.executor().advance_clock(Duration::from_millis(600));
+    cx.run_until_parked();
+    assert!(shown(cx), "arriving on the tooltip keeps it");
+
+    cx.simulate_mouse_move(point(px(300.), px(300.)), None, Modifiers::default());
+    cx.executor().advance_clock(Duration::from_millis(600));
+    cx.run_until_parked();
+    assert!(!shown(cx), "and leaving the tooltip closes it");
+}
+
+#[gpui::test]
 fn a_long_list_renders_only_what_is_in_view_and_keys_scroll_it(cx: &mut TestAppContext) {
     let (rows, cx) = open(
         cx,

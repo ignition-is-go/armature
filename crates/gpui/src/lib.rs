@@ -777,13 +777,15 @@ impl<P: Primitive> Machine<P> {
             popup,
             left: (part, item),
         });
-        // A pointer that stops short of the popup has left after all.
+        // A pointer that stops short of the popup has left after all. One that is
+        // resting on it has arrived, even if no move was seen on the way.
         cx.spawn_in(window, async move |this, cx| {
             cx.background_executor()
                 .timer(Duration::from_millis(400))
                 .await;
             let _ = this.update_in(cx, |state, window, cx| {
-                state.end_crossing(false, window, cx);
+                let arrived = popup.contains(core_point(window.mouse_position()));
+                state.end_crossing(arrived, window, cx);
             });
         })
         .detach();
