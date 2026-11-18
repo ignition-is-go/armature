@@ -4,6 +4,7 @@ use crate::items::Items;
 use crate::keys::{Dir, Key, Orientation};
 use crate::primitive::{Focusable, Input, Item, PartOf, Primitive, Reaction, Role, Semantics};
 use crate::roving::{self, Ends};
+use crate::selection::Choosing;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Part {
@@ -14,10 +15,9 @@ pub enum Part {
 
 #[derive(Clone, Copy, Debug)]
 pub struct Options {
-    /// Whether several toggles can be down at once.
-    pub multiple: bool,
-    /// Whether pressing the one toggle that is down lets it up, leaving none.
-    pub deselectable: bool,
+    /// How many toggles may be down at once, and whether the last one down can be
+    /// let up.
+    pub pressed: Choosing,
     pub orientation: Orientation,
     pub dir: Dir,
 }
@@ -25,8 +25,7 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Self {
-            multiple: false,
-            deselectable: true,
+            pressed: Choosing::OneOrNone,
             orientation: Orientation::Horizontal,
             dir: Dir::Ltr,
         }
@@ -78,7 +77,10 @@ impl ToggleGroup {
             return false;
         }
         let down = self.is_pressed(key);
-        let mut next = match (self.opts.multiple, down) {
+        if down && self.pressed.len() == 1 && self.opts.pressed.keeps_last() {
+            return false;
+        }
+        let mut next = match (self.opts.pressed.is_many(), down) {
             (true, true) => self.pressed.iter().filter(|p| *p != key).cloned().collect(),
             (true, false) => self
                 .pressed
@@ -86,8 +88,7 @@ impl ToggleGroup {
                 .cloned()
                 .chain([key.to_string()])
                 .collect(),
-            (false, true) if self.opts.deselectable => Vec::new(),
-            (false, true) => return false,
+            (false, true) => Vec::new(),
             (false, false) => vec![key.to_string()],
         };
         next.sort_by_key(|key: &String| self.items.index_of(key));
@@ -212,9 +213,7 @@ impl Primitive for ToggleGroup {
             .filter(|key| self.items.get(key).is_some())
             .collect();
         next.sort_by_key(|key| self.items.index_of(key));
-        if !self.opts.multiple {
-            next.truncate(1);
-        }
+        next.truncate(self.opts.pressed.limit());
         self.pressed = next;
     }
 
@@ -298,6 +297,20 @@ mod tests {
     }
 
     #[test]
+    fn several_down_but_never_none_keeps_the_last_one_down() {
+        let mut group = group(Options {
+            pressed: Choosing::AtLeastOne,
+            ..Default::default()
+        });
+        press(&mut group, "left");
+        press(&mut group, "right");
+        assert_eq!(group.value(), ["left", "right"]);
+        press(&mut group, "left");
+        press(&mut group, "right");
+        assert_eq!(group.value(), ["right"]);
+    }
+
+    #[test]
     fn one_toggle_is_down_at_a_time_unless_several_are_allowed() {
         let mut single = group(Options::default());
         press(&mut single, "left");
@@ -308,7 +321,7 @@ mod tests {
             Some(true)
         );
         let mut several = group(Options {
-            multiple: true,
+            pressed: Choosing::Any,
             ..Default::default()
         });
         press(&mut several, "right");
@@ -323,7 +336,7 @@ mod tests {
     #[test]
     fn the_last_toggle_stays_down_when_it_may_not_be_let_up() {
         let mut group = group(Options {
-            deselectable: false,
+            pressed: Choosing::One,
             ..Default::default()
         });
         press(&mut group, "center");
@@ -360,7 +373,7 @@ mod tests {
         crate::testing::assert_conforms(
             || {
                 ToggleGroup::new(Options {
-                    multiple: true,
+                    pressed: Choosing::Any,
                     ..Default::default()
                 })
             },

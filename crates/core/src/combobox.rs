@@ -8,6 +8,7 @@ use crate::primitive::{
     Focusable, Input, Item, Outcome, PartOf, Primitive, Reaction, Relations, Role, Semantics,
 };
 use crate::roving::{self, Ends, Nav};
+use crate::selection::Count;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Part {
@@ -32,15 +33,14 @@ pub enum Part {
     reason = "each flag is an independent setting"
 )]
 pub struct Options {
-    pub multiple: bool,
+    /// How many options may be chosen at once.
+    pub count: Count,
     /// Whether text that matches no option is a value in its own right, as in a
     /// search box with suggestions. Otherwise only an option can be the value.
     pub custom: bool,
     /// Whether the first match is highlighted as soon as there is one, so Enter
     /// takes it.
     pub auto_highlight: bool,
-    /// The most options that may be chosen at once, where several can be.
-    pub max_selected: Option<usize>,
     /// Whether the list opens as soon as the field takes focus.
     pub open_on_focus: bool,
     /// Whether reaching the last option asks the owner for more, by offering
@@ -100,7 +100,7 @@ impl Combobox {
 
     fn matches(&self, item: &Item) -> bool {
         // Text that is just the chosen option's label narrows nothing.
-        let shows_choice = !self.opts.multiple
+        let shows_choice = !self.opts.count.is_many()
             && self
                 .selected
                 .first()
@@ -188,16 +188,12 @@ impl Combobox {
         if !self.items.is_enabled(key) {
             return false;
         }
-        if self.opts.multiple {
+        if self.opts.count.is_many() {
             let mut next = self.selected.clone();
             match next.iter().position(|chosen| chosen == key) {
                 Some(at) => drop(next.remove(at)),
                 // Full, so nothing more is taken until one is let go.
-                None if self
-                    .opts
-                    .max_selected
-                    .is_some_and(|most| next.len() >= most) =>
-                {
+                None if next.len() >= self.opts.count.limit() => {
                     return false;
                 }
                 None => next.push(key.to_string()),
@@ -225,7 +221,7 @@ impl Combobox {
     /// becomes the value where free text is allowed.
     fn settle(&mut self, gate: Gate) {
         self.close();
-        if self.opts.multiple {
+        if self.opts.count.is_many() {
             self.text.clear();
         } else if self.opts.custom {
             let next = if self.text.is_empty() {
@@ -268,7 +264,7 @@ impl Combobox {
     fn on_typed(&mut self, value: String, gate: Gate) -> Reaction<Part> {
         // Deleting all the text of a single choice clears it. Escape can
         // still bring it back.
-        if value.is_empty() && !self.opts.multiple && !self.opts.custom {
+        if value.is_empty() && !self.opts.count.is_many() && !self.opts.custom {
             let was = self.selected.first().cloned();
             if was.is_some() && self.commit(Vec::new(), Source::User, Reason::Text, gate) {
                 self.deleted = was;
@@ -374,7 +370,7 @@ impl Combobox {
                 Reaction::handled()
             }
             Key::Escape if !self.text.is_empty() => {
-                if self.opts.multiple
+                if self.opts.count.is_many()
                     || self.commit(Vec::new(), Source::User, Reason::Keyboard, gate)
                 {
                     self.text.clear();
@@ -382,7 +378,9 @@ impl Combobox {
                 Reaction::handled()
             }
             Key::Backspace
-                if self.opts.multiple && self.text.is_empty() && !self.selected.is_empty() =>
+                if self.opts.count.is_many()
+                    && self.text.is_empty()
+                    && !self.selected.is_empty() =>
             {
                 let mut next = self.selected.clone();
                 next.pop();
@@ -488,7 +486,7 @@ impl Primitive for Combobox {
             },
             (Part::List, _) => Semantics {
                 role: Some(Role::Listbox),
-                multiselectable: Some(self.opts.multiple),
+                multiselectable: Some(self.opts.count.is_many()),
                 hidden: !self.open,
                 ..Default::default()
             },
@@ -509,7 +507,7 @@ impl Primitive for Combobox {
             },
             (Part::Chip, Some(key)) => Semantics {
                 role: Some(Role::Button),
-                hidden: !self.opts.multiple || !self.is_chosen(key),
+                hidden: !self.opts.count.is_many() || !self.is_chosen(key),
                 ..Default::default()
             },
             (Part::Chip, None) => Semantics {
@@ -615,7 +613,7 @@ impl Primitive for Combobox {
     fn set_value(&mut self, value: Vec<String>) {
         let known = |key: &String| self.opts.custom || self.items.get(key).is_some();
         let mut next: Vec<String> = value.into_iter().filter(known).collect();
-        if !self.opts.multiple {
+        if !self.opts.count.is_many() {
             next.truncate(1);
             self.text = next.first().map(|key| self.label(key)).unwrap_or_default();
         }
@@ -688,7 +686,7 @@ impl Primitive for Combobox {
                 let next = self.selected_without(key);
                 self.commit(next, Source::Agent, Reason::Action, gate)
             }
-            (_, true) if self.opts.multiple => true,
+            (_, true) if self.opts.count.is_many() => true,
             _ => self.choose(key, Source::Agent, Reason::Action, gate),
         };
         if done { Ok(()) } else { Err(ActError::Refused) }
@@ -791,7 +789,7 @@ mod tests {
     #[test]
     fn several_can_be_chosen_and_backspace_removes_the_last() {
         let mut combobox = fruit(Options {
-            multiple: true,
+            count: Count::ANY,
             ..Default::default()
         });
         typed(&mut combobox, "b");
@@ -831,7 +829,7 @@ mod tests {
         crate::testing::assert_conforms(
             || {
                 Combobox::new(Options {
-                    multiple: true,
+                    count: Count::ANY,
                     ..Default::default()
                 })
             },
@@ -875,8 +873,7 @@ mod tests {
     #[test]
     fn no_more_than_the_limit_can_be_chosen_and_focus_can_open_the_list() {
         let mut combobox = fruit(Options {
-            multiple: true,
-            max_selected: Some(2),
+            count: Count::Many { max: Some(2) },
             open_on_focus: true,
             ..Default::default()
         });

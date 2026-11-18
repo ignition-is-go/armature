@@ -1,5 +1,68 @@
 use crate::keys::Modifiers;
 
+/// How many things may be open or pressed at once, and whether the last one
+/// can be let go.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Choosing {
+    /// One at a time, and once there is one it stays: another can replace it.
+    #[default]
+    One,
+    /// One at a time, or none.
+    OneOrNone,
+    /// Any number, but the last one stays.
+    AtLeastOne,
+    /// Any number, none included.
+    Any,
+}
+
+impl Choosing {
+    /// Whether several may be chosen at once.
+    #[must_use]
+    pub const fn is_many(self) -> bool {
+        matches!(self, Self::AtLeastOne | Self::Any)
+    }
+
+    /// Whether the last one chosen stays when it is let go of.
+    #[must_use]
+    pub const fn keeps_last(self) -> bool {
+        matches!(self, Self::One | Self::AtLeastOne)
+    }
+
+    /// The most that may be chosen at once.
+    #[must_use]
+    pub const fn limit(self) -> usize {
+        if self.is_many() { usize::MAX } else { 1 }
+    }
+}
+
+/// How many things may be chosen at once.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Count {
+    #[default]
+    One,
+    /// Several, up to `max` when there is one.
+    Many { max: Option<usize> },
+}
+
+impl Count {
+    /// Any number, with no most.
+    pub const ANY: Self = Self::Many { max: None };
+
+    #[must_use]
+    pub const fn is_many(self) -> bool {
+        matches!(self, Self::Many { .. })
+    }
+
+    /// The most that may be chosen at once.
+    #[must_use]
+    pub fn limit(self) -> usize {
+        match self {
+            Self::One => 1,
+            Self::Many { max } => max.unwrap_or(usize::MAX),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Mode {
     #[default]

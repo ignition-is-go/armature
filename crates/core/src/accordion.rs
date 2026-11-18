@@ -6,6 +6,7 @@ use crate::primitive::{
     Focusable, Input, Item, PartOf, Primitive, Reaction, Relations, Role, Semantics,
 };
 use crate::roving::{self, Ends};
+use crate::selection::Choosing;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Part {
@@ -17,10 +18,8 @@ pub enum Part {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Options {
-    /// Whether several sections may be open at once.
-    pub multiple: bool,
-    /// Whether the last open section may be closed.
-    pub collapsible: bool,
+    /// How many sections may be open, and whether the last open one may close.
+    pub open: Choosing,
     /// Whether find-in-page searches closed sections and opens the one it matches.
     pub findable: bool,
 }
@@ -50,7 +49,7 @@ impl Accordion {
     }
 
     fn toggled(&self, key: &str, open: bool) -> Vec<String> {
-        match (open, self.opts.multiple) {
+        match (open, self.opts.open.is_many()) {
             (true, true) => {
                 let wanted = |item: &&Item| item.key == key || self.is_open(&item.key);
                 self.items
@@ -60,7 +59,7 @@ impl Accordion {
                     .collect()
             }
             (true, false) => vec![key.to_string()],
-            (false, _) if self.open.len() == 1 && !self.opts.collapsible => self.open.clone(),
+            (false, _) if self.open.len() == 1 && self.opts.open.keeps_last() => self.open.clone(),
             (false, _) => self.open.iter().filter(|k| *k != key).cloned().collect(),
         }
     }
@@ -209,7 +208,7 @@ impl Primitive for Accordion {
     }
 
     fn set_value(&mut self, value: Vec<String>) {
-        let limit = if self.opts.multiple { usize::MAX } else { 1 };
+        let limit = self.opts.open.limit();
         self.open = self
             .items
             .iter()
@@ -258,13 +257,8 @@ impl Primitive for Accordion {
                 .collect();
             let mut next = kept;
             if action == "open_all" {
-                next.extend(
-                    enabled
-                        .iter()
-                        .take(if self.opts.multiple { usize::MAX } else { 1 })
-                        .cloned(),
-                );
-            } else if !self.opts.collapsible {
+                next.extend(enabled.iter().take(self.opts.open.limit()).cloned());
+            } else if self.opts.open.keeps_last() {
                 next.extend(self.open.first().cloned());
             }
             next.sort_by_key(|key| self.items.index_of(key));
@@ -351,8 +345,7 @@ mod tests {
     #[test]
     fn several_sections_can_be_open_when_allowed_and_keep_document_order() {
         let mut accordion = accordion(Options {
-            multiple: true,
-            collapsible: true,
+            open: Choosing::Any,
             findable: false,
         });
         press(&mut accordion, "returns");
@@ -369,7 +362,7 @@ mod tests {
         press(&mut fixed, "shipping");
         assert_eq!(fixed.value(), ["shipping"]);
         let mut loose = accordion(Options {
-            collapsible: true,
+            open: Choosing::OneOrNone,
             ..Default::default()
         });
         press(&mut loose, "shipping");

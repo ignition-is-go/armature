@@ -22,6 +22,7 @@ use armature_core::range_slider::{self, RangeSlider};
 use armature_core::rating::{self, Rating};
 use armature_core::roving::Ends;
 use armature_core::select::Select;
+use armature_core::selection::Choosing;
 use armature_core::tabs::{self, Tabs};
 use armature_core::timing::Hold;
 use armature_core::toast::{self, Toast, Toaster};
@@ -70,7 +71,7 @@ fn press(accordion: &mut Accordion, key: &str, allow: bool) {
 fn accordion_behaviors() {
     // "single mode keeps one item open"
     let mut single = accordion(accordion::Options {
-        collapsible: true,
+        open: Choosing::OneOrNone,
         ..Default::default()
     });
     press(&mut single, "a", true);
@@ -99,8 +100,7 @@ fn accordion_behaviors() {
 
     // "multiple mode adds and removes items in order"
     let mut multiple = accordion(accordion::Options {
-        multiple: true,
-        collapsible: true,
+        open: Choosing::Any,
         ..Default::default()
     });
     press(&mut multiple, "b", true);
@@ -469,7 +469,7 @@ fn toggle_behaviors() {
     assert_eq!(single.value(), ["under"]);
     // "deselectable={false} keeps the pressed toggle pressed"
     let mut kept = toggles(toggle_group::Options {
-        deselectable: false,
+        pressed: Choosing::One,
         ..Default::default()
     });
     press_toggle(&mut kept, "bold", true);
@@ -477,7 +477,7 @@ fn toggle_behaviors() {
     assert_eq!(kept.value(), ["bold"]);
     // "values keep document order with multiple"
     let mut several = toggles(toggle_group::Options {
-        multiple: true,
+        pressed: Choosing::Any,
         ..Default::default()
     });
     press_toggle(&mut several, "under", true);

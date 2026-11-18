@@ -506,6 +506,7 @@ mod tests {
     use crate::number_input::NumberInput;
     use crate::radio::Radio;
     use crate::select::Select;
+    use crate::selection::Choosing;
     use crate::selection::Mode;
     use crate::slider::Slider;
     use crate::sortable::Sortable;
@@ -564,13 +565,16 @@ mod tests {
 
     #[test]
     fn accordion_conforms_in_every_mode() {
-        for (multiple, collapsible) in [(false, false), (true, false), (false, true), (true, true)]
-        {
+        for open in [
+            Choosing::One,
+            Choosing::OneOrNone,
+            Choosing::AtLeastOne,
+            Choosing::Any,
+        ] {
             assert_conforms(
                 || {
                     Accordion::new(accordion::Options {
-                        multiple,
-                        collapsible,
+                        open,
                         findable: true,
                     })
                 },

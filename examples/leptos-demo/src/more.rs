@@ -20,6 +20,7 @@ use armature_core::menubar::{self, Menubar};
 use armature_core::navigation_menu::{self, NavigationMenu};
 use armature_core::pagination::{self, PageItem, Pagination};
 use armature_core::scroll_area::{self, ScrollArea};
+use armature_core::selection::Count;
 use armature_core::text_field::{self, Kind, TextField};
 use armature_core::toast::{self, Toast, Toaster};
 use armature_core::toggle_group::{self, ToggleGroup};
@@ -818,7 +819,7 @@ fn FileInputSection() -> impl IntoView {
         <Section title="File input">
             <p id="files-value">"Files: " {move || files.get().join(", ")}</p>
             <Root
-                machine=FileInput::new(file_input::Options { multiple: true, accept: vec!["image/*".into()], ..Default::default() })
+                machine=FileInput::new(file_input::Options { count: Count::ANY, accept: vec!["image/*".into()], ..Default::default() })
                 label="Attachments"
                 on_value_change=on_files
             >

@@ -59,13 +59,13 @@ Primitives not listed take their settings through `new(...)` arguments or builde
 
 | Module | `Options` fields |
 | --- | --- |
-| `accordion` | `multiple: bool`, `collapsible: bool`, `findable: bool` |
+| `accordion` | `open: selection::Choosing`, `findable: bool` |
 | `calendar` | `week_start: u8`, `dir: Dir`, `min: Option<Date>`, `max: Option<Date>`, `mode: Selecting`, `unavailable: Option<fn(Date) -> bool>`, `deselectable: bool`, `months: usize` |
 | `carousel` | `ends: roving::Ends`, `autoplay_ms: Option<u64>`, `dir: Dir`, `per_page: usize`, `orientation: crate::keys::Orientation` |
-| `combobox` | `multiple: bool`, `custom: bool`, `auto_highlight: bool`, `max_selected: Option<usize>`, `open_on_focus: bool`, `load_more: bool`, `remote: bool`, `read_only: bool` |
+| `combobox` | `count: selection::Count`, `custom: bool`, `auto_highlight: bool`, `open_on_focus: bool`, `load_more: bool`, `remote: bool`, `read_only: bool` |
 | `dialog` | `modality: Modality` (`Modeless`, `Modal`, `Alert`), `closes: Closes` (`Never`, `By(layers::DismissedBy)`) |
 | `event_list` | `orientation: Orientation`, `dir: Dir`, `ends: roving::Ends`, `feed: bool` |
-| `file_input` | `multiple: bool`, `accept: Vec<String>`, `max_size: Option<u64>`, `max_files: Option<usize>` |
+| `file_input` | `count: selection::Count`, `accept: Vec<String>`, `max_size: Option<u64>` |
 | `listbox` | `mode: Mode`, `orientation: Orientation`, `dir: Dir`, `ends: roving::Ends` |
 | `navigation_menu` | `hover: bool`, `open_delay_ms: u64`, `close_delay_ms: u64`, `orientation: Orientation`, `dir: Dir` |
 | `panel_group` | `orientation: Orientation`, `dir: Dir`, `min: f64`, `step: f64`, `large_step: f64` |
@@ -75,11 +75,13 @@ Primitives not listed take their settings through `new(...)` arguments or builde
 | `slider` | `range: NumberRange`, `orientation: Orientation`, `dir: Dir`, `large_step: f64` |
 | `tabs` | `orientation: Orientation`, `dir: Dir`, `manual: bool`, `ends: roving::Ends` |
 | `timeline` | `range: Span`, `grid: f64`, `min_length: f64` |
-| `toggle_group` | `multiple: bool`, `deselectable: bool`, `orientation: Orientation`, `dir: Dir` |
+| `toggle_group` | `pressed: selection::Choosing`, `orientation: Orientation`, `dir: Dir` |
 | `tooltip` | `open_delay_ms: u64`, `close_delay_ms: u64`, `card: bool`, `disabled: bool` |
 
-An accordion is single and not collapsible by default: its open section stays open,
-so `toggle` and `close` on it change nothing. Set `collapsible: true` to allow closing.
+`selection::Choosing` is `One`, `OneOrNone`, `AtLeastOne` or `Any`: how many may be
+open or pressed, and whether the last one can be let go. `selection::Count` is `One` or
+`Many { max }`. An accordion opens `Choosing::One` by default: its open section stays
+open, so `toggle` and `close` on it change nothing. Use `OneOrNone` to allow closing.
 An action that changes nothing returns `Ok(())` without asking the gate.
 
 ## Sending input

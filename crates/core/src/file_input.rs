@@ -4,6 +4,7 @@ use crate::keys::Key;
 use crate::primitive::{
     Effect, FileInfo, Focusable, Input, Item, PartOf, Primitive, Reaction, Role, Semantics,
 };
+use crate::selection::Count;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Part {
@@ -57,13 +58,13 @@ pub enum Rejection {
 
 #[derive(Clone, Debug, Default)]
 pub struct Options {
-    pub multiple: bool,
+    /// How many files may be held at once.
+    pub count: Count,
     /// The types taken: extensions such as `.png`, media types such as
     /// `application/pdf`, or families such as `image/*`. Empty takes anything.
     pub accept: Vec<String>,
     /// The largest file taken, in bytes.
     pub max_size: Option<u64>,
-    pub max_files: Option<usize>,
 }
 
 const ACTIONS: &[&str] = &["remove", "clear", "browse"];
@@ -129,16 +130,12 @@ impl FileInput {
 
     /// Sorts offered files into those taken and those turned away.
     fn offer(&mut self, offered: Vec<FileInfo>, reason: Reason, gate: Gate) -> Reaction<Part> {
-        let mut taken = if self.opts.multiple {
+        let mut taken = if self.opts.count.is_many() {
             self.files.clone()
         } else {
             Vec::new()
         };
-        let limit = if self.opts.multiple {
-            self.opts.max_files.unwrap_or(usize::MAX)
-        } else {
-            1
-        };
+        let limit = self.opts.count.limit();
         let mut rejected = Vec::new();
         let mut added = 0_usize;
         for file in offered {
@@ -184,7 +181,7 @@ impl FileInput {
 
     fn browse(&self) -> Reaction<Part> {
         Reaction::handled().with(Effect::PickFiles {
-            multiple: self.opts.multiple,
+            multiple: self.opts.count.is_many(),
             accept: self.opts.accept.join(","),
         })
     }
@@ -378,10 +375,9 @@ mod tests {
 
     fn images() -> FileInput {
         FileInput::new(Options {
-            multiple: true,
+            count: Count::Many { max: Some(2) },
             accept: vec!["image/*".into(), ".pdf".into()],
             max_size: Some(1000),
-            max_files: Some(2),
         })
     }
 
