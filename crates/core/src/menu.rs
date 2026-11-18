@@ -251,31 +251,47 @@ impl Menu {
                 self.active = self.edge(false);
                 Ok(Reaction::item(Part::Item, true, self.active.clone()))
             }
-            Kind::Checkbox | Kind::Radio(_) => {
-                let (mut checked, mut chosen) = (self.checked.clone(), self.chosen.clone());
-                match &entry.kind {
-                    Kind::Radio(group) => drop(chosen.insert(group.clone(), entry.key.clone())),
-                    _ if !checked.remove(&entry.key) => drop(checked.insert(entry.key.clone())),
-                    _ => {}
-                }
-                let value = self.written(&checked, &chosen);
-                if value != self.value()
-                    && !gate(&ValueChange {
-                        value,
-                        source,
-                        reason,
-                    })
-                {
-                    return Err(ActError::Refused);
-                }
-                (self.checked, self.chosen) = (checked, chosen);
-                if self.close_on_select {
-                    self.close();
-                    return Ok(Reaction::focusing(Part::Trigger));
-                }
-                Ok(Reaction::handled())
-            }
+            Kind::Checkbox | Kind::Radio(_) => self.switch(&entry, source, reason, gate),
         }
+    }
+
+    /// Flips a checkbox entry, or makes a radio entry the one chosen in its group.
+    fn switch(
+        &mut self,
+        entry: &Entry,
+        source: Source,
+        reason: Reason,
+        gate: Gate,
+    ) -> Result<Reaction<Part>, ActError> {
+        let (mut checked, mut chosen) = (self.checked.clone(), self.chosen.clone());
+        match &entry.kind {
+            Kind::Radio(group) => drop(chosen.insert(group.clone(), entry.key.clone())),
+            _ if !checked.remove(&entry.key) => drop(checked.insert(entry.key.clone())),
+            _ => {}
+        }
+        let value = self.written(&checked, &chosen);
+        let changes = value != self.value();
+        if changes
+            && !gate(&ValueChange {
+                value,
+                source,
+                reason,
+            })
+        {
+            return Err(ActError::Refused);
+        }
+        (self.checked, self.chosen) = (checked, chosen);
+        if self.close_on_select {
+            self.close();
+            return Ok(Reaction::focusing(Part::Trigger));
+        }
+        Ok(Reaction::handled())
+    }
+
+    /// Chooses an entry from the keyboard. A refusal is still the menu's to answer.
+    fn choose_by_key(&mut self, key: &str, gate: Gate) -> Reaction<Part> {
+        self.choose(key, Source::User, Reason::Keyboard, gate)
+            .unwrap_or_else(|_| Reaction::handled())
     }
 
     /// Leaves the submenu on show, landing on the entry that opened it.
@@ -338,9 +354,7 @@ impl Menu {
                 let Some(key) = self.active.clone() else {
                     return Reaction::handled();
                 };
-                return self
-                    .choose(&key, Source::User, Reason::Keyboard, gate)
-                    .unwrap_or_else(|_| Reaction::handled());
+                return self.choose_by_key(&key, gate);
             }
             Key::ArrowRight => {
                 let submenu = at
@@ -349,9 +363,7 @@ impl Menu {
                 let Some(key) = submenu.map(|entry| entry.key.clone()) else {
                     return Reaction::default();
                 };
-                return self
-                    .choose(&key, Source::User, Reason::Keyboard, gate)
-                    .unwrap_or_else(|_| Reaction::handled());
+                return self.choose_by_key(&key, gate);
             }
             Key::ArrowLeft | Key::Escape if !self.path.is_empty() => return self.back(),
             Key::Escape => {
