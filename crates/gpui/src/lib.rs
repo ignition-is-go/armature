@@ -295,7 +295,8 @@ impl<P: Primitive> Machine<P> {
         self
     }
 
-    /// Records a committed change in the shared history.
+    /// After a change: keeps the stack of open layers up to date, and records the
+    /// change in the shared history.
     fn remember(&self, before: Vec<String>, source: Source, cx: &mut App) {
         // Whatever is open sits in the stack of layers while it is open.
         let open = self.primitive.snapshot("").expanded == Some(true);
@@ -351,7 +352,6 @@ impl<P: Primitive> Machine<P> {
         self.primitive.semantics(part, item)
     }
 
-    /// Everything announced so far, oldest first.
     /// Ends the wait while the pointer crossed to the popup. Unless it arrived, the
     /// primitive now hears that the pointer left.
     fn end_crossing(&mut self, arrived: bool, window: &mut Window, cx: &mut Context<Self>) {
@@ -443,6 +443,7 @@ impl<P: Primitive> Machine<P> {
         ]
     }
 
+    /// Everything announced so far, oldest first.
     pub fn announcements(&self) -> &[Announcement] {
         &self.announcements
     }
@@ -473,44 +474,17 @@ impl<P: Primitive> Machine<P> {
             .map_or(end, |field| field.caret().min(end))
     }
 
-    fn key_down(
+    /// A key in a part the person types into. GPUI has no text field element, so
+    /// the edit is applied here and the new text offered to the primitive.
+    fn edit_text(
         &mut self,
         (part, item): PartKey<P>,
-        takes_text: bool,
         keystroke: &gpui::Keystroke,
+        key: Option<Key>,
+        mods: Modifiers,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
-        self.by_keyboard = true;
-        let mods = modifiers(keystroke.modifiers);
-        if mods.ctrl && keystroke.key == "v" {
-            let pasted = cx
-                .read_from_clipboard()
-                .and_then(|clipboard| clipboard.text());
-            if let Some(text) = pasted {
-                return self.dispatch(Input::Paste { text }, window, cx);
-            }
-        }
-        if keystroke.key == "tab" && self.trap_tab(keystroke.modifiers.shift, window, cx) {
-            return true;
-        }
-        let now_ms = self.now_ms();
-        let key = key_from_keystroke(keystroke);
-        // Apple platforms have their own keys for the ends of a list and for
-        // stepping through one.
-        let held = keystroke.modifiers;
-        let meant = key.filter(|_| cfg!(target_os = "macos")).and_then(|key| {
-            armature_core::keys::apple_key(key, held.control, held.platform, held.shift || held.alt)
-        });
-        let (key, mods) = meant.map_or((key, mods), |meant| (Some(meant), Modifiers::default()));
-        if key.is_some_and(|key| self.dispatch(Input::Key { key, mods, now_ms }, window, cx)) {
-            return true;
-        }
-        if !takes_text {
-            return false;
-        }
-
-        // GPUI has no text field element, so the edit is applied here.
         let slot = (part, item.clone());
         let text = self
             .primitive
@@ -558,6 +532,46 @@ impl<P: Primitive> Machine<P> {
         self.edits.insert(slot, field);
         cx.notify();
         true
+    }
+
+    fn key_down(
+        &mut self,
+        (part, item): PartKey<P>,
+        takes_text: bool,
+        keystroke: &gpui::Keystroke,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        self.by_keyboard = true;
+        let mods = modifiers(keystroke.modifiers);
+        if mods.ctrl && keystroke.key == "v" {
+            let pasted = cx
+                .read_from_clipboard()
+                .and_then(|clipboard| clipboard.text());
+            if let Some(text) = pasted {
+                return self.dispatch(Input::Paste { text }, window, cx);
+            }
+        }
+        if keystroke.key == "tab" && self.trap_tab(keystroke.modifiers.shift, window, cx) {
+            return true;
+        }
+        let now_ms = self.now_ms();
+        let key = key_from_keystroke(keystroke);
+        // Apple platforms have their own keys for the ends of a list and for
+        // stepping through one.
+        let held = keystroke.modifiers;
+        let meant = key.filter(|_| cfg!(target_os = "macos")).and_then(|key| {
+            armature_core::keys::apple_key(key, held.control, held.platform, held.shift || held.alt)
+        });
+        let (key, mods) = meant.map_or((key, mods), |meant| (Some(meant), Modifiers::default()));
+        if key.is_some_and(|key| self.dispatch(Input::Key { key, mods, now_ms }, window, cx)) {
+            return true;
+        }
+        if !takes_text {
+            return false;
+        }
+
+        self.edit_text((part, item), keystroke, key, mods, window, cx)
     }
 
     /// Keeps Tab among this primitive's own parts while one of them is a shown modal.
