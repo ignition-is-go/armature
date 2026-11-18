@@ -182,6 +182,66 @@ impl Sheet {
     }
 }
 
+impl Sheet {
+    /// Scrolling carries the sheet. Each movement puts the settling off again.
+    fn on_scrolled(&mut self, offset: f64, now_ms: u64, at: usize) -> Reaction<Part> {
+        // Measured from where it last was, or from its resting place.
+        let from = self.scrolled.map_or_else(
+            || self.detents.get(at).copied().unwrap_or_default(),
+            |(was, _)| was,
+        );
+        let moved = (from - offset).abs() > f64::EPSILON;
+        if !moved {
+            return Reaction::default();
+        }
+        let at_ms = now_ms.saturating_add(REST_MS);
+        self.scrolled = Some((offset, at_ms));
+        Reaction::default().with(Effect::Wake { at_ms })
+    }
+
+    /// Once scrolling has paused, the sheet settles on the nearest resting place.
+    fn on_tick(&mut self, now_ms: u64, gate: Gate) -> Reaction<Part> {
+        self.wheeled = false;
+        let Some((offset, _)) = self.scrolled.filter(|(_, at_ms)| now_ms >= *at_ms) else {
+            return Reaction::default();
+        };
+        self.scrolled = None;
+        let landing = self.landing(offset, 0.0);
+        let settled = self.settle(landing, Source::User, Reason::Drag, gate);
+        let rest = Effect::ScrollTo {
+            offset: self
+                .at
+                .map_or(0.0, |at| self.detents.get(at).copied().unwrap_or_default())
+                .cast::<u32>(),
+        };
+        if settled && landing.is_none() {
+            return Reaction::focusing(Part::Trigger).with(rest);
+        }
+        Reaction::default().with(rest)
+    }
+
+    /// Arrow keys step the sheet between its resting places, and Escape closes it.
+    fn on_key(&mut self, key: Key, at: usize, last: usize, gate: Gate) -> Reaction<Part> {
+        let (grow, shrink) = match self.side {
+            Edge::Bottom => (Key::ArrowUp, Key::ArrowDown),
+            Edge::Top => (Key::ArrowDown, Key::ArrowUp),
+            Edge::Left => (Key::ArrowRight, Key::ArrowLeft),
+            Edge::Right => (Key::ArrowLeft, Key::ArrowRight),
+        };
+        let target = match key {
+            // The arrow that points away from its edge makes it larger.
+            k if k == grow => (at.saturating_add(1)).min(last),
+            k if k == shrink && at == 0 => return self.dismiss(Reason::Keyboard, gate),
+            k if k == shrink => at.saturating_sub(1),
+            Key::Home => 0,
+            Key::End => last,
+            _ => return Reaction::default(),
+        };
+        self.settle(Some(target), Source::User, Reason::Keyboard, gate);
+        Reaction::handled()
+    }
+}
+
 impl PartOf for Part {
     type Primitive = Sheet;
 }
@@ -290,11 +350,6 @@ impl Primitive for Sheet {
             },
         }
     }
-
-    #[expect(
-        clippy::too_many_lines,
-        reason = "one arm for each input the primitive answers"
-    )]
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
         let last = self.detents.len().saturating_sub(1);
         match (input, self.at) {
@@ -323,38 +378,9 @@ impl Primitive for Sheet {
             }
             // Scrolling carries the sheet. Each movement puts the settling off again.
             (Input::Scrolled { offset, now_ms, .. }, Some(at)) => {
-                // Measured from where it last was, or from its resting place.
-                let from = self.scrolled.map_or_else(
-                    || self.detents.get(at).copied().unwrap_or_default(),
-                    |(was, _)| was,
-                );
-                let moved = (from - offset).abs() > f64::EPSILON;
-                if !moved {
-                    return Reaction::default();
-                }
-                let at_ms = now_ms.saturating_add(REST_MS);
-                self.scrolled = Some((offset, at_ms));
-                Reaction::default().with(Effect::Wake { at_ms })
+                self.on_scrolled(offset, now_ms, at)
             }
-            (Input::Tick { now_ms }, Some(_)) => {
-                self.wheeled = false;
-                let Some((offset, _)) = self.scrolled.filter(|(_, at_ms)| now_ms >= *at_ms) else {
-                    return Reaction::default();
-                };
-                self.scrolled = None;
-                let landing = self.landing(offset, 0.0);
-                let settled = self.settle(landing, Source::User, Reason::Drag, gate);
-                let rest = Effect::ScrollTo {
-                    offset: self
-                        .at
-                        .map_or(0.0, |at| self.detents.get(at).copied().unwrap_or_default())
-                        .cast::<u32>(),
-                };
-                if settled && landing.is_none() {
-                    return Reaction::focusing(Part::Trigger).with(rest);
-                }
-                Reaction::default().with(rest)
-            }
+            (Input::Tick { now_ms }, Some(_)) => self.on_tick(now_ms, gate),
             // The trigger is a button, so Enter and Space press it.
             (
                 Input::Key {
@@ -399,25 +425,7 @@ impl Primitive for Sheet {
                 },
                 Some(_),
             ) => self.dismiss(Reason::Keyboard, gate),
-            (Input::Key { key, .. }, Some(at)) => {
-                let (grow, shrink) = match self.side {
-                    Edge::Bottom => (Key::ArrowUp, Key::ArrowDown),
-                    Edge::Top => (Key::ArrowDown, Key::ArrowUp),
-                    Edge::Left => (Key::ArrowRight, Key::ArrowLeft),
-                    Edge::Right => (Key::ArrowLeft, Key::ArrowRight),
-                };
-                let target = match key {
-                    // The arrow that points away from its edge makes it larger.
-                    k if k == grow => (at.saturating_add(1)).min(last),
-                    k if k == shrink && at == 0 => return self.dismiss(Reason::Keyboard, gate),
-                    k if k == shrink => at.saturating_sub(1),
-                    Key::Home => 0,
-                    Key::End => last,
-                    _ => return Reaction::default(),
-                };
-                self.settle(Some(target), Source::User, Reason::Keyboard, gate);
-                Reaction::handled()
-            }
+            (Input::Key { key, .. }, Some(at)) => self.on_key(key, at, last, gate),
             _ => Reaction::default(),
         }
     }

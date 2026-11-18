@@ -122,6 +122,58 @@ impl NavigationMenu {
     }
 }
 
+impl NavigationMenu {
+    /// The pointer resting on a trigger opens its panel after a pause, and leaving
+    /// closes it after one.
+    fn on_hover(
+        &mut self,
+        part: Part,
+        key: String,
+        inside: bool,
+        now_ms: u64,
+        gate: Gate,
+    ) -> Reaction<Part> {
+        let wanted = if inside { Some(key) } else { None };
+        // Moving to another trigger while a panel is open switches at once.
+        if inside && part == Part::Trigger && self.open.is_some() {
+            self.set(wanted, Source::User, Reason::Press, gate);
+            return Reaction::default();
+        }
+        if wanted == self.open {
+            self.due = None;
+            return Reaction::default();
+        }
+        let delay = if inside {
+            self.opts.open_delay_ms
+        } else {
+            self.opts.close_delay_ms
+        };
+        let at_ms = now_ms.saturating_add(delay);
+        self.due = Some((at_ms, wanted));
+        Reaction::default().with(Effect::Wake { at_ms })
+    }
+
+    /// Arrow keys move focus between the triggers.
+    fn on_arrow(&mut self, key: Key) -> Reaction<Part> {
+        let Some(nav) = roving::nav_for_key(key, self.opts.orientation, self.opts.dir) else {
+            return Reaction::default();
+        };
+        let at = self
+            .tab_stop()
+            .and_then(|key| self.entries.iter().position(|(entry, _)| entry == key));
+        let Some(next) = roving::step(&vec![true; self.entries.len()], at, nav, true) else {
+            return Reaction::default();
+        };
+        let key = self
+            .entries
+            .get(next)
+            .map(|entry| entry.0.clone())
+            .unwrap_or_default();
+        self.focused = Some(key.clone());
+        Reaction::item(self.part_of(&key), true, Some(key))
+    }
+}
+
 impl PartOf for Part {
     type Primitive = NavigationMenu;
 }
@@ -218,11 +270,6 @@ impl Primitive for NavigationMenu {
             },
         }
     }
-
-    #[expect(
-        clippy::too_many_lines,
-        reason = "one arm for each input the primitive answers"
-    )]
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
         if roving::is_platform_arrow(&input) {
             return Reaction::default();
@@ -263,26 +310,7 @@ impl Primitive for NavigationMenu {
                 item: Some(key),
                 inside,
                 now_ms,
-            } if self.opts.hover => {
-                let wanted = if inside { Some(key) } else { None };
-                // Moving to another trigger while a panel is open switches at once.
-                if inside && part == Part::Trigger && self.open.is_some() {
-                    self.set(wanted, Source::User, Reason::Press, gate);
-                    return Reaction::default();
-                }
-                if wanted == self.open {
-                    self.due = None;
-                    return Reaction::default();
-                }
-                let delay = if inside {
-                    self.opts.open_delay_ms
-                } else {
-                    self.opts.close_delay_ms
-                };
-                let at_ms = now_ms.saturating_add(delay);
-                self.due = Some((at_ms, wanted));
-                Reaction::default().with(Effect::Wake { at_ms })
-            }
+            } if self.opts.hover => self.on_hover(part, key, inside, now_ms, gate),
             Input::Tick { now_ms } => {
                 if let Some((_, wanted)) = self.due.clone().filter(|(at_ms, _)| now_ms >= *at_ms) {
                     self.set(wanted, Source::User, Reason::Press, gate);
@@ -324,26 +352,7 @@ impl Primitive for NavigationMenu {
                 self.set(self.focused.clone(), Source::User, Reason::Keyboard, gate);
                 Reaction::handled()
             }
-            Input::Key { key, .. } => {
-                let Some(nav) = roving::nav_for_key(key, self.opts.orientation, self.opts.dir)
-                else {
-                    return Reaction::default();
-                };
-                let at = self
-                    .tab_stop()
-                    .and_then(|key| self.entries.iter().position(|(entry, _)| entry == key));
-                let Some(next) = roving::step(&vec![true; self.entries.len()], at, nav, true)
-                else {
-                    return Reaction::default();
-                };
-                let key = self
-                    .entries
-                    .get(next)
-                    .map(|entry| entry.0.clone())
-                    .unwrap_or_default();
-                self.focused = Some(key.clone());
-                Reaction::item(self.part_of(&key), true, Some(key))
-            }
+            Input::Key { key, .. } => self.on_arrow(key),
             Input::PressOutside | Input::WindowBlur | Input::Blur { .. } => {
                 self.set(None, Source::User, Reason::Press, gate);
                 Reaction::default()

@@ -248,6 +248,91 @@ impl Canvas {
     }
 }
 
+impl Canvas {
+    /// Alt with an arrow selects the nearest node in that direction.
+    fn select_towards(&mut self, key: Key) -> Reaction<Part> {
+        let direction = match key {
+            Key::ArrowUp => Direction::Up,
+            Key::ArrowDown => Direction::Down,
+            Key::ArrowLeft => Direction::Left,
+            Key::ArrowRight => Direction::Right,
+            _ => return Reaction::default(),
+        };
+        let Some(from) = self
+            .selected
+            .first()
+            .or_else(|| self.nodes.first().map(|node| &node.key))
+            .cloned()
+        else {
+            return Reaction::default();
+        };
+        let origin = self
+            .nodes
+            .iter()
+            .find(|node| node.key == from)
+            .map(|node| node.rect)
+            .unwrap_or_default();
+        let others: Vec<(String, Rect)> = self
+            .nodes
+            .iter()
+            .filter(|node| node.key != from)
+            .map(|node| (node.key.clone(), node.rect))
+            .collect();
+        if let Some(next) = nearest_in_direction(&others, origin, direction) {
+            self.selected = vec![next];
+        }
+        Reaction::handled()
+    }
+
+    /// A pointer moving with a gesture under way: a lasso grows, nodes are carried,
+    /// one is resized, or the view pans.
+    fn pointer_moved(&mut self, pointer: &Pointer<Part>, at: Point) -> Reaction<Part> {
+        match self.gesture.clone() {
+            Some(Gesture::Lasso {
+                from, before, mods, ..
+            }) => {
+                let boxes: Vec<(String, Rect)> = self
+                    .nodes
+                    .iter()
+                    .map(|node| (node.key.clone(), node.rect))
+                    .collect();
+                self.selected = lasso_selection(&before, &lasso_hits(from, at, &boxes), mods);
+                self.gesture = Some(Gesture::Lasso {
+                    from,
+                    to: at,
+                    before,
+                    mods,
+                });
+            }
+            Some(Gesture::Move { from, origin }) => {
+                self.shift_selected(&origin, at.minus(from));
+            }
+            Some(Gesture::Resize { key, from, origin }) => {
+                let limits = ResizeLimits {
+                    min: MIN_NODE,
+                    max: None,
+                    bounds: None,
+                };
+                let start = origin
+                    .iter()
+                    .find(|node| node.key == key)
+                    .map(|node| node.rect);
+                if let (Some(start), Some(node)) =
+                    (start, self.nodes.iter_mut().find(|node| node.key == key))
+                {
+                    node.rect = resized(start, Handle::BOTTOM_RIGHT, at.minus(from), limits);
+                }
+            }
+            Some(Gesture::Pan { last }) => {
+                self.view.pan_by(pointer.at.minus(last));
+                self.gesture = Some(Gesture::Pan { last: pointer.at });
+            }
+            None => return Reaction::default(),
+        }
+        Reaction::handled()
+    }
+}
+
 impl PartOf for Part {
     type Primitive = Canvas;
 }
@@ -314,11 +399,6 @@ impl Primitive for Canvas {
             },
         }
     }
-
-    #[expect(
-        clippy::too_many_lines,
-        reason = "one arm for each input the primitive answers"
-    )]
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
         match input {
             Input::Press {
@@ -389,39 +469,7 @@ impl Primitive for Canvas {
                 }
             }
             // Alt with an arrow moves the selection to the nearest node that way.
-            Input::Key { key, mods, .. } if mods.alt => {
-                let direction = match key {
-                    Key::ArrowUp => Direction::Up,
-                    Key::ArrowDown => Direction::Down,
-                    Key::ArrowLeft => Direction::Left,
-                    Key::ArrowRight => Direction::Right,
-                    _ => return Reaction::default(),
-                };
-                let Some(from) = self
-                    .selected
-                    .first()
-                    .or_else(|| self.nodes.first().map(|node| &node.key))
-                    .cloned()
-                else {
-                    return Reaction::default();
-                };
-                let origin = self
-                    .nodes
-                    .iter()
-                    .find(|node| node.key == from)
-                    .map(|node| node.rect)
-                    .unwrap_or_default();
-                let others: Vec<(String, Rect)> = self
-                    .nodes
-                    .iter()
-                    .filter(|node| node.key != from)
-                    .map(|node| (node.key.clone(), node.rect))
-                    .collect();
-                if let Some(next) = nearest_in_direction(&others, origin, direction) {
-                    self.selected = vec![next];
-                }
-                Reaction::handled()
-            }
+            Input::Key { key, mods, .. } if mods.alt => self.select_towards(key),
             Input::Key { key, mods, .. } => {
                 let Some(delta) = key_delta(key, mods, 1.0, 10.0) else {
                     return Reaction::default();
@@ -437,11 +485,6 @@ impl Primitive for Canvas {
             _ => Reaction::default(),
         }
     }
-
-    #[expect(
-        clippy::too_many_lines,
-        reason = "one arm for each input the primitive answers"
-    )]
     fn pointer(
         &mut self,
         pointer: Pointer<Part>,
@@ -487,53 +530,7 @@ impl Primitive for Canvas {
                 };
                 Reaction::focusing(Part::Surface).with(Effect::CapturePointer)
             }
-            PointerPhase::Move => {
-                match self.gesture.clone() {
-                    Some(Gesture::Lasso {
-                        from, before, mods, ..
-                    }) => {
-                        let boxes: Vec<(String, Rect)> = self
-                            .nodes
-                            .iter()
-                            .map(|node| (node.key.clone(), node.rect))
-                            .collect();
-                        self.selected =
-                            lasso_selection(&before, &lasso_hits(from, at, &boxes), mods);
-                        self.gesture = Some(Gesture::Lasso {
-                            from,
-                            to: at,
-                            before,
-                            mods,
-                        });
-                    }
-                    Some(Gesture::Move { from, origin }) => {
-                        self.shift_selected(&origin, at.minus(from));
-                    }
-                    Some(Gesture::Resize { key, from, origin }) => {
-                        let limits = ResizeLimits {
-                            min: MIN_NODE,
-                            max: None,
-                            bounds: None,
-                        };
-                        let start = origin
-                            .iter()
-                            .find(|node| node.key == key)
-                            .map(|node| node.rect);
-                        if let (Some(start), Some(node)) =
-                            (start, self.nodes.iter_mut().find(|node| node.key == key))
-                        {
-                            node.rect =
-                                resized(start, Handle::BOTTOM_RIGHT, at.minus(from), limits);
-                        }
-                    }
-                    Some(Gesture::Pan { last }) => {
-                        self.view.pan_by(pointer.at.minus(last));
-                        self.gesture = Some(Gesture::Pan { last: pointer.at });
-                    }
-                    None => return Reaction::default(),
-                }
-                Reaction::handled()
-            }
+            PointerPhase::Move => self.pointer_moved(&pointer, at),
             PointerPhase::Up => {
                 if let Some(Gesture::Move { origin, .. } | Gesture::Resize { origin, .. }) =
                     self.gesture.take()

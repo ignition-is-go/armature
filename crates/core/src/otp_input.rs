@@ -149,6 +149,75 @@ impl OtpInput {
     }
 }
 
+impl OtpInput {
+    /// A key at the caret: typing over a cell, deleting one, or moving between them.
+    fn on_key(&mut self, key: Key, gate: Gate) -> Reaction<Part> {
+        let mut cells: Vec<char> = self.code.chars().collect();
+        let (back, forward) = if self.dir == Dir::Rtl {
+            (Key::ArrowRight, Key::ArrowLeft)
+        } else {
+            (Key::ArrowLeft, Key::ArrowRight)
+        };
+        match key {
+            Key::Char(ch) if self.accept.takes(ch) => {
+                // Typing replaces the character under the caret, or adds one.
+                if let Some(cell) = cells.get_mut(self.slot) {
+                    *cell = ch;
+                } else if cells.len() < self.length {
+                    cells.push(ch);
+                }
+                let at = self.slot;
+                if self.commit(
+                    cells.into_iter().collect(),
+                    Source::User,
+                    Reason::Text,
+                    gate,
+                ) {
+                    self.slot = (at.saturating_add(1)).min(self.end());
+                }
+                Reaction::handled()
+            }
+            Key::Backspace => {
+                let at = if self.slot < cells.len() {
+                    self.slot
+                } else {
+                    cells.len().saturating_sub(1)
+                };
+                if !cells.is_empty() {
+                    cells.remove(at);
+                    if self.commit(
+                        cells.into_iter().collect(),
+                        Source::User,
+                        Reason::Text,
+                        gate,
+                    ) {
+                        self.slot = at.min(self.end());
+                    }
+                }
+                Reaction::handled()
+            }
+            k if k == back => {
+                self.slot = self.slot.saturating_sub(1);
+                Reaction::handled()
+            }
+            k if k == forward => {
+                self.slot = (self.slot.saturating_add(1)).min(self.end());
+                Reaction::handled()
+            }
+            Key::Home => {
+                self.slot = 0;
+                Reaction::handled()
+            }
+            Key::End => {
+                self.slot = self.end();
+                Reaction::handled()
+            }
+            // Other keys are left to the platform.
+            _ => Reaction::default(),
+        }
+    }
+}
+
 impl PartOf for Part {
     type Primitive = OtpInput;
 }
@@ -181,11 +250,6 @@ impl Primitive for OtpInput {
             },
         }
     }
-
-    #[expect(
-        clippy::too_many_lines,
-        reason = "one arm for each input the primitive answers"
-    )]
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
         match input {
             Input::Text { value, .. } => {
@@ -229,71 +293,7 @@ impl Primitive for OtpInput {
                 }
                 Reaction::handled()
             }
-            Input::Key { key, mods, .. } if !mods.ctrl && !mods.alt => {
-                let mut cells: Vec<char> = self.code.chars().collect();
-                let (back, forward) = if self.dir == Dir::Rtl {
-                    (Key::ArrowRight, Key::ArrowLeft)
-                } else {
-                    (Key::ArrowLeft, Key::ArrowRight)
-                };
-                match key {
-                    Key::Char(ch) if self.accept.takes(ch) => {
-                        // Typing replaces the character under the caret, or adds one.
-                        if let Some(cell) = cells.get_mut(self.slot) {
-                            *cell = ch;
-                        } else if cells.len() < self.length {
-                            cells.push(ch);
-                        }
-                        let at = self.slot;
-                        if self.commit(
-                            cells.into_iter().collect(),
-                            Source::User,
-                            Reason::Text,
-                            gate,
-                        ) {
-                            self.slot = (at.saturating_add(1)).min(self.end());
-                        }
-                        Reaction::handled()
-                    }
-                    Key::Backspace => {
-                        let at = if self.slot < cells.len() {
-                            self.slot
-                        } else {
-                            cells.len().saturating_sub(1)
-                        };
-                        if !cells.is_empty() {
-                            cells.remove(at);
-                            if self.commit(
-                                cells.into_iter().collect(),
-                                Source::User,
-                                Reason::Text,
-                                gate,
-                            ) {
-                                self.slot = at.min(self.end());
-                            }
-                        }
-                        Reaction::handled()
-                    }
-                    k if k == back => {
-                        self.slot = self.slot.saturating_sub(1);
-                        Reaction::handled()
-                    }
-                    k if k == forward => {
-                        self.slot = (self.slot.saturating_add(1)).min(self.end());
-                        Reaction::handled()
-                    }
-                    Key::Home => {
-                        self.slot = 0;
-                        Reaction::handled()
-                    }
-                    Key::End => {
-                        self.slot = self.end();
-                        Reaction::handled()
-                    }
-                    // Other keys are left to the platform.
-                    _ => Reaction::default(),
-                }
-            }
+            Input::Key { key, mods, .. } if !mods.ctrl && !mods.alt => self.on_key(key, gate),
             _ => Reaction::default(),
         }
     }
