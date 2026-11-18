@@ -5,17 +5,26 @@
 use armature_core::accordion::{self, Accordion};
 use armature_core::calendar::{self, Calendar, Selecting};
 use armature_core::collapsible::{self, Collapsible};
+use armature_core::combobox::{self, Combobox};
 use armature_core::date::Date;
+use armature_core::dialog::{self, Dialog, Dismiss, Refusal};
 use armature_core::keys::{Dir, Key, Modifiers, Orientation, apple_key};
 use armature_core::listbox::{self, Listbox};
+use armature_core::menu::{self, Entry, Kind, Menu};
+use armature_core::number::NumberRange;
+use armature_core::number_input::NumberInput;
 use armature_core::otp_input::{self, Accept, OtpInput};
+use armature_core::popover::{self, Popover};
 use armature_core::primitive::Focusable;
 use armature_core::primitive::{Input, Item, Primitive};
 use armature_core::range_slider::{self, RangeSlider};
 use armature_core::rating::{self, Rating};
+use armature_core::select::Select;
 use armature_core::tabs::{self, Tabs};
 use armature_core::timing::Hold;
+use armature_core::toast::{self, Toast, Toaster};
 use armature_core::toggle_group::{self, ToggleGroup};
+use armature_core::tooltip::{self, Tooltip, Warmth};
 
 fn item(key: &str, disabled: bool) -> Item {
     Item {
@@ -726,8 +735,6 @@ fn calendar_behaviors_a_press_or_enter_selects_one_date() {
     );
 }
 
-use armature_core::dialog::{self, Dialog, Dismiss, Refusal};
-
 // dialog.test.ts
 #[test]
 fn dialog_behaviors() {
@@ -866,8 +873,6 @@ fn dialog_behaviors_a_dialog_is_modal_by_default_and() {
     );
 }
 
-use armature_core::tooltip::{self, Tooltip, Warmth};
-
 // tooltip.test.ts
 #[test]
 fn tooltip_behaviors() {
@@ -944,10 +949,6 @@ fn tooltip_behaviors() {
     hover(&mut first, true, 5000, true);
     assert!(!first.is_open());
 }
-
-use armature_core::number::NumberRange;
-use armature_core::number_input::NumberInput;
-use armature_core::select::Select;
 
 // select.test.ts
 #[test]
@@ -1045,8 +1046,6 @@ fn number_input_behaviors() {
     );
     assert_eq!((typed.number(), asked), (4.0, 0));
 }
-
-use armature_core::combobox::{self, Combobox};
 
 fn frameworks(opts: combobox::Options) -> Combobox {
     let mut combobox = Combobox::new(opts);
@@ -1156,8 +1155,6 @@ fn combobox_behaviors() {
     );
 }
 
-use armature_core::menu::{self, Entry, Kind, Menu};
-
 // menu-headless.test.ts
 #[test]
 fn menu_behaviors() {
@@ -1216,8 +1213,6 @@ fn menu_behaviors() {
     assert!(!disabled.is_open());
     assert!(disabled.semantics(Part::Trigger, None).disabled);
 }
-
-use armature_core::toast::{self, Toast, Toaster};
 
 // toast.test.ts
 #[test]
@@ -1330,8 +1325,6 @@ fn toast_behaviors() {
     several.act("dismiss_all", None, &mut |_| true).unwrap();
     assert_eq!(count(&several), 0);
 }
-
-use armature_core::popover::{self, Popover};
 
 // popover.test.ts
 #[test]
