@@ -26,7 +26,14 @@ use crate::{Section, follow};
 #[component]
 fn Grips() -> impl IntoView {
     let slider = use_primitive::<RangeSlider>();
-    let left = move |at: usize| move || format!("{}%", slider.with(|s| s.fractions()[at]) * 100.0);
+    let left = move |at: usize| {
+        move || {
+            format!(
+                "{}%",
+                slider.with(|s| s.fractions().get(at).copied().unwrap_or_default()) * 100.0
+            )
+        }
+    };
     view! {
         <Part part=range_slider::Part::Track>
             <div class="thumb-slot" style:left=left(0)><Part part=range_slider::Part::Thumb item="0" label="Lowest price" /></div>
@@ -38,7 +45,14 @@ fn Grips() -> impl IntoView {
 #[component]
 fn Panes() -> impl IntoView {
     let group = use_primitive::<PanelGroup>();
-    let share = move |at: usize| move || format!("{}%", group.with(|g| g.sizes()[at]));
+    let share = move |at: usize| {
+        move || {
+            format!(
+                "{}%",
+                group.with(|g| g.sizes().get(at).copied().unwrap_or_default())
+            )
+        }
+    };
     view! {
         <Part part=panel_group::Part::Root>
             <div class="panes">
@@ -76,7 +90,7 @@ fn Stars() -> impl IntoView {
 #[component]
 fn TwoMonths() -> impl IntoView {
     let calendar = use_primitive::<Calendar>();
-    let months = move || calendar.with(|c| c.shown_months());
+    let months = move || calendar.with(armature_core::calendar::Calendar::shown_months);
     view! {
         <Part part=calendar::Part::PreviousMonth label="Earlier">"‹"</Part>
         <Part part=calendar::Part::NextMonth label="Later">"›"</Part>
@@ -117,11 +131,11 @@ fn LazyRows() -> impl IntoView {
     let tree = use_primitive::<TreeView>();
     view! {
         <Part part=tree_view::Part::Root>
-            <For each=move || tree.with(|t| t.rows()) key=|row| row.key.clone() let:row>
+            <For each=move || tree.with(armature_core::tree_view::TreeView::rows) key=|row| row.key.clone() let:row>
                 {
                     let (key, name) = (row.key.clone(), row.key.rsplit('/').next().unwrap_or(&row.key).to_string());
                     view! {
-                        <div style:padding-left=format!("{}px", (row.level - 1) * 16)>
+                        <div style:padding-left=format!("{}px", row.level.saturating_sub(1).saturating_mul(16))>
                             <Part part=tree_view::Part::Node item=key>{name}</Part>
                         </div>
                     }
@@ -134,9 +148,16 @@ fn LazyRows() -> impl IntoView {
 #[component]
 fn ZoomCrop() -> impl IntoView {
     let cropper = use_primitive::<ImageCropper>();
-    let side = move |at: usize| move || format!("{}%", cropper.with(|c| c.fractions()[at]) * 100.0);
+    let side = move |at: usize| {
+        move || {
+            format!(
+                "{}%",
+                cropper.with(|c| c.fractions().get(at).copied().unwrap_or_default()) * 100.0
+            )
+        }
+    };
     view! {
-        <p id="zoom-value">"Zoom: " {move || format!("{:.2}", cropper.with(|c| c.zoom()))}</p>
+        <p id="zoom-value">"Zoom: " {move || format!("{:.2}", cropper.with(armature_core::image_cropper::ImageCropper::zoom))}</p>
         <Part part=image_cropper::Part::Area>
             <div class="crop-box" style:left=side(0) style:top=side(1) style:width=side(2) style:height=side(3)>
                 <Part part=image_cropper::Part::Selection label="Zoomed crop" />
@@ -151,7 +172,7 @@ fn TimeParts() -> impl IntoView {
     view! {
         <Part part=date_input::Part::Root>
             <div class="segments">
-                <For each=move || input.with(|i| i.segments()) key=|segment| segment.name() let:segment>
+                <For each=move || input.with(armature_core::date_input::DateInput::segments) key=|segment| segment.name() let:segment>
                     <Part part=date_input::Part::Segment item=segment.name() label=segment.name() />
                 </For>
             </div>
@@ -164,7 +185,7 @@ fn CityField() -> impl IntoView {
     let combobox = use_primitive::<Combobox>();
     view! {
         <Part part=combobox::Part::Input />
-        <span id="city-completion" class="hint">{move || combobox.with(|c| c.completion()).unwrap_or_default()}</span>
+        <span id="city-completion" class="hint">{move || combobox.with(armature_core::combobox::Combobox::completion).unwrap_or_default()}</span>
         <Part part=combobox::Part::List>
             <Part part=combobox::Part::Option item="lisbon">"Lisbon"</Part>
             <Part part=combobox::Part::Option item="lima">"Lima"</Part>
@@ -186,6 +207,10 @@ fn CommandField() -> impl IntoView {
     }
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "one section for each component the demo shows"
+)]
 #[component]
 pub fn Audit() -> impl IntoView {
     let (price, on_price) = follow();
@@ -249,7 +274,7 @@ pub fn Audit() -> impl IntoView {
         <Section title="Date span">
             <p id="stay-value">"Stay: " {move || stay.get().join(" to ")}</p>
             <Root
-                machine=Calendar::new(calendar::Options { mode: Selecting::Range, months: 2, ..Default::default() }, Date::new(2026, 11, 17).expect("a real date"))
+                machine=Calendar::new(calendar::Options { mode: Selecting::Range, months: 2, ..Default::default() }, Date::new(2026, 11, 17).unwrap_or(Date::FIRST))
                 label="Stay"
                 on_value_change=on_stay
             >
@@ -315,7 +340,7 @@ pub fn Audit() -> impl IntoView {
                 " | "
                 {armature_leptos::locale::weekday_name(2, "es-ES")}
                 " | "
-                {armature_leptos::locale::format_date(Date::new(2026, 11, 17).expect("a real date"), "en-GB")}
+                {armature_leptos::locale::format_date(Date::new(2026, 11, 17).unwrap_or(Date::FIRST), "en-GB")}
             </p>
         </Section>
 

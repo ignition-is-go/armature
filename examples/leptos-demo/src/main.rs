@@ -55,6 +55,10 @@ pub(crate) fn follow() -> (RwSignal<Vec<String>>, Callback<ValueChange, bool>) {
     (value, gate)
 }
 
+#[allow(
+    clippy::must_use_candidate,
+    reason = "the component macro generates a function this cannot reach"
+)]
 #[component]
 pub(crate) fn Section(title: &'static str, children: Children) -> impl IntoView {
     view! {
@@ -92,7 +96,7 @@ fn OtpCells() -> impl IntoView {
     view! {
         <div class="otp-cells">
             {move || {
-                otp.with(|o| o.cells())
+                otp.with(armature_core::otp_input::OtpInput::cells)
                     .into_iter()
                     .map(|digit| view! { <span>{digit.map(String::from).unwrap_or_default()}</span> })
                     .collect_view()
@@ -118,7 +122,7 @@ fn ColorParts() -> impl IntoView {
             </div>
         </Part>
         <Part part=color_picker::Part::Hue>
-            <div class="color-dot" style:left=move || percent(picker.with(|p| p.hue_position())) style:top="50%">
+            <div class="color-dot" style:left=move || percent(picker.with(armature_core::color_picker::ColorPicker::hue_position)) style:top="50%">
                 <Part part=color_picker::Part::HueThumb label="Hue" />
             </div>
         </Part>
@@ -136,7 +140,7 @@ fn SheetParts() -> impl IntoView {
     view! {
         <Part part=sheet::Part::Trigger>"Open sheet"</Part>
         <Part part=sheet::Part::Backdrop />
-        <div class="sheet-slot" style:height=move || format!("{}px", panel.with(|s| s.height()))>
+        <div class="sheet-slot" style:height=move || format!("{}px", panel.with(armature_core::sheet::Sheet::height))>
             <Part part=sheet::Part::Content>
                 <Part part=sheet::Part::Handle label="Resize sheet" />
                 <p>"Drag the grip, or use the arrow keys."</p>
@@ -155,7 +159,7 @@ fn SwipeParts() -> impl IntoView {
                 <Part part=swipe_row::Part::Action item="archive">"Archive"</Part>
                 <Part part=swipe_row::Part::Action item="delete">"Delete"</Part>
             </div>
-            <div class="swipe-slide" style:transform=move || format!("translateX(-{}px)", row.with(|r| r.offset()))>
+            <div class="swipe-slide" style:transform=move || format!("translateX(-{}px)", row.with(armature_core::swipe_row::SwipeRow::offset))>
                 <Part part=swipe_row::Part::Row>"Swipe me left"</Part>
             </div>
         </div>
@@ -168,8 +172,8 @@ fn VirtualRows() -> impl IntoView {
     let list = use_primitive::<VirtualList>();
     view! {
         <Part part=virtual_list::Part::Viewport>
-            <div class="virtual-space" style:height=move || format!("{}px", list.with(|l| l.total_size()))>
-                <For each=move || list.with(|l| l.rows()) key=|row| row.index let:row>
+            <div class="virtual-space" style:height=move || format!("{}px", list.with(armature_core::virtual_list::VirtualList::total_size))>
+                <For each=move || list.with(armature_core::virtual_list::VirtualList::rows) key=|row| row.index let:row>
                     <div class="virtual-row" style:top=format!("{}px", row.offset)>
                         <Part part=virtual_list::Part::Row item=row.key.clone()>
                             "Row "
@@ -203,7 +207,7 @@ fn TimelineParts() -> impl IntoView {
                     class="span-slot"
                     style:left=format!("{}%", entry.1.0 * 100.0)
                     style:width=format!("{}%", (entry.1.1 - entry.1.0) * 100.0)
-                    style:top=format!("{}px", entry.2 * 22)
+                    style:top=format!("{}px", entry.2.saturating_mul(22))
                 >
                     <Part part=timeline::Part::Span item=entry.0.clone()>
                         {entry.0.clone()}
@@ -250,12 +254,14 @@ fn CanvasParts() -> impl IntoView {
         }
     };
     let lasso = move || {
-        canvas.with(|c| c.lasso()).map(|rect| {
-            format!(
-                "left:{}px;top:{}px;width:{}px;height:{}px",
-                rect.x, rect.y, rect.width, rect.height
-            )
-        })
+        canvas
+            .with(armature_core::canvas::Canvas::lasso)
+            .map(|rect| {
+                format!(
+                    "left:{}px;top:{}px;width:{}px;height:{}px",
+                    rect.x, rect.y, rect.width, rect.height
+                )
+            })
     };
     view! {
         <Part part=canvas::Part::Surface>
@@ -273,7 +279,7 @@ fn CanvasParts() -> impl IntoView {
                     }
                 })
                 .collect_view()}
-            <div class="lasso" style=move || lasso().unwrap_or("display:none".into())></div>
+            <div class="lasso" style=move || lasso().unwrap_or_else(|| "display:none".into())></div>
         </Part>
         <p id="links">{move || canvas.with(|c| c.connections().iter().map(|l| format!("{}>{}", l.from, l.to)).collect::<Vec<_>>().join(" "))}</p>
         <p id="canvas-selected">{move || canvas.with(|c| c.selected().join(","))}</p>
@@ -284,7 +290,12 @@ fn CanvasParts() -> impl IntoView {
 #[component]
 fn Panels() -> impl IntoView {
     let panels = use_primitive::<Resizable>();
-    let share = move || format!("{}%", panels.with(|p| p.percent()));
+    let share = move || {
+        format!(
+            "{}%",
+            panels.with(armature_core::resizable::Resizable::percent)
+        )
+    };
     view! {
         <div class="panel" style:width=share>"Left"</div>
         <Part part=resizable::Part::Handle />
@@ -306,13 +317,13 @@ fn OutlineRows() -> impl IntoView {
     };
     view! {
         <Part part=tree_view::Part::Root>
-            <For each=move || tree.with(|t| t.rows()) key=|row| row.key.clone() let:row>
+            <For each=move || tree.with(armature_core::tree_view::TreeView::rows) key=|row| row.key.clone() let:row>
                 {
                     let key = row.key.clone();
                     let name = row.key.rsplit('/').next().unwrap_or(&row.key).to_string();
                     view! {
-                        <div class="outline-row" style:padding-left=move || format!("{}px", (level(&key) - 1) * 24)>
-                            <Part part=tree_view::Part::Node item=row.key.clone()>{name}</Part>
+                        <div class="outline-row" style:padding-left=move || format!("{}px", level(&key).saturating_sub(1).saturating_mul(24))>
+                            <Part part=tree_view::Part::Node item=row.key>{name}</Part>
                         </div>
                     }
                 }
@@ -394,7 +405,7 @@ fn App() -> impl IntoView {
     let (chosen, on_chosen) = follow();
     let (moved, on_moved) = follow();
     let sent = RwSignal::new(Vec::<String>::new());
-    let deleted = RwSignal::new(0);
+    let deleted = RwSignal::new(0_u32);
     use_shortcut("mod+k", || {
         let field = document()
             .query_selector("[aria-label=\"Message\"]")
@@ -420,7 +431,7 @@ fn App() -> impl IntoView {
     let (code, on_code) = follow();
     let (tags, on_tags) = follow();
     let (split, on_split) = follow();
-    let start = Date::parse("2026-11-17").expect("a real date");
+    let start = Date::parse("2026-11-17").unwrap_or(Date::FIRST);
     let (color, on_color) = follow();
     let (swiped, on_swiped) = follow();
     let (row, on_row) = follow();
@@ -431,7 +442,7 @@ fn App() -> impl IntoView {
     let visible = use_visible_viewport();
     let sheet = ["a1", "b1", "c1", "a2", "b2", "c2", "a3", "b3", "c3"]
         .chunks(3)
-        .map(|row| row.iter().map(|text| text.to_string()).collect())
+        .map(|row| row.iter().map(std::string::ToString::to_string).collect())
         .collect::<Vec<Vec<String>>>();
     let nodes = [("a", 10.0, 10.0), ("b", 150.0, 10.0), ("c", 10.0, 100.0)]
         .map(|(key, x, y)| Node {
@@ -453,7 +464,12 @@ fn App() -> impl IntoView {
         mode: Mode::Multiple,
         ..Default::default()
     };
-    let percent = move || format!("{}%", volume.get().first().cloned().unwrap_or("30".into()));
+    let percent = move || {
+        format!(
+            "{}%",
+            volume.get().first().cloned().unwrap_or_else(|| "30".into())
+        )
+    };
     let files = [
         "src",
         "src/main.rs",
@@ -483,7 +499,7 @@ fn App() -> impl IntoView {
                 <Root machine=Select::default() label="Size" on_value_change=on_size>
                     <Part part=select::Part::Trigger>
                         <span id="size-value">
-                            {move || size.get().first().cloned().unwrap_or("Choose a size".into())}
+                            {move || size.get().first().cloned().unwrap_or_else(|| "Choose a size".into())}
                         </span>
                     </Part>
                     <Part part=select::Part::Content>
@@ -532,7 +548,7 @@ fn App() -> impl IntoView {
 
             <Section title="Slider">
                 <p id="volume-value">"Volume: " {percent}</p>
-                <Root machine=Slider::new(Default::default(), 30.0) label="Volume" on_value_change=on_volume>
+                <Root machine=Slider::new(armature_core::slider::Options::default(), 30.0) label="Volume" on_value_change=on_volume>
                     <Part part=slider::Part::Track>
                         <div class="fill" style:width=percent></div>
                         <div class="thumb-slot" style:left=percent>
@@ -627,7 +643,7 @@ fn App() -> impl IntoView {
 
             <Section title="Calendar">
                 <p id="day-value">"Day: " {move || day.get().join("")}</p>
-                <Root machine=Calendar::new(Default::default(), start) label="Date" on_value_change=on_day>
+                <Root machine=Calendar::new(armature_core::calendar::Options::default(), start) label="Date" on_value_change=on_day>
                     <CalendarParts />
                 </Root>
             </Section>
@@ -835,7 +851,7 @@ fn App() -> impl IntoView {
                     machine=HoldButton::new(300)
                     label="Delete"
                     on_value_change=Callback::new(move |_: ValueChange| {
-                        deleted.update(|count| *count += 1);
+                        deleted.update(|count| *count = count.saturating_add(1));
                         true
                     })
                 >
@@ -890,6 +906,7 @@ fn App() -> impl IntoView {
 
 fn main() {
     agent::install();
-    agent::register_tools();
+    // Whether the browser offers its tool API or not, the page works the same.
+    let _ = agent::register_tools();
     mount_to_body(App);
 }

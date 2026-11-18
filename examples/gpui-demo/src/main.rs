@@ -4,6 +4,7 @@ use armature_core::canvas::{self, Canvas, Node};
 use armature_core::checkbox::{self, CheckboxGroup};
 use armature_core::color_picker::{self, ColorPicker};
 use armature_core::command::{self, Command};
+use armature_core::convert::Cast;
 use armature_core::date::Date;
 use armature_core::editable::{self, Editable};
 use armature_core::geometry::Rect;
@@ -35,18 +36,26 @@ use armature_core::virtual_list::{self, VirtualList};
 use armature_gpui::{Machine, PartElement, Source, live_region, part};
 use gpui::prelude::*;
 use gpui::{
-    App, Bounds, Context, Div, Entity, KeyBinding, Window, WindowBounds, WindowOptions, actions,
-    div, px, rgb, size,
+    App, Bounds, Context, Div, Entity, KeyBinding, Window, WindowBounds, WindowOptions, div, px,
+    rgb, size,
 };
 
-actions!(demo, [FocusNext, FocusPrev]);
+// The macro derives `PartialEq` alone for these.
+#[expect(
+    clippy::derive_partial_eq_without_eq,
+    reason = "derived inside the toolkit's macro"
+)]
+mod focus_actions {
+    gpui::actions!(demo, [FocusNext, FocusPrev]);
+}
+use focus_actions::{FocusNext, FocusPrev};
 
-const INK: u32 = 0x1f2430;
-const MUTED: u32 = 0x8a909c;
-const LINE: u32 = 0xc9ced8;
-const WASH: u32 = 0xe8eefc;
-const ACCENT: u32 = 0x3b6fe0;
-const WHITE: u32 = 0xffffff;
+const INK: u32 = 0x001f_2430;
+const MUTED: u32 = 0x008a_909c;
+const LINE: u32 = 0x00c9_ced8;
+const WASH: u32 = 0x00e8_eefc;
+const ACCENT: u32 = 0x003b_6fe0;
+const WHITE: u32 = 0x00ff_ffff;
 const FILES: [&str; 7] = [
     "src",
     "src/main.rs",
@@ -103,6 +112,10 @@ struct Demo {
 }
 
 impl Demo {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one block for each component the demo shows"
+    )]
     fn new(cx: &mut Context<Self>) -> Self {
         let multiple = listbox::Options {
             mode: Mode::Multiple,
@@ -127,7 +140,7 @@ impl Demo {
                 disabled: false,
             })
             .collect();
-        Demo {
+        Self {
             size: cx.new(|cx| {
                 let sizes = items(&[("Small", false), ("Medium", true), ("Large", false)]);
                 Machine::new(Select::default(), "Size", sizes, cx)
@@ -154,8 +167,14 @@ impl Demo {
                     },
                 )
             }),
-            volume: cx
-                .new(|cx| Machine::new(Slider::new(Default::default(), 30.0), "Volume", [], cx)),
+            volume: cx.new(|cx| {
+                Machine::new(
+                    Slider::new(armature_core::slider::Options::default(), 30.0),
+                    "Volume",
+                    [],
+                    cx,
+                )
+            }),
             wifi: cx.new(|cx| Machine::new(Toggle::default(), "Wi-Fi", [], cx)),
             faq: cx.new(|cx| {
                 Machine::new(
@@ -184,8 +203,13 @@ impl Demo {
                 Machine::new(NumberInput::new(range, 2.0), "Quantity", [], cx)
             }),
             date: cx.new(|cx| {
-                let start = Date::parse("2026-11-17").expect("a real date");
-                Machine::new(Calendar::new(Default::default(), start), "Date", [], cx)
+                let start = Date::parse("2026-11-17").unwrap_or(Date::FIRST);
+                Machine::new(
+                    Calendar::new(armature_core::calendar::Options::default(), start),
+                    "Date",
+                    [],
+                    cx,
+                )
             }),
             formatting: cx.new(|cx| {
                 let buttons = items(&[("Bold", false), ("Italic", true), ("Link", false)]);
@@ -358,7 +382,7 @@ impl Demo {
             .w(px(220.))
             .px_2()
             .py_1()
-            .child(chosen_size.unwrap_or("Choose a size".into()));
+            .child(chosen_size.unwrap_or_else(|| "Choose a size".into()));
         let options = boxed(part(&self.size, select::Part::Content, None, cx))
             .w(px(220.))
             .p_1()
@@ -435,9 +459,13 @@ impl Demo {
             )
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one block for each component the demo shows"
+    )]
     fn newer(&self, cx: &App) -> Div {
         let volume = self.volume.read(cx).primitive();
-        let fraction = volume.fraction() as f32;
+        let fraction = volume.fraction().cast::<f32>();
         let slider = part(&self.volume, slider::Part::Track, None, cx)
             .relative()
             .w(px(TRACK))
@@ -459,7 +487,7 @@ impl Demo {
                 part(&self.volume, slider::Part::Thumb, None, cx)
                     .absolute()
                     .top(px(-5.))
-                    .left(px(TRACK * fraction - 8.))
+                    .left(px(TRACK.mul_add(fraction, -8.)))
                     .size(px(16.))
                     .rounded_full()
                     .bg(rgb(WHITE))
@@ -511,7 +539,7 @@ impl Demo {
             part(&self.rating, radio::Part::Option, Some(key), cx)
                 .px_1()
                 .text_xl()
-                .text_color(rgb(if filled { 0xe0a23b } else { LINE }))
+                .text_color(rgb(if filled { 0x00e0_a23b } else { LINE }))
                 .border_1()
                 .border_color(rgb(WHITE))
                 .focus(|style| style.border_color(rgb(ACCENT)))
@@ -536,7 +564,12 @@ impl Demo {
                 ""
             };
             part(&self.files, tree_view::Part::Node, Some(path), cx)
-                .ml(px(18. * (semantics.level.unwrap_or(1) - 1) as f32))
+                .ml(px(18.
+                    * semantics
+                        .level
+                        .unwrap_or(1)
+                        .saturating_sub(1)
+                        .cast::<f32>()))
                 .px_1()
                 .border_1()
                 .border_color(rgb(WHITE))
@@ -644,6 +677,10 @@ impl Demo {
 }
 
 impl Demo {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one block for each component the demo shows"
+    )]
     fn latest(&self, cx: &App) -> Div {
         let calendar = self.date.read(cx).primitive();
         let (year, month) = calendar.month();
@@ -685,7 +722,7 @@ impl Demo {
                 .child(key)
         };
 
-        let share = self.panels.read(cx).primitive().percent() as f32;
+        let share = self.panels.read(cx).primitive().percent().cast::<f32>();
         let dragging = self
             .panels
             .read(cx)
@@ -755,10 +792,14 @@ impl Demo {
 }
 
 impl Demo {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one block for each component the demo shows"
+    )]
     fn advanced(&self, cx: &App) -> Div {
         let picker = self.colour.read(cx).primitive();
         let hex = |color: armature_core::color::Rgb| {
-            rgb(((color.r as u32) << 16) | ((color.g as u32) << 8) | color.b as u32)
+            rgb((u32::from(color.r) << 16) | (u32::from(color.g) << 8) | u32::from(color.b))
         };
         let (across, down) = picker.area_position();
         let dot = |kind, left: f32, top: f32| {
@@ -781,7 +822,7 @@ impl Demo {
             .unwrap_or_default();
 
         let visible = self.rows.read(cx).primitive().rows();
-        let total = self.rows.read(cx).primitive().total_size() as f32;
+        let total = self.rows.read(cx).primitive().total_size().cast::<f32>();
         let row = |row: armature_core::virtual_list::VirtualRow| {
             let semantics = self
                 .rows
@@ -794,7 +835,7 @@ impl Demo {
             };
             part(&self.rows, virtual_list::Part::Row, Some(&row.key), cx)
                 .absolute()
-                .top(px(row.offset as f32))
+                .top(px(row.offset.cast::<f32>()))
                 .h(px(24.))
                 .w_full()
                 .px_2()
@@ -808,10 +849,10 @@ impl Demo {
             let chosen = board.selected().iter().any(|selected| selected == key);
             part(&self.board, canvas::Part::Node, Some(key), cx)
                 .absolute()
-                .left(px(place.x as f32))
-                .top(px(place.y as f32))
-                .w(px(place.width as f32))
-                .h(px(place.height as f32))
+                .left(px(place.x.cast::<f32>()))
+                .top(px(place.y.cast::<f32>()))
+                .w(px(place.width.cast::<f32>()))
+                .h(px(place.height.cast::<f32>()))
                 .rounded_md()
                 .border_1()
                 .border_color(rgb(if chosen { ACCENT } else { LINE }))
@@ -841,8 +882,8 @@ impl Demo {
                             .bg(hex(picker.hue_color()))
                             .child(dot(
                                 color_picker::Part::AreaThumb,
-                                pad_w * across as f32,
-                                pad_h * down as f32,
+                                pad_w * across.cast::<f32>(),
+                                pad_h * down.cast::<f32>(),
                             )),
                     )
                     .child(
@@ -854,7 +895,7 @@ impl Demo {
                             .bg(rgb(LINE))
                             .child(dot(
                                 color_picker::Part::HueThumb,
-                                pad_w * picker.hue_position() as f32,
+                                pad_w * picker.hue_position().cast::<f32>(),
                                 5.,
                             )),
                     )
@@ -948,7 +989,7 @@ impl Demo {
                         boxed(part(&self.title, editable::Part::Preview, None, cx))
                             .w(px(200.))
                             .px_2()
-                            .child(saved.clone()),
+                            .child(saved),
                     )
                     .child(
                         boxed(part(&self.title, editable::Part::Input, None, cx))
@@ -1100,7 +1141,7 @@ impl Demo {
                     )
                     .child(
                         part(&self.email, text_field::Part::Error, None, cx)
-                            .text_color(rgb(0xb3261e))
+                            .text_color(rgb(0x00b3_261e))
                             .child(problem),
                     ),
             )
@@ -1108,6 +1149,10 @@ impl Demo {
 }
 
 impl Demo {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one block for each component the demo shows"
+    )]
     fn extras(&self, cx: &App) -> Div {
         let price = self.price.read(cx);
         let spots = price.primitive().fractions();
@@ -1119,7 +1164,10 @@ impl Demo {
                 cx,
             )
             .absolute()
-            .left(px(TRACK * spots[at] as f32 - 8.))
+            .left(px(TRACK.mul_add(
+                spots.get(at).copied().unwrap_or_default().cast::<f32>(),
+                -8.,
+            )))
             .top(px(-5.))
             .size(px(16.))
             .rounded_full()
@@ -1197,8 +1245,8 @@ impl Demo {
                                 .child(
                                     part(&self.strip, scroll_area::Part::Thumb, None, cx)
                                         .absolute()
-                                        .left(px(start as f32))
-                                        .w(px(length as f32))
+                                        .left(px(start.cast::<f32>()))
+                                        .w(px(length.cast::<f32>()))
                                         .h(px(8.))
                                         .bg(rgb(MUTED)),
                                 ),
@@ -1238,7 +1286,7 @@ impl Render for Demo {
             .map(|row| row.key)
             .collect();
         self.rows.update(cx, |rows, cx| {
-            rows.track(virtual_list::Part::Row, shown, cx)
+            rows.track(virtual_list::Part::Row, shown, cx);
         });
         let entries: Vec<String> = self
             .actions
@@ -1249,7 +1297,7 @@ impl Render for Demo {
             .map(|entry| entry.key.clone())
             .collect();
         self.actions.update(cx, |actions, cx| {
-            actions.track(menu::Part::Item, entries, cx)
+            actions.track(menu::Part::Item, entries, cx);
         });
         let ids: Vec<String> = self
             .notices
@@ -1269,7 +1317,7 @@ impl Render for Demo {
                 range_slider::Part::Thumb,
                 ["0".to_string(), "1".to_string()],
                 cx,
-            )
+            );
         });
         let nodes = ["a", "b", "c"].map(String::from);
         self.board
@@ -1305,7 +1353,7 @@ fn main() {
             KeyBinding::new("shift-tab", FocusPrev, None),
         ]);
         let bounds = Bounds::centered(None, size(px(1480.), px(900.)), cx);
-        cx.open_window(
+        let opened = cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 titlebar: Some(gpui::TitlebarOptions {
@@ -1315,8 +1363,12 @@ fn main() {
                 ..Default::default()
             },
             |_, cx| cx.new(Demo::new),
-        )
-        .unwrap();
+        );
+        if let Err(error) = opened {
+            eprintln!("could not open the demo window: {error}");
+            cx.quit();
+            return;
+        }
         cx.activate(true);
 
         let runtime_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into());

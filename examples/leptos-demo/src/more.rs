@@ -119,7 +119,7 @@ fn OutlineRows() -> impl IntoView {
         <Part part=OutlinePart::Root>
             <For each=rows key=|row| row.clone() let:row>
                 <Part part=OutlinePart::Row item=row.0.clone()>
-                    <span style=format!("display:block;padding-left:{}px", row.1 * 24)>{row.0.clone()}</span>
+                    <span style=format!("display:block;padding-left:{}px", row.1.saturating_mul(24))>{row.0.clone()}</span>
                 </Part>
             </For>
         </Part>
@@ -157,7 +157,7 @@ fn Pages() -> impl IntoView {
         <Part part=pagination::Part::Root>
             <div class="pages">
                 <Part part=pagination::Part::Previous label="Previous page">"‹"</Part>
-                <For each=move || pages.with(|p| p.range()) key=|item| format!("{item:?}") let:item>
+                <For each=move || pages.with(armature_core::pagination::Pagination::range) key=|item| format!("{item:?}") let:item>
                     {match item {
                         PageItem::Page(page) => view! { <Part part=pagination::Part::Page item=page.to_string()>{page}</Part> }.into_any(),
                         _ => view! { <span>"…"</span> }.into_any(),
@@ -178,7 +178,7 @@ fn Toasts() -> impl IntoView {
                 <Part part=toast::Part::Toast item=toast.id.clone()>
                     <Part part=toast::Part::Title item=toast.id.clone()>{toast.title.clone()}</Part>
                     <Part part=toast::Part::Action item=toast.id.clone()>{toast.action.clone()}</Part>
-                    <Part part=toast::Part::Close item=toast.id.clone() label="Dismiss">"×"</Part>
+                    <Part part=toast::Part::Close item=toast.id label="Dismiss">"×"</Part>
                 </Part>
             </For>
         </Part>
@@ -216,7 +216,7 @@ fn Slides() -> impl IntoView {
     view! {
         <Part part=carousel::Part::Root>
             <Part part=carousel::Part::Viewport>
-                <div class="strip" style:transform=move || format!("translateX(-{}%)", carousel.with(|c| c.position()) * 100.0)>
+                <div class="strip" style:transform=move || format!("translateX(-{}%)", carousel.with(armature_core::carousel::Carousel::position) * 100.0)>
                     {["one", "two", "three"].map(|key| view! { <Part part=carousel::Part::Slide item=key>{key}</Part> }).collect_view()}
                 </div>
             </Part>
@@ -295,7 +295,14 @@ fn WideParts() -> impl IntoView {
 #[component]
 fn CropParts() -> impl IntoView {
     let cropper = use_primitive::<ImageCropper>();
-    let side = move |at: usize| move || format!("{}%", cropper.with(|c| c.fractions()[at]) * 100.0);
+    let side = move |at: usize| {
+        move || {
+            format!(
+                "{}%",
+                cropper.with(|c| c.fractions().get(at).copied().unwrap_or_default()) * 100.0
+            )
+        }
+    };
     view! {
         <Part part=image_cropper::Part::Area>
             <div class="crop-box" style:left=side(0) style:top=side(1) style:width=side(2) style:height=side(3)>
@@ -318,16 +325,16 @@ fn TraceRows() -> impl IntoView {
     };
     view! {
         <Part part=waterfall::Part::Root>
-            <For each=move || trace.with(|t| t.rows()) key=|row| row.key.clone() let:row>
+            <For each=move || trace.with(armature_core::waterfall::Waterfall::rows) key=|row| row.key.clone() let:row>
                 {
                     let (key, name) = (row.key.clone(), row.key.clone());
                     view! {
                         <div class="trace-row">
-                            <div class="trace-name" style:padding-left=format!("{}px", (row.level - 1) * 12)>
+                            <div class="trace-name" style:padding-left=format!("{}px", row.level.saturating_sub(1).saturating_mul(12))>
                                 <Part part=waterfall::Part::Row item=key.clone()>{name}</Part>
                             </div>
                             <div class="trace-lane">
-                                <div class="trace-bar" style:left=bar(key.clone(), 0) style:width=bar(key.clone(), 1)>
+                                <div class="trace-bar" style:left=bar(key.clone(), 0) style:width=bar(key, 1)>
                                     <Part part=waterfall::Part::Bar item=key.clone() />
                                 </div>
                             </div>
@@ -355,11 +362,15 @@ fn Files() -> impl IntoView {
     }
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "one section for each component the demo shows"
+)]
 #[component]
 pub fn More() -> impl IntoView {
-    let saves = RwSignal::new(0);
+    let saves = RwSignal::new(0_u32);
     let on_save = Callback::new(move |_: ValueChange| {
-        saves.update(|count| *count += 1);
+        saves.update(|count| *count = count.saturating_add(1));
         true
     });
     let (agreed, on_agreed) = follow();
@@ -408,7 +419,7 @@ pub fn More() -> impl IntoView {
         })
     };
     let submit = Callback::new(move |_: ValueChange| {
-        let result = form.try_update_value(|form| form.submit());
+        let result = form.try_update_value(armature_core::form::Form::submit);
         outcome.set(match result {
             Some(Ok(fields)) => format!(
                 "Sent: {}",
@@ -434,7 +445,7 @@ pub fn More() -> impl IntoView {
         true
     });
     let toasts = RwSignal::new(Vec::<String>::new());
-    let count = RwSignal::new(0);
+    let count = RwSignal::new(0_u32);
     let on_toasts = Callback::new(move |change: ValueChange| {
         // An action is offered first. The list follows when the toast goes.
         if !change
@@ -447,7 +458,7 @@ pub fn More() -> impl IntoView {
         true
     });
     let notify = Callback::new(move |_: ValueChange| {
-        count.update(|n| *n += 1);
+        count.update(|n| *n = n.saturating_add(1));
         let toast = Toast::new(&count.get_untracked().to_string(), "Saved")
             .action("Undo")
             .lasting(1500);
@@ -588,7 +599,7 @@ pub fn More() -> impl IntoView {
 
         <Section title="Navigation menu">
             <p id="nav-value">"Open: " {move || nav.get().join("")}</p>
-            <Root machine=NavigationMenu::new(Default::default(), &[("products", true), ("pricing", false)]).current("pricing") label="Main" on_value_change=on_nav>
+            <Root machine=NavigationMenu::new(navigation_menu::Options::default(), &[("products", true), ("pricing", false)]).current("pricing") label="Main" on_value_change=on_nav>
                 <Part part=navigation_menu::Part::Root>
                     <div class="bar">
                         <Part part=navigation_menu::Part::Trigger item="products">"Products"</Part>
@@ -622,7 +633,7 @@ pub fn More() -> impl IntoView {
 
         <Section title="Date picker">
             <p id="due-value">"Due: " {move || due.get().join("")}</p>
-            <Root machine=DatePicker::new(Default::default(), Date::new(2026, 11, 17).expect("a real date")) label="Due date" on_value_change=on_due>
+            <Root machine=DatePicker::new(armature_core::calendar::Options::default(), Date::new(2026, 11, 17).unwrap_or(Date::FIRST)) label="Due date" on_value_change=on_due>
                 <PickerParts />
             </Root>
         </Section>
@@ -714,7 +725,7 @@ pub fn More() -> impl IntoView {
             // An outline reordered and nested with the keyboard or by dragging.
             <Root
                 machine=armature_core::outline::Outline::new(
-                    Default::default(),
+                    armature_core::outline::Options::default(),
                     [("inbox", 0), ("projects", 0), ("site", 1), ("copy", 2), ("app", 1), ("archive", 0)]
                         .iter()
                         .map(|(key, depth)| armature_core::outline::OutlineRow { key: key.to_string(), depth: *depth })
