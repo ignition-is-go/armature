@@ -210,15 +210,23 @@ impl CheckboxGroup {
     #[must_use]
     pub fn all_state(&self) -> CheckState {
         let enabled = self.items.enabled_keys();
-        let on = enabled
-            .iter()
-            .filter(|key| self.checked.iter().any(|c| c == *key))
-            .count();
+        let on = enabled.iter().filter(|key| self.is_checked(key)).count();
         match on {
             0 => CheckState::Unchecked,
             n if n == enabled.len() => CheckState::Checked,
             _ => CheckState::Indeterminate,
         }
+    }
+
+    fn is_checked(&self, key: &str) -> bool {
+        self.checked.iter().any(|checked| checked == key)
+    }
+
+    /// What pressing the box that stands for the group does: checks every box,
+    /// or clears them all when every one is checked already.
+    fn toggle_all(&mut self, reason: Reason, gate: Gate) -> bool {
+        let check = self.all_state() != CheckState::Checked;
+        self.set_all(check, Source::User, reason, gate)
     }
 
     fn commit(
@@ -320,7 +328,7 @@ impl Primitive for CheckboxGroup {
                 let enabled = self.items.is_enabled(key);
                 Semantics {
                     role: Some(Role::Checkbox),
-                    checked: Some(self.checked.iter().any(|c| c == key)),
+                    checked: Some(self.is_checked(key)),
                     disabled: !enabled,
                     // Every box is its own Tab stop, as separate checkboxes are.
                     focusable: if enabled {
@@ -349,12 +357,7 @@ impl Primitive for CheckboxGroup {
                 part: GroupPart::All,
                 ..
             } => {
-                self.set_all(
-                    self.all_state() != CheckState::Checked,
-                    Source::User,
-                    Reason::Press,
-                    gate,
-                );
+                self.toggle_all(Reason::Press, gate);
                 Reaction::handled()
             }
             Input::Press {
@@ -368,12 +371,7 @@ impl Primitive for CheckboxGroup {
             Input::Key {
                 key: Key::Space, ..
             } if self.on_all => {
-                self.set_all(
-                    self.all_state() != CheckState::Checked,
-                    Source::User,
-                    Reason::Keyboard,
-                    gate,
-                );
+                self.toggle_all(Reason::Keyboard, gate);
                 Reaction::handled()
             }
             Input::Key {
@@ -449,7 +447,7 @@ impl Primitive for CheckboxGroup {
             Some(true) => return Err(ActError::Disabled(key.to_string())),
             Some(false) => {}
         }
-        let on = self.checked.iter().any(|c| c == key);
+        let on = self.is_checked(key);
         if (action == "check" && on) || (action == "uncheck" && !on) {
             return Ok(());
         }

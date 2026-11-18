@@ -134,8 +134,8 @@ impl Timeline {
             start: span.start.max(self.opts.range.start),
             end: span.end.min(self.opts.range.end),
         };
-        if let Some(entry) = self.spans.iter_mut().find(|(k, _)| k == key) {
-            entry.1 = held;
+        if let Some((_, span)) = self.spans.iter_mut().find(|(k, _)| k == key) {
+            *span = held;
         }
     }
 
