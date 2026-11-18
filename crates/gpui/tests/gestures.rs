@@ -105,6 +105,24 @@ fn open(cx: &mut TestAppContext) -> (Entity<Demo>, &mut VisualTestContext) {
     cx.add_window_view(|_, cx| Demo::new(cx))
 }
 
+/// Puts focus on one part of a machine, as Tab or a press would.
+#[expect(
+    clippy::expect_used,
+    reason = "a helper for tests fails as a test does"
+)]
+fn focus<P: armature_core::primitive::Primitive>(
+    machine: &Entity<Machine<P>>,
+    cx: &mut VisualTestContext,
+    part: P::Part,
+    item: Option<&str>,
+) {
+    machine.update_in(cx, |m, window, cx| {
+        m.focus_handle(part, item)
+            .expect("the test names a part that takes focus")
+            .focus(window, cx);
+    });
+}
+
 fn down(cx: &mut VisualTestContext, x: f32, y: f32) {
     cx.simulate_mouse_down(point(px(x), px(y)), MouseButton::Left, Modifiers::default());
 }
@@ -166,11 +184,7 @@ fn a_held_stepper_button_repeats_until_released(cx: &mut TestAppContext) {
 fn typing_edits_a_number_field_and_enter_commits_it(cx: &mut TestAppContext) {
     let (demo, cx) = open(cx);
     let quantity = demo.update(cx, |d, _| d.quantity.clone());
-    quantity.update_in(cx, |q, window, cx| {
-        q.focus_handle(number_input::Part::Input, None)
-            .unwrap()
-            .focus(window, cx);
-    });
+    focus(&quantity, cx, number_input::Part::Input, None);
 
     cx.simulate_keystrokes("backspace 4 2");
     let shown = quantity.update(cx, |q, _| q.text(number_input::Part::Input, None));
@@ -188,11 +202,7 @@ fn typing_edits_a_number_field_and_enter_commits_it(cx: &mut TestAppContext) {
 fn typing_filters_a_command_palette_and_enter_runs_the_match(cx: &mut TestAppContext) {
     let (demo, cx) = open(cx);
     let commands = demo.update(cx, |d, _| d.commands.clone());
-    commands.update_in(cx, |c, window, cx| {
-        c.focus_handle(command::Part::Input, None)
-            .unwrap()
-            .focus(window, cx);
-    });
+    focus(&commands, cx, command::Part::Input, None);
 
     cx.simulate_keystrokes("s a v");
     commands.update(cx, |c, _| {
@@ -235,11 +245,7 @@ fn the_owner_can_set_a_value_without_the_gate(cx: &mut TestAppContext) {
 fn enter_and_space_press_a_focused_switch_exactly_once(cx: &mut TestAppContext) {
     let (demo, cx) = open(cx);
     let wifi = demo.update(cx, |d, _| d.wifi.clone());
-    wifi.update_in(cx, |w, window, cx| {
-        w.focus_handle(toggle::Part::Root, None)
-            .unwrap()
-            .focus(window, cx);
-    });
+    focus(&wifi, cx, toggle::Part::Root, None);
 
     cx.simulate_keystrokes("enter");
     assert!(wifi.update(cx, |w, _| w.primitive().is_on()));
@@ -272,11 +278,7 @@ fn a_dialog_opens_from_the_keyboard_and_escape_returns_focus(cx: &mut TestAppCon
             c.focus_handle(part, None).unwrap().is_focused(window)
         })
     };
-    confirm.update_in(cx, |c, window, cx| {
-        c.focus_handle(dialog::Part::Trigger, None)
-            .unwrap()
-            .focus(window, cx);
-    });
+    focus(&confirm, cx, dialog::Part::Trigger, None);
 
     cx.simulate_keystrokes("enter");
     assert!(confirm.update(cx, |c, _| c.primitive().is_open()));
@@ -331,11 +333,7 @@ fn a_calendar_keeps_focus_when_the_keyboard_pages_to_another_month(cx: &mut Test
         }))
     });
     let calendar = page.update(cx, |page, _| page.0.clone());
-    calendar.update_in(cx, |c, window, cx| {
-        c.focus_handle(calendar::Part::Day, Some("2026-11-30"))
-            .unwrap()
-            .focus(window, cx);
-    });
+    focus(&calendar, cx, calendar::Part::Day, Some("2026-11-30"));
 
     cx.simulate_keystrokes("down down enter");
 
@@ -368,6 +366,7 @@ fn dragging_a_divider_resizes_the_panels(cx: &mut TestAppContext) {
                 .flex()
                 .w(px(400.))
                 .h(px(100.))
+                // 4px for each percent of the 400px group, less half the 10px handle.
                 .child(div().w(px(4.0f32.mul_add(share, -5.))))
                 .child(
                     part(&self.0, resizable::Part::Handle, None, cx)
