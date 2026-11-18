@@ -340,12 +340,9 @@ pub fn to_text(value: &[Segment]) -> String {
     for (index, segment) in value.iter().enumerate() {
         match segment {
             Segment::Token(token) => {
-                out.push_str(&format!(
-                    "[@{}]({}:{})",
-                    escaped(&token.label, &['\\', '[', ']']),
-                    token.kind,
-                    escaped(&token.value, &['\\', '(', ')'])
-                ));
+                let label = escaped(&token.label, &['\\', '[', ']']);
+                let value = escaped(&token.value, &['\\', '(', ')']);
+                out = format!("{out}[@{label}]({}:{value})", token.kind);
             }
             Segment::Text(text) => {
                 let mut parts: Vec<&str> = text.split("[@").collect();

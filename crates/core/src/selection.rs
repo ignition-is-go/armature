@@ -16,13 +16,13 @@ pub fn propose(
     selected: &[String],
     anchor: Option<&str>,
     key: &str,
-    mods: Modifiers,
+    held: Modifiers,
     order: &[&str],
 ) -> Vec<String> {
     if mode == Mode::Single {
         // Toggling the one selected item clears it.
         let sole =
-            mods.ctrl && selected.len() == 1 && selected.first().is_some_and(|only| only == key);
+            held.ctrl && selected.len() == 1 && selected.first().is_some_and(|only| only == key);
         return if sole {
             Vec::new()
         } else {
@@ -31,7 +31,7 @@ pub fn propose(
     }
     let position = |k: &str| order.iter().position(|o| *o == k);
 
-    if mods.shift
+    if held.shift
         && let (Some(a), Some(b)) = (anchor.and_then(position), position(key))
     {
         let (lo, hi) = (a.min(b), a.max(b));
@@ -42,7 +42,7 @@ pub fn propose(
             .map(std::string::ToString::to_string)
             .collect();
     }
-    if mods.ctrl {
+    if held.ctrl {
         let mut next: Vec<String> = selected.to_vec();
         match next.iter().position(|k| k == key) {
             Some(i) => {

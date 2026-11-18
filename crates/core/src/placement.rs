@@ -54,13 +54,13 @@ pub struct Placement {
     pub y: f64,
     /// The side used, which is the other one after a flip.
     pub side: PlaceSide,
-    /// The room on that side, for limiting the popup's size.
+    /// The room on that side, for limiting the popup's popup.
     pub available: Size,
 }
 
 fn point(
     anchor: Rect,
-    size: Size,
+    popup: Size,
     side: PlaceSide,
     align: PlaceAlign,
     options: &PlaceOptions,
@@ -72,30 +72,30 @@ fn point(
     };
     match side {
         PlaceSide::Bottom => (
-            along(anchor.x, anchor.width, size.width),
+            along(anchor.x, anchor.width, popup.width),
             anchor.y + anchor.height + options.side_offset,
         ),
         PlaceSide::Top => (
-            along(anchor.x, anchor.width, size.width),
-            anchor.y - size.height - options.side_offset,
+            along(anchor.x, anchor.width, popup.width),
+            anchor.y - popup.height - options.side_offset,
         ),
         PlaceSide::Right => (
             anchor.x + anchor.width + options.side_offset,
-            along(anchor.y, anchor.height, size.height),
+            along(anchor.y, anchor.height, popup.height),
         ),
         PlaceSide::Left => (
-            anchor.x - size.width - options.side_offset,
-            along(anchor.y, anchor.height, size.height),
+            anchor.x - popup.width - options.side_offset,
+            along(anchor.y, anchor.height, popup.height),
         ),
     }
 }
 
 /// How far a popup at `at` runs past the view on `side`. Negative when it fits.
-fn overflow(side: PlaceSide, at: (f64, f64), size: Size, viewport: Rect, padding: f64) -> f64 {
+fn overflow(side: PlaceSide, at: (f64, f64), popup: Size, viewport: Rect, padding: f64) -> f64 {
     match side {
-        PlaceSide::Bottom => at.1 + size.height - (viewport.y + viewport.height - padding),
+        PlaceSide::Bottom => at.1 + popup.height - (viewport.y + viewport.height - padding),
         PlaceSide::Top => viewport.y + padding - at.1,
-        PlaceSide::Right => at.0 + size.width - (viewport.x + viewport.width - padding),
+        PlaceSide::Right => at.0 + popup.width - (viewport.x + viewport.width - padding),
         PlaceSide::Left => viewport.x + padding - at.0,
     }
 }
@@ -125,7 +125,7 @@ const fn held(value: f64, least: f64, most: f64) -> f64 {
     value.min(most).max(least)
 }
 
-/// Places a popup of `size` beside `anchor` within `viewport`, the part of the
+/// Places a popup of `popup` beside `anchor` within `viewport`, the part of the
 /// page on show.
 ///
 /// It flips to the other side when that overflows less, slides along the anchor to stay
@@ -134,7 +134,7 @@ const fn held(value: f64, least: f64, most: f64) -> f64 {
 #[must_use]
 pub fn compute_placement(
     anchor: Rect,
-    size: Size,
+    popup: Size,
     viewport: Rect,
     options: PlaceOptions,
 ) -> Placement {
@@ -146,32 +146,32 @@ pub fn compute_placement(
     };
     let padding = options.collision_padding;
     let mut side = options.side;
-    let mut at = point(anchor, size, side, align, &options);
-    let over = overflow(side, at, size, viewport, padding);
+    let mut at = point(anchor, popup, side, align, &options);
+    let over = overflow(side, at, popup, viewport, padding);
     if over > 0.0 {
         let other = side.opposite();
-        let there = point(anchor, size, other, align, &options);
-        if overflow(other, there, size, viewport, padding) < over {
+        let there = point(anchor, popup, other, align, &options);
+        if overflow(other, there, popup, viewport, padding) < over {
             (side, at) = (other, there);
         }
     }
     let mut room = available(side, anchor, viewport, &options);
-    if overflow(side, at, size, viewport, padding) > 0.0 {
-        if side.is_vertical() && size.height > 0.0 && anchor.height >= size.height {
+    if overflow(side, at, popup, viewport, padding) > 0.0 {
+        if side.is_vertical() && popup.height > 0.0 && anchor.height >= popup.height {
             let on_screen = held(
                 at.1,
                 viewport.y + padding,
-                viewport.y + viewport.height - size.height - padding,
+                viewport.y + viewport.height - popup.height - padding,
             );
-            at.1 = held(on_screen, anchor.y, anchor.y + anchor.height - size.height);
+            at.1 = held(on_screen, anchor.y, anchor.y + anchor.height - popup.height);
             room.height = padding.mul_add(-2.0, viewport.height).max(0.0);
-        } else if !side.is_vertical() && size.width > 0.0 && anchor.width >= size.width {
+        } else if !side.is_vertical() && popup.width > 0.0 && anchor.width >= popup.width {
             let on_screen = held(
                 at.0,
                 viewport.x + padding,
-                viewport.x + viewport.width - size.width - padding,
+                viewport.x + viewport.width - popup.width - padding,
             );
-            at.0 = held(on_screen, anchor.x, anchor.x + anchor.width - size.width);
+            at.0 = held(on_screen, anchor.x, anchor.x + anchor.width - popup.width);
             room.width = padding.mul_add(-2.0, viewport.width).max(0.0);
         }
     }
@@ -179,23 +179,23 @@ pub fn compute_placement(
         let x = held(
             at.0,
             viewport.x + padding,
-            viewport.x + viewport.width - size.width - padding,
+            viewport.x + viewport.width - popup.width - padding,
         );
         at.0 = if (x - at.0).abs() < f64::EPSILON {
             x
         } else {
-            held(x, anchor.x - size.width, anchor.x + anchor.width)
+            held(x, anchor.x - popup.width, anchor.x + anchor.width)
         };
     } else {
         let y = held(
             at.1,
             viewport.y + padding,
-            viewport.y + viewport.height - size.height - padding,
+            viewport.y + viewport.height - popup.height - padding,
         );
         at.1 = if (y - at.1).abs() < f64::EPSILON {
             y
         } else {
-            held(y, anchor.y - size.height, anchor.y + anchor.height)
+            held(y, anchor.y - popup.height, anchor.y + anchor.height)
         };
     }
     Placement {

@@ -148,14 +148,13 @@ impl FileInput {
             } else {
                 None
             };
-            match problem {
-                Some(problem) => rejected.push((file.name, problem)),
+            if let Some(problem) = problem {
+                rejected.push((file.name, problem));
+            } else {
                 // A file offered again replaces the one of the same name.
-                None => {
-                    taken.retain(|held| held.name != file.name);
-                    taken.push(file);
-                    added = added.saturating_add(1);
-                }
+                taken.retain(|held| held.name != file.name);
+                taken.push(file);
+                added = added.saturating_add(1);
             }
         }
         if added > 0 && !self.commit(taken, Source::User, reason, gate) {
@@ -164,11 +163,8 @@ impl FileInput {
         let plural = |count: usize| if count == 1 { "file" } else { "files" };
         let mut message = format!("{added} {} added.", plural(added));
         if !rejected.is_empty() {
-            message.push_str(&format!(
-                " {} {} not accepted.",
-                rejected.len(),
-                plural(rejected.len())
-            ));
+            let refused = rejected.len();
+            message = format!("{message} {refused} {} not accepted.", plural(refused));
         }
         self.rejected = rejected;
         Reaction::handled().announcing(message)

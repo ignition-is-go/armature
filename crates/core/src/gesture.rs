@@ -205,15 +205,16 @@ impl Spring {
     /// How long the spring takes to come to rest within half a unit, in seconds.
     #[must_use]
     pub fn settle_time(&self, from: f64, to: f64, velocity: f64) -> f64 {
-        let mut seconds = 0.0;
-        while seconds < 10.0 {
-            let (position, speed) = self.solve(from, to, velocity, seconds);
-            if (position - to).abs() <= 0.5 && speed.abs() <= 20.0 {
-                return seconds;
-            }
-            seconds += 1.0 / 120.0;
-        }
-        seconds
+        // Looked for a frame at a time, and given up on after ten seconds.
+        const FRAMES_PER_SECOND: u32 = 120;
+        const LONGEST_SECONDS: u32 = 10;
+        (0..FRAMES_PER_SECOND.saturating_mul(LONGEST_SECONDS))
+            .map(|frame| f64::from(frame) / f64::from(FRAMES_PER_SECOND))
+            .find(|seconds| {
+                let (position, speed) = self.solve(from, to, velocity, *seconds);
+                (position - to).abs() <= 0.5 && speed.abs() <= 20.0
+            })
+            .unwrap_or_else(|| f64::from(LONGEST_SECONDS))
     }
 
     /// The spring as a timing curve a style sheet can play: a `linear(..)` easing
@@ -226,7 +227,7 @@ impl Spring {
         }
         let duration = self.settle_time(from, to, velocity);
         let steps = ((duration * 60.0).ceil().cast::<usize>()).clamp(2, 120);
-        let stops: Vec<String> = (0..steps)
+        let samples: Vec<String> = (0..steps)
             .map(|step| {
                 let (position, _) = self.solve(
                     from,
@@ -241,7 +242,7 @@ impl Spring {
             })
             .chain(["1".to_string()])
             .collect();
-        format!("linear({})", stops.join(", "))
+        format!("linear({})", samples.join(", "))
     }
 }
 

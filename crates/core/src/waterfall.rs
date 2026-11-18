@@ -157,9 +157,9 @@ impl Waterfall {
             .find(|step| *step >= rough)
             .unwrap_or(rough);
         let first = (start / step).ceil().cast::<i64>();
-        (first..)
+        let last = (end / step).floor().cast::<i64>();
+        (first..=last)
             .map(|n| n.cast::<f64>() * step)
-            .take_while(|time| *time <= end)
             .map(|time| ((time - start) / (end - start), time))
             .collect()
     }

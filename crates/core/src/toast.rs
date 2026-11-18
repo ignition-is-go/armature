@@ -235,8 +235,8 @@ impl Toaster {
                 );
                 Reaction::default()
             }
-            (true, held) => {
-                self.paused = held;
+            (true, already) => {
+                self.paused = already;
                 Reaction::default()
             }
             (false, Some(left)) => {

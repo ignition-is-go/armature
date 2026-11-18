@@ -186,9 +186,9 @@ impl Tree {
         };
         let leaves = self.leaves(*at);
         if leaves.iter().all(|leaf| checked.contains(*leaf)) {
-            leaves.iter().for_each(|leaf| {
+            for leaf in &leaves {
                 next.remove(*leaf);
-            });
+            }
         } else {
             next.extend(leaves.iter().map(std::string::ToString::to_string));
         }

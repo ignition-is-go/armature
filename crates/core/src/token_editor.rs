@@ -176,9 +176,10 @@ impl TokenEditor {
             .chars()
             .skip(self.caret)
             .position(|ch| ch == '\n');
-        after.map_or(self.length(), |line_break| {
-            self.caret.saturating_add(line_break)
-        })
+        after.map_or_else(
+            || self.length(),
+            |line_break| self.caret.saturating_add(line_break),
+        )
     }
 }
 

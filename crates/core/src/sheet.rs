@@ -323,11 +323,12 @@ impl Primitive for Sheet {
             }
             // Scrolling carries the sheet. Each movement puts the settling off again.
             (Input::Scrolled { offset, now_ms, .. }, Some(at)) => {
-                let moved = self.scrolled.map_or(
-                    (offset - self.detents.get(at).copied().unwrap_or_default()).abs()
-                        > f64::EPSILON,
-                    |(was, _)| (was - offset).abs() > f64::EPSILON,
+                // Measured from where it last was, or from its resting place.
+                let from = self.scrolled.map_or_else(
+                    || self.detents.get(at).copied().unwrap_or_default(),
+                    |(was, _)| was,
                 );
+                let moved = (from - offset).abs() > f64::EPSILON;
                 if !moved {
                     return Reaction::default();
                 }

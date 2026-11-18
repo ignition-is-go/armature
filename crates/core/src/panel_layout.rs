@@ -420,9 +420,9 @@ pub fn resize_panel(
         .flatten();
     let mut best: Option<Vec<f64>> = None;
     for candidate in [after, before].into_iter().flatten() {
-        let closest = best.as_ref().map_or(size_at(layout, index), |best| {
-            best.get(index).copied().unwrap_or_default()
-        });
+        let closest = best
+            .as_ref()
+            .map_or_else(|| size_at(layout, index), |best| size_at(best, index));
         if (candidate.get(index).copied().unwrap_or_default() - target).abs()
             < (closest - target).abs() - EPSILON
         {
