@@ -2,12 +2,26 @@
 //! against armature. Each test names the upstream file it follows. Units differ in
 //! one place: upstream measures velocity in px/ms, armature in units per second.
 
+use armature_core::color::{Notation, Rgb};
 use armature_core::convert::Cast;
+use armature_core::date::{Date, days_in_month, month_grid};
+use armature_core::file_input::accepts_file;
+use armature_core::fold::fold_text;
+use armature_core::gauge::percent;
+use armature_core::gauge::{Meter, MeterPart};
 use armature_core::gesture::{
     DECELERATION, VelocityTracker, dim_amount, expand_amount, project_distance, rubber_band,
 };
+use armature_core::number::{NumberRange, decimals_of, wrap};
+use armature_core::outline::{OutlineMove, depth_at, move_row, slot_at};
+use armature_core::outline::{OutlineRow, Place, depth_range, moved_rows, place_of, subtree_end};
 use armature_core::pagination::{PageItem, page_count, page_range};
+use armature_core::primitive::Primitive;
+use armature_core::selection::{all_toggled, keys_between, range_selection, toggled_keys};
+use armature_core::text_match::{match_ranges, match_segments};
+use armature_core::tree::{CheckStrategy, Checked, Tree, TreeItem};
 use armature_core::typeahead::Typeahead;
+use std::collections::HashSet;
 
 fn close(left: f64, right: f64, tolerance: f64) -> bool {
     (left - right).abs() <= tolerance
@@ -230,10 +244,6 @@ fn typeahead() {
     );
 }
 
-use armature_core::date::{Date, days_in_month, month_grid};
-use armature_core::tree::{CheckStrategy, Checked, Tree, TreeItem};
-use std::collections::HashSet;
-
 #[expect(
     clippy::expect_used,
     reason = "a helper for tests fails as a test does"
@@ -436,8 +446,6 @@ fn tree_checking() {
     );
 }
 
-use armature_core::number::{NumberRange, decimals_of, wrap};
-
 // number.test.ts
 #[test]
 fn number_steps_and_scales() {
@@ -512,9 +520,6 @@ fn number_steps_and_scales() {
     assert!((log.at_fraction(log.fraction(1234.0)) - 1234.0).abs() < 1e-6);
 }
 
-use armature_core::file_input::accepts_file;
-use armature_core::gauge::percent;
-
 // files.test.ts and gauge.test.ts
 #[test]
 fn file_kinds_and_gauges() {
@@ -555,9 +560,6 @@ fn file_kinds_and_gauges() {
     );
 }
 
-use armature_core::fold::fold_text;
-use armature_core::text_match::{match_ranges, match_segments};
-
 // match.test.ts
 #[test]
 fn folding_and_match_ranges() {
@@ -586,8 +588,6 @@ fn folding_and_match_ranges() {
     assert_eq!(push[0].start, 4);
 }
 
-use armature_core::color::{Notation, Rgb};
-
 // color.test.ts
 #[test]
 fn colour_notations() {
@@ -610,10 +610,6 @@ fn colour_notations() {
     assert_eq!(black.write_alpha(Notation::Hex, alpha), "#00000080");
     assert!(Rgb::read("#12").is_none());
 }
-
-use armature_core::gauge::{Meter, MeterPart};
-use armature_core::primitive::Primitive;
-use armature_core::selection::{all_toggled, keys_between, range_selection, toggled_keys};
 
 fn keys(list: &[&str]) -> Vec<String> {
     list.iter().map(std::string::ToString::to_string).collect()
@@ -685,8 +681,6 @@ fn meter_readings() {
     assert_eq!(meter.percent(), 0.0);
 }
 
-use armature_core::outline::{OutlineRow, Place, depth_range, moved_rows, place_of, subtree_end};
-
 fn outline(text: &str) -> Vec<OutlineRow> {
     text.lines()
         .filter(|line| !line.trim().is_empty())
@@ -741,8 +735,6 @@ fn outline_reordering() {
         "dropped where it was"
     );
 }
-
-use armature_core::outline::{OutlineMove, depth_at, move_row, slot_at};
 
 fn written(rows: &[OutlineRow]) -> String {
     rows.iter()
