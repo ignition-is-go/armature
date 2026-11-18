@@ -957,7 +957,10 @@ fn shortcuts() {
 
 // trigger-match.test.ts
 #[test]
-#[allow(clippy::cloned_ref_to_slice_refs)]
+#[allow(
+    clippy::cloned_ref_to_slice_refs,
+    reason = "the rules are written as upstream writes them, one cloned into a list"
+)]
 fn trigger_matching() {
     use armature_core::trigger_match::{
         Boundary, Dismissed, Spaces, TriggerRule, find_trigger_match, is_at_boundary,

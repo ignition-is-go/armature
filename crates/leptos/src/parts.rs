@@ -523,15 +523,18 @@ where
     // primitive would take over any part this one creates later, such as a menu's
     // items when it opens.
     let owner = Owner::current().map_or_else(Owner::new, |current| current.child());
+    let access = Access {
+        hidden: agent_hidden,
+        secret: agent_secret,
+        confirm: agent_confirm,
+    };
     let view = owner.with(move || {
         root_view(
             machine,
             label,
             on_value_change,
             value,
-            agent_hidden,
-            agent_secret,
-            agent_confirm,
+            access,
             settings,
             children,
         )
@@ -809,18 +812,12 @@ fn follow_captured_gesture<P: Primitive + Send + Sync>(ctx: Context<P>) {
     }
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the props of `Root`, passed straight through"
-)]
 fn root_view<P>(
     machine: P,
     label: String,
     on_value_change: Option<ChangeGate>,
     value: Option<Signal<Vec<String>>>,
-    agent_hidden: bool,
-    agent_secret: bool,
-    agent_confirm: Option<String>,
+    access: Access,
     settings: Option<Signal<Vec<(String, String)>>>,
     children: Children,
 ) -> AnyView
@@ -836,16 +833,11 @@ where
         label,
         gate: on_value_change,
         captured: StoredValue::new(None),
-        secret: agent_secret,
+        secret: access.secret,
     };
     provide_context(ctx);
 
     follow_controlled_value(machine, value);
-    let access = Access {
-        hidden: agent_hidden,
-        secret: agent_secret,
-        confirm: agent_confirm,
-    };
     register_with_agents(ctx, access);
     watch_outside_presses(ctx);
     follow_settings(machine, settings);
