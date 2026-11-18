@@ -70,7 +70,7 @@ impl ToggleGroup {
             .iter()
             .map(String::as_str)
             .find(|key| self.items.is_enabled(key));
-        focused.or(down).or(self.items.first_enabled())
+        focused.or(down).or_else(|| self.items.first_enabled())
     }
 
     fn toggle(&mut self, key: &str, source: Source, reason: Reason, gate: Gate) -> bool {
@@ -178,7 +178,11 @@ impl Primitive for ToggleGroup {
             Input::Key {
                 key: Key::Enter | Key::Space,
                 ..
-            } => match self.focused.clone().or(self.tab_stop().map(str::to_string)) {
+            } => match self
+                .focused
+                .clone()
+                .or_else(|| self.tab_stop().map(str::to_string))
+            {
                 Some(key) => {
                     self.toggle(&key, Source::User, Reason::Keyboard, gate);
                     Reaction::handled()

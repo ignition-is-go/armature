@@ -300,7 +300,7 @@ impl Primitive for Accordion {
         if found.disabled {
             return Err(ActError::Disabled(key.to_string()));
         }
-        let open = open.unwrap_or(!self.is_open(key));
+        let open = open.unwrap_or_else(|| !self.is_open(key));
         if self.set(key, open, Source::Agent, Reason::Action, gate) {
             Ok(())
         } else {

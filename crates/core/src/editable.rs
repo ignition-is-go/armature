@@ -181,7 +181,12 @@ impl Primitive for Editable {
     }
 
     fn text(&self, part: Part, _: Option<&str>) -> Option<String> {
-        (part == Part::Input).then(|| self.edit.draft().unwrap_or(self.edit.value()).to_string())
+        (part == Part::Input).then(|| {
+            self.edit
+                .draft()
+                .unwrap_or_else(|| self.edit.value())
+                .to_string()
+        })
     }
 
     fn value(&self) -> Vec<String> {

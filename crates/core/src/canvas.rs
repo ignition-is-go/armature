@@ -396,7 +396,7 @@ impl Primitive for Canvas {
                 let Some(from) = self
                     .selected
                     .first()
-                    .or(self.nodes.first().map(|node| &node.key))
+                    .or_else(|| self.nodes.first().map(|node| &node.key))
                     .cloned()
                 else {
                     return Reaction::default();

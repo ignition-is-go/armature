@@ -184,7 +184,7 @@ impl Waterfall {
         self.focused
             .as_deref()
             .filter(on_show)
-            .or(rows.first().map(|row| row.key.as_str()))
+            .or_else(|| rows.first().map(|row| row.key.as_str()))
             .map(str::to_string)
     }
 

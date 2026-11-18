@@ -609,7 +609,7 @@ impl Primitive for Outline {
                     .item
                     .clone()
                     .and_then(|key| Some((key.clone(), self.depth_of(&key)?)));
-                self.focused = pointer.item.clone();
+                self.focused.clone_from(&pointer.item);
                 Reaction::item(Part::Row, true, pointer.item).with(Effect::CapturePointer)
             }
             PointerPhase::Move => {

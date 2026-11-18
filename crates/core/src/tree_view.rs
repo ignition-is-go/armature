@@ -97,7 +97,7 @@ impl TreeView {
         self.focused
             .as_ref()
             .filter(visible)
-            .or(self.selected.as_ref().filter(visible))
+            .or_else(|| self.selected.as_ref().filter(visible))
             .cloned()
             .or_else(|| {
                 rows.iter()

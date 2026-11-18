@@ -163,7 +163,7 @@ impl Primitive for Tabs {
         match input {
             Input::Key { key, .. } => {
                 if let Some(nav) = roving::nav_for_key(key, self.opts.orientation, self.opts.dir) {
-                    let from = self.focused.as_deref().or(self.current());
+                    let from = self.focused.as_deref().or_else(|| self.current());
                     let focus = self.items.step(from, nav, self.opts.wrap);
                     if let Some(key) = &focus {
                         self.focused = Some(key.clone());

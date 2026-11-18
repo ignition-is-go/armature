@@ -278,8 +278,8 @@ impl Primitive for Sortable {
         match pointer.phase {
             PointerPhase::Down => {
                 self.drag.down(pointer.at);
-                self.pressed = pointer.item.clone();
-                self.focused = pointer.item.clone();
+                self.pressed.clone_from(&pointer.item);
+                self.focused.clone_from(&pointer.item);
                 Reaction::item(Part::Item, true, pointer.item).with(Effect::CapturePointer)
             }
             PointerPhase::Move => {

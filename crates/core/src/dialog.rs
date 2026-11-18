@@ -65,7 +65,7 @@ impl Options {
         match dismiss {
             Dismiss::ClosePress | Dismiss::TriggerPress | Dismiss::Controller => None,
             Dismiss::OutsidePress
-                if !self.is_modal() && !(self.dismiss_on_backdrop && self.dismissible) =>
+                if !(self.is_modal() || self.dismiss_on_backdrop && self.dismissible) =>
             {
                 Some(Refusal::Silent)
             }

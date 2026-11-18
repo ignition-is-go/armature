@@ -86,8 +86,8 @@ impl EventList {
         self.focused
             .as_deref()
             .filter(known)
-            .or(self.current.as_deref().filter(known))
-            .or(self.events.first_enabled())
+            .or_else(|| self.current.as_deref().filter(known))
+            .or_else(|| self.events.first_enabled())
     }
 }
 

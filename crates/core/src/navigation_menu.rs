@@ -110,7 +110,7 @@ impl NavigationMenu {
     fn tab_stop(&self) -> Option<&str> {
         self.focused
             .as_deref()
-            .or(self.entries.first().map(|(key, _)| key.as_str()))
+            .or_else(|| self.entries.first().map(|(key, _)| key.as_str()))
     }
 
     fn part_of(&self, key: &str) -> Part {

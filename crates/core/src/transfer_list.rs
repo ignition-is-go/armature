@@ -108,9 +108,9 @@ impl TransferList {
         let stay = &self.lists[from];
         let landing = stay
             .get(first.min(stay.len().saturating_sub(1)))
-            .or(self.lists[to].last())
+            .or_else(|| self.lists[to].last())
             .cloned();
-        self.focused = landing.clone();
+        self.focused.clone_from(&landing);
         let destination = if to == 1 { "chosen" } else { "available" };
         Some(
             Reaction::item(Part::Option, true, landing)
@@ -135,7 +135,7 @@ impl TransferList {
         self.focused
             .as_deref()
             .filter(|key| list.iter().any(|k| k == key))
-            .or(list.first().map(String::as_str))
+            .or_else(|| list.first().map(String::as_str))
     }
 }
 

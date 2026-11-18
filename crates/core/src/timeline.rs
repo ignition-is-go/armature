@@ -216,7 +216,7 @@ impl Primitive for Timeline {
                     .focused
                     .as_deref()
                     .filter(|key| self.get(key).is_some())
-                    .or(self.spans.first().map(|(key, _)| key.as_str()));
+                    .or_else(|| self.spans.first().map(|(key, _)| key.as_str()));
                 Semantics {
                     role: Some(Role::ListItem),
                     hidden: !exists,
