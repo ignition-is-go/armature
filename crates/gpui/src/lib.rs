@@ -14,6 +14,7 @@ use armature_core::geometry::{Point as CorePoint, Rect};
 use armature_core::keys::{Direction, Key, Modifiers, Orientation};
 use armature_core::layers::{Layer, LayerStack};
 use armature_core::popup::{Align, Side};
+use armature_core::preference::Modality;
 use armature_core::primitive::{
     Effect, FileInfo, Focusable, Input, Item, Measure, Outcome, PartOf, Pointer, PointerPhase,
     Primitive, Reaction, Role, Semantics,
@@ -158,10 +159,6 @@ struct Scrolled {
 }
 
 /// Owns one primitive's state, its parts' focus handles, and its agent registration.
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "each flag is an independent fact about the component"
-)]
 pub struct Machine<P: Primitive> {
     primitive: P,
     label: SharedString,
@@ -188,9 +185,8 @@ pub struct Machine<P: Primitive> {
     /// The pointer on its way from a part to this primitive's open popup, while that
     /// part's hover-leave is held back.
     crossing: Option<Crossing<P>>,
-    /// Whether the keyboard, and not a pointer, was the last thing used on this
-    /// primitive.
-    by_keyboard: bool,
+    /// Whether the keyboard or a pointer was the last thing used on this primitive.
+    modality: Modality,
     /// Whether a tick the primitive asked for through `wake_after` is on its way.
     waking: bool,
     /// Watches for the window being switched away from.
@@ -251,7 +247,7 @@ impl<P: Primitive> Machine<P> {
             blur_watch: HashMap::new(),
             away_watch: None,
             waking: false,
-            by_keyboard: false,
+            modality: Modality::Pointer,
             crossing: None,
             hotkey_watch: None,
             return_to: None,
@@ -386,12 +382,8 @@ impl<P: Primitive> Machine<P> {
 
     /// Whether the person is driving this primitive from the keyboard or with a
     /// pointer, for showing focus boldly for the keyboard alone.
-    pub const fn modality(&self) -> armature_core::preference::Modality {
-        if self.by_keyboard {
-            armature_core::preference::Modality::Keyboard
-        } else {
-            armature_core::preference::Modality::Pointer
-        }
+    pub const fn modality(&self) -> Modality {
+        self.modality
     }
 
     /// Changes a setting the owner controls while the primitive runs, such as a
@@ -557,7 +549,7 @@ impl<P: Primitive> Machine<P> {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
-        self.by_keyboard = true;
+        self.modality = Modality::Keyboard;
         let mods = modifiers(keystroke.modifiers);
         if mods.ctrl && keystroke.key == "v" {
             let pasted = cx
@@ -661,7 +653,7 @@ impl<P: Primitive> Machine<P> {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.by_keyboard = false;
+        self.modality = Modality::Pointer;
         let pointer = Pointer {
             phase,
             part,
@@ -1513,7 +1505,7 @@ pub fn part<K: PartOf>(
                     mods: modifiers(event.modifiers()),
                 };
                 state.update(cx, |state, cx| {
-                    state.by_keyboard = false;
+                    state.modality = Modality::Pointer;
                     state.dispatch(input, window, cx)
                 });
             }
