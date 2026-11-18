@@ -21,6 +21,15 @@ pub enum Part {
 /// How long after the last movement the scrollbar still counts as in use.
 const IDLE_MS: u64 = 1000;
 
+/// The thumb being dragged.
+#[derive(Clone, Copy, Debug)]
+struct ThumbDrag {
+    /// How far along the thumb the pointer took hold of it.
+    grip: f64,
+    /// How long the track was then.
+    track: f64,
+}
+
 /// A scrolling box with a scrollbar you draw yourself. The platform still does the
 /// scrolling, so wheels, touch and the keyboard behave as they do everywhere. It
 /// scrolls down the page. It has no value.
@@ -29,8 +38,7 @@ pub struct ScrollArea {
     offset: f64,
     viewport: f64,
     content: f64,
-    /// Where on the grip a drag took hold, and how long the track was.
-    drag: Option<(f64, f64)>,
+    drag: Option<ThumbDrag>,
     hovered: bool,
     idle_at: Option<u64>,
     scrolling: bool,
@@ -247,7 +255,10 @@ impl Primitive for ScrollArea {
         };
         match (pointer.phase, pointer.part) {
             (PointerPhase::Down, Part::Thumb) => {
-                self.drag = Some((along - start, length));
+                self.drag = Some(ThumbDrag {
+                    grip: along - start,
+                    track: length,
+                });
                 Reaction::handled().with(Effect::CapturePointer)
             }
             // A press on the track pages towards it, as a platform scrollbar does.
@@ -261,7 +272,7 @@ impl Primitive for ScrollArea {
                 scroll_to((self.offset + page).clamp(0.0, limit))
             }
             (PointerPhase::Move, _) => match self.drag {
-                Some((grip, track)) => scroll_to(self.offset_for(along - grip, track)),
+                Some(drag) => scroll_to(self.offset_for(along - drag.grip, drag.track)),
                 None => Reaction::default(),
             },
             (PointerPhase::Up | PointerPhase::Cancel, _) => {

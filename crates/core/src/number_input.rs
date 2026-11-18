@@ -24,6 +24,14 @@ const PIXELS_PER_STEP: f64 = 4.0;
 
 const ACTIONS: &[&str] = &["set", "increment", "decrement"];
 
+/// The label being dragged sideways to change the number.
+#[derive(Clone, Copy, Debug)]
+struct Scrub {
+    /// Where the pointer went down.
+    from: f64,
+    value_at_start: f64,
+}
+
 /// A number typed into a field or stepped with buttons and arrow keys.
 #[derive(Clone, Debug)]
 pub struct NumberInput {
@@ -36,8 +44,7 @@ pub struct NumberInput {
     held: f64,
     /// Whether the field holds focus, so the wheel may change it.
     focused: bool,
-    /// Where a scrub began, and the number then.
-    scrub: Option<(f64, f64)>,
+    scrub: Option<Scrub>,
 }
 
 impl Default for NumberInput {
@@ -259,13 +266,16 @@ impl Primitive for NumberInput {
         if pointer.part == Part::Scrub || self.scrub.is_some() {
             return match (pointer.phase, self.scrub) {
                 (PointerPhase::Down, _) => {
-                    self.scrub = Some((pointer.at.x, self.value));
+                    self.scrub = Some(Scrub {
+                        from: pointer.at.x,
+                        value_at_start: self.value,
+                    });
                     Reaction::handled().with(Effect::CapturePointer)
                 }
-                (PointerPhase::Move, Some((from, started))) => {
-                    let steps = ((pointer.at.x - from) / PIXELS_PER_STEP).trunc();
+                (PointerPhase::Move, Some(scrub)) => {
+                    let steps = ((pointer.at.x - scrub.from) / PIXELS_PER_STEP).trunc();
                     self.set(
-                        self.range.nudge(started, steps),
+                        self.range.nudge(scrub.value_at_start, steps),
                         Source::User,
                         Reason::Drag,
                         gate,
