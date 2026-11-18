@@ -1,5 +1,6 @@
 //! The contract features GPUI gets no help from the platform for: a text caret, Tab
 //! trapping, hover timing, scrolling and the clipboard.
+#![cfg(test)]
 
 use armature_core::convert::Cast;
 use std::cell::RefCell;
@@ -65,10 +66,6 @@ fn open<P: Primitive, E: IntoElement>(
     (machine, cx)
 }
 
-#[expect(
-    clippy::expect_used,
-    reason = "a helper for tests fails as a test does"
-)]
 fn focus<P: Primitive>(
     machine: &Entity<Machine<P>>,
     cx: &mut VisualTestContext,

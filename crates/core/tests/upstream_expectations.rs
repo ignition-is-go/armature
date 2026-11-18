@@ -1,6 +1,7 @@
 //! Expectations taken from UI SDK's own test suite (`packages/core/test`), restated
 //! against armature. Each test names the upstream file it follows. Units differ in
 //! one place: upstream measures velocity in px/ms, armature in units per second.
+#![cfg(test)]
 
 use armature_core::color::{Notation, Rgb};
 use armature_core::convert::Cast;
@@ -243,10 +244,6 @@ fn typeahead() {
     );
 }
 
-#[expect(
-    clippy::expect_used,
-    reason = "a helper for tests fails as a test does"
-)]
 fn day(text: &str) -> Date {
     Date::parse(text).expect("the test wrote a date")
 }
@@ -1193,7 +1190,6 @@ fn plain(text: &str) -> armature_core::token_text::Segment {
 }
 
 /// The token a segment holds. A test that asks for one where there is text fails.
-#[expect(clippy::panic, reason = "a helper for tests fails as a test does")]
 fn token_in(segment: &armature_core::token_text::Segment) -> armature_core::token_text::Token {
     match segment {
         armature_core::token_text::Segment::Token(token) => token.clone(),

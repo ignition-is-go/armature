@@ -1,3 +1,4 @@
+#![cfg(test)]
 use armature_core::convert::Cast;
 use std::time::Duration;
 
@@ -106,10 +107,6 @@ fn open(cx: &mut TestAppContext) -> (Entity<Demo>, &mut VisualTestContext) {
 }
 
 /// Puts focus on one part of a machine, as Tab or a press would.
-#[expect(
-    clippy::expect_used,
-    reason = "a helper for tests fails as a test does"
-)]
 fn focus<P: armature_core::primitive::Primitive>(
     machine: &Entity<Machine<P>>,
     cx: &mut VisualTestContext,

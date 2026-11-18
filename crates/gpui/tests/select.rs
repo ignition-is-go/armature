@@ -1,3 +1,4 @@
+#![cfg(test)]
 use armature_core::primitive::Item;
 use armature_core::select::{Part, Select};
 use armature_gpui::{Machine, agent, part};
@@ -32,10 +33,6 @@ impl Render for Demo {
     }
 }
 
-#[expect(
-    clippy::expect_used,
-    reason = "a helper for tests fails as a test does"
-)]
 fn open(cx: &mut TestAppContext) -> (Entity<Machine<Select>>, &mut VisualTestContext) {
     let items =
         [("small", false), ("medium", true), ("large", false)].map(|(key, disabled)| Item {
