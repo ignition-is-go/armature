@@ -379,22 +379,6 @@ impl Primitive for Listbox {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::string_slice,
-    clippy::panic,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::cast_lossless,
-    clippy::float_cmp,
-    clippy::too_many_lines,
-    reason = "a test fails by panicking, and its arithmetic is on values it wrote itself"
-)]
 mod tests {
     use super::*;
 
@@ -462,7 +446,7 @@ mod tests {
             key(&mut lb, Key::ArrowDown, NONE).focus_item(),
             Some("cherry")
         );
-        assert_eq!(lb.value(), [] as [std::string::String; 0]);
+        assert_eq!(lb.value(), Vec::<String>::new());
     }
 
     #[test]
@@ -538,7 +522,7 @@ mod tests {
     fn pressing_a_disabled_item_does_nothing() {
         let mut lb = listbox(Mode::Single);
         assert_eq!(press(&mut lb, "banana", &mut |_| true), Reaction::default());
-        assert_eq!(lb.value(), [] as [std::string::String; 0]);
+        assert_eq!(lb.value(), Vec::<String>::new());
     }
 
     #[test]
@@ -549,7 +533,7 @@ mod tests {
             seen.push(change.clone());
             false
         });
-        assert_eq!(lb.value(), [] as [std::string::String; 0]);
+        assert_eq!(lb.value(), Vec::<String>::new());
         assert_eq!(seen[0].value, ["apple"]);
         assert_eq!(seen[0].source, Source::User);
     }

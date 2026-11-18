@@ -1,23 +1,6 @@
 //! The examples in `skills/armature/references/core-contract.md`, kept here so
 //! they stay true.
 
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::string_slice,
-    clippy::panic,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::cast_lossless,
-    clippy::float_cmp,
-    clippy::too_many_lines,
-    reason = "a test fails by panicking, and its arithmetic is on values it wrote itself"
-)]
-
 use armature_core::agent::ActError;
 use armature_core::change::{Reason, Source, ValueChange};
 use armature_core::combobox::{self, Combobox};
@@ -55,7 +38,7 @@ fn a_refused_change_keeps_the_tab() {
         manual: true,
         ..Default::default()
     });
-    assert_eq!(manual.value(), [] as [std::string::String; 0]);
+    assert_eq!(manual.value(), Vec::<String>::new());
 }
 
 #[test]
@@ -154,7 +137,7 @@ fn the_details_the_skill_states() {
         label: "a".into(),
         disabled: false,
     });
-    assert_eq!(accordion.value(), [] as [std::string::String; 0]);
+    assert_eq!(accordion.value(), Vec::<String>::new());
 
     // Lists: arrows skip disabled items and only move focus; Enter chooses.
     let mut list = Listbox::default();

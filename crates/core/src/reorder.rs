@@ -117,28 +117,13 @@ pub fn reorder_message(step: ReorderStep, label: &str, reorder: Reorder, count: 
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::string_slice,
-    clippy::panic,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::cast_lossless,
-    clippy::float_cmp,
-    clippy::too_many_lines,
-    reason = "a test fails by panicking, and its arithmetic is on values it wrote itself"
-)]
 mod tests {
     use super::*;
+    use crate::convert::Cast;
 
     fn column() -> Vec<Rect> {
         (0..4)
-            .map(|i| Rect::new(0., i as f64 * 20., 100., 20.))
+            .map(|i| Rect::new(0., i.cast::<f64>() * 20., 100., 20.))
             .collect()
     }
 

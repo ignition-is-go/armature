@@ -1,19 +1,4 @@
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::string_slice,
-    clippy::panic,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::cast_lossless,
-    clippy::float_cmp,
-    clippy::too_many_lines,
-    reason = "a test fails by panicking, and its arithmetic is on values it wrote itself"
-)]
+use armature_core::convert::Cast;
 use std::time::Duration;
 
 use armature_core::command::{self, Command};
@@ -378,7 +363,7 @@ fn dragging_a_divider_resizes_the_panels(cx: &mut TestAppContext) {
     struct Page(Entity<Machine<Resizable>>);
     impl Render for Page {
         fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-            let share = self.0.read(cx).primitive().percent() as f32;
+            let share = self.0.read(cx).primitive().percent().cast::<f32>();
             part(&self.0, resizable::Part::Root, None, cx)
                 .flex()
                 .w(px(400.))

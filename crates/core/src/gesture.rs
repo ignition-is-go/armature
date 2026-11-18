@@ -247,22 +247,6 @@ impl Spring {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::string_slice,
-    clippy::panic,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::cast_lossless,
-    clippy::float_cmp,
-    clippy::too_many_lines,
-    reason = "a test fails by panicking, and its arithmetic is on values it wrote itself"
-)]
 mod tests {
     use super::*;
 
@@ -295,7 +279,7 @@ mod tests {
     fn velocity_is_fitted_across_samples_and_capped() {
         let mut steady = VelocityTracker::default();
         for step in 0..5 {
-            steady.push(step as f64 * 10.0, step as f64 * 5.0);
+            steady.push(step.cast::<f64>() * 10.0, step.cast::<f64>() * 5.0);
         }
         assert!(close(steady.velocity(), 500.0));
         let mut wild = VelocityTracker::default();
@@ -364,7 +348,7 @@ mod tests {
                 mass: 1.0,
             };
             (0..400)
-                .map(|i| spring.solve(0.0, 100.0, 0.0, i as f64 * 0.01).0)
+                .map(|i| spring.solve(0.0, 100.0, 0.0, i.cast::<f64>() * 0.01).0)
                 .fold(0.0, f64::max)
         };
         assert!(peak(5.0) > 100.5);

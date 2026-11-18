@@ -421,22 +421,6 @@ impl Primitive for Calendar {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::string_slice,
-    clippy::panic,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::cast_lossless,
-    clippy::float_cmp,
-    clippy::too_many_lines,
-    reason = "a test fails by panicking, and its arithmetic is on values it wrote itself"
-)]
 mod tests {
     use super::*;
     use crate::keys::Modifiers;
@@ -529,7 +513,7 @@ mod tests {
             mods: Modifiers::default(),
         };
         calendar.send(press, &mut |_| true);
-        assert_eq!(calendar.value(), [] as [std::string::String; 0]);
+        assert_eq!(calendar.value(), Vec::<String>::new());
         assert!(calendar.semantics(Part::Day, Some("2026-11-05")).disabled);
         assert_eq!(
             calendar.act("select", Some("2026-11-25"), &mut |_| true),
@@ -553,7 +537,7 @@ mod tests {
             &mut |_| true,
         );
         assert_eq!(calendar.month(), (2026, 12));
-        assert_eq!(calendar.value(), [] as [std::string::String; 0]);
+        assert_eq!(calendar.value(), Vec::<String>::new());
     }
 
     #[test]
@@ -568,7 +552,7 @@ mod tests {
         );
         key(&mut calendar, Key::Enter);
         assert_eq!(calendar.month(), (2026, 12));
-        assert_eq!(calendar.value(), [] as [std::string::String; 0]);
+        assert_eq!(calendar.value(), Vec::<String>::new());
         calendar.send(
             Input::Focus {
                 part: Part::Day,

@@ -306,22 +306,6 @@ impl Primitive for Select {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::string_slice,
-    clippy::panic,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::cast_lossless,
-    clippy::float_cmp,
-    clippy::too_many_lines,
-    reason = "a test fails by panicking, and its arithmetic is on values it wrote itself"
-)]
 mod tests {
     use super::*;
     use crate::primitive::FocusTarget;
@@ -401,7 +385,7 @@ mod tests {
         press(&mut select, Part::Trigger, None);
         key(&mut select, Key::ArrowDown);
         let closed = key(&mut select, Key::Escape);
-        assert_eq!(select.value(), [] as [std::string::String; 0]);
+        assert_eq!(select.value(), Vec::<String>::new());
         assert!(!select.is_open());
         assert_eq!(closed.focus, TO_TRIGGER);
     }
@@ -444,7 +428,7 @@ mod tests {
         press(&mut select, Part::Trigger, None);
         press(&mut select, Part::Option, Some("medium"));
         assert!(select.is_open());
-        assert_eq!(select.value(), [] as [std::string::String; 0]);
+        assert_eq!(select.value(), Vec::<String>::new());
     }
 
     #[test]

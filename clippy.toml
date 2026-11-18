@@ -1,0 +1,6 @@
+# A test fails by panicking, so tests may unwrap, index and panic.
+# Every other lint applies to them as it does to the rest of the code.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-indexing-slicing-in-tests = true
+allow-panic-in-tests = true

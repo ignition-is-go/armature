@@ -322,22 +322,6 @@ impl Primitive for Picker {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::string_slice,
-    clippy::panic,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::cast_lossless,
-    clippy::float_cmp,
-    clippy::too_many_lines,
-    reason = "a test fails by panicking, and its arithmetic is on values it wrote itself"
-)]
 mod tests {
     use super::*;
     use crate::keys::Modifiers;
@@ -441,7 +425,7 @@ mod tests {
             },
             &mut |_| false,
         );
-        assert_eq!(picker.value(), [] as [std::string::String; 0]);
+        assert_eq!(picker.value(), Vec::<String>::new());
         assert_eq!(
             picker.act("select", Some("4"), &mut |_| true),
             Err(ActError::Disabled("4".into()))

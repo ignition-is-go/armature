@@ -360,22 +360,6 @@ impl Primitive for FileInput {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::string_slice,
-    clippy::panic,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::cast_lossless,
-    clippy::float_cmp,
-    clippy::too_many_lines,
-    reason = "a test fails by panicking, and its arithmetic is on values it wrote itself"
-)]
 mod tests {
     use super::*;
     use crate::keys::Modifiers;
@@ -489,7 +473,7 @@ mod tests {
             },
             &mut |_| true,
         );
-        assert_eq!(input.value(), [] as [std::string::String; 0]);
+        assert_eq!(input.value(), Vec::<String>::new());
         assert!(input.semantics(Part::List, None).hidden);
         assert_eq!(
             input.act("browse", None, &mut |_| true),

@@ -243,22 +243,6 @@ impl Primitive for Radio {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::string_slice,
-    clippy::panic,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::cast_lossless,
-    clippy::float_cmp,
-    clippy::too_many_lines,
-    reason = "a test fails by panicking, and its arithmetic is on values it wrote itself"
-)]
 mod tests {
     use super::*;
     use crate::keys::Modifiers;
@@ -300,7 +284,7 @@ mod tests {
     #[test]
     fn nothing_is_chosen_until_the_person_chooses() {
         let mut radio = radio();
-        assert_eq!(radio.value(), [] as [std::string::String; 0]);
+        assert_eq!(radio.value(), Vec::<String>::new());
         assert_eq!(
             radio.semantics(Part::Option, Some("1")).focusable,
             Focusable::TabStop
@@ -360,6 +344,6 @@ mod tests {
         press(&mut rating);
         assert_eq!(rating.value(), ["2"]);
         press(&mut rating);
-        assert_eq!(rating.value(), [] as [std::string::String; 0]);
+        assert_eq!(rating.value(), Vec::<String>::new());
     }
 }

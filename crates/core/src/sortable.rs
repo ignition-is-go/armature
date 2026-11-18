@@ -398,22 +398,6 @@ impl Primitive for Sortable {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::string_slice,
-    clippy::panic,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::cast_lossless,
-    clippy::float_cmp,
-    clippy::too_many_lines,
-    reason = "a test fails by panicking, and its arithmetic is on values it wrote itself"
-)]
 mod tests {
     use super::*;
     use crate::keys::Modifiers;
@@ -434,7 +418,7 @@ mod tests {
         let at = ["milk", "eggs", "bread", "jam"]
             .iter()
             .position(|key| Some(*key) == item)?;
-        (part == Part::Item).then(|| Rect::new(0.0, at as f64 * 20.0, 100.0, 20.0))
+        (part == Part::Item).then(|| Rect::new(0.0, at.cast::<f64>() * 20.0, 100.0, 20.0))
     }
 
     fn pointer(

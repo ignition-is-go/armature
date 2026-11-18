@@ -314,22 +314,6 @@ impl Primitive for SwipeRow {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::string_slice,
-    clippy::panic,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::cast_lossless,
-    clippy::float_cmp,
-    clippy::too_many_lines,
-    reason = "a test fails by panicking, and its arithmetic is on values it wrote itself"
-)]
 mod tests {
     use super::*;
     use crate::keys::Modifiers;
@@ -386,7 +370,7 @@ mod tests {
     #[test]
     fn a_swipe_past_halfway_leaves_the_actions_showing() {
         let mut row = row();
-        assert_eq!(swipe(&mut row, 50.0), [] as [std::string::String; 0]);
+        assert_eq!(swipe(&mut row, 50.0), Vec::<String>::new());
         assert!(row.is_revealed());
         assert_eq!(row.offset(), 80.0);
         assert!(!row.semantics(Part::Action, Some("delete")).hidden);

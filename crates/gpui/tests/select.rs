@@ -1,19 +1,3 @@
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::string_slice,
-    clippy::panic,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::cast_lossless,
-    clippy::float_cmp,
-    clippy::too_many_lines,
-    reason = "a test fails by panicking, and its arithmetic is on values it wrote itself"
-)]
 use armature_core::primitive::Item;
 use armature_core::select::{Part, Select};
 use armature_gpui::{Machine, agent, part};
@@ -48,6 +32,10 @@ impl Render for Demo {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "a helper for tests fails as a test does"
+)]
 fn open(cx: &mut TestAppContext) -> (Entity<Machine<Select>>, &mut VisualTestContext) {
     let items =
         [("small", false), ("medium", true), ("large", false)].map(|(key, disabled)| Item {
@@ -61,7 +49,7 @@ fn open(cx: &mut TestAppContext) -> (Entity<Machine<Select>>, &mut VisualTestCon
     let size = demo.update(cx, |demo, _| demo.size.clone());
     size.update_in(cx, |size, window, cx| {
         size.focus_handle(Part::Trigger, None)
-            .unwrap()
+            .expect("a select has a trigger")
             .focus(window, cx);
     });
     (size, cx)
@@ -76,8 +64,7 @@ fn is_open(size: &Entity<Machine<Select>>, cx: &mut VisualTestContext) -> bool {
 fn trigger_has_focus(size: &Entity<Machine<Select>>, cx: &mut VisualTestContext) -> bool {
     size.update_in(cx, |size, window, _| {
         size.focus_handle(Part::Trigger, None)
-            .unwrap()
-            .is_focused(window)
+            .is_some_and(|handle| handle.is_focused(window))
     })
 }
 
@@ -117,7 +104,7 @@ fn escape_closes_and_returns_focus_without_choosing(cx: &mut TestAppContext) {
     assert!(trigger_has_focus(&size, cx));
     assert_eq!(
         size.update(cx, |size, _| size.value()),
-        [] as [std::string::String; 0]
+        Vec::<String>::new()
     );
 }
 

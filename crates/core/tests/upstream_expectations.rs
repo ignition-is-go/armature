@@ -2,23 +2,7 @@
 //! against armature. Each test names the upstream file it follows. Units differ in
 //! one place: upstream measures velocity in px/ms, armature in units per second.
 
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::string_slice,
-    clippy::panic,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::cast_lossless,
-    clippy::float_cmp,
-    clippy::too_many_lines,
-    reason = "a test fails by panicking, and its arithmetic is on values it wrote itself"
-)]
-
+use armature_core::convert::Cast;
 use armature_core::gesture::{
     DECELERATION, VelocityTracker, dim_amount, expand_amount, project_distance, rubber_band,
 };
@@ -46,7 +30,7 @@ fn row(page: usize, count: usize, siblings: usize, boundaries: usize) -> String 
 fn pagination_range() {
     assert_eq!(
         page_range(1, 0, 1, 1),
-        [] as [armature_core::pagination::PageItem; 0]
+        Vec::<armature_core::pagination::PageItem>::new()
     );
     assert_eq!(row(1, 1, 1, 1), "1");
     assert_eq!(row(1, 2, 1, 1), "1 2");
@@ -188,11 +172,13 @@ fn typed(labels: &[&str], keys: &str, current: Option<usize>) -> Option<String> 
     let mut search = Typeahead::default();
     let mut index = current;
     for (at, key) in keys.chars().enumerate() {
-        if let Some(found) = search.push(key, at as u64, &items, index) {
+        if let Some(found) = search.push(key, at.cast::<u64>(), &items, index) {
             index = Some(found);
         }
     }
-    index.map(|index| labels[index].to_string())
+    index
+        .and_then(|index| labels.get(index))
+        .map(|label| (*label).to_string())
 }
 
 // typeahead.test.ts
@@ -248,8 +234,12 @@ use armature_core::date::{Date, days_in_month, month_grid};
 use armature_core::tree::{CheckStrategy, Checked, Tree, TreeItem};
 use std::collections::HashSet;
 
+#[expect(
+    clippy::expect_used,
+    reason = "a helper for tests fails as a test does"
+)]
 fn day(text: &str) -> Date {
-    Date::parse(text).unwrap_or_else(|| panic!("{text} is a date"))
+    Date::parse(text).expect("the test wrote a date")
 }
 
 // date.test.ts
@@ -442,7 +432,7 @@ fn tree_checking() {
     let cleared = tree.toggle_checked("fruit", &set(&["apple", "straw", "blue", "lemon"]));
     assert_eq!(
         tree.checked_value(&cleared, CheckStrategy::Leaf),
-        [] as [std::string::String; 0]
+        Vec::<String>::new()
     );
 }
 
@@ -585,14 +575,14 @@ fn folding_and_match_ranges() {
     let text = "Crème brûlée";
     let ranges = match_ranges("brule", text).expect("accents are no difference");
     assert_eq!(ranges.len(), 1);
-    assert_eq!(&text[ranges[0].clone()], "brûlé");
+    assert_eq!(text.get(ranges[0].clone()), Some("brûlé"));
     let segments: Vec<(&str, bool)> = match_segments(text, &ranges)
         .iter()
         .map(|segment| (segment.text, segment.matched))
         .collect();
     assert_eq!(segments, [("Crème ", false), ("brûlé", true), ("e", false)]);
     let push = match_ranges("pu", "Git push").unwrap();
-    assert_eq!(&"Git push"[push[0].clone()], "pu");
+    assert_eq!("Git push".get(push[0].clone()), Some("pu"));
     assert_eq!(push[0].start, 4);
 }
 
@@ -667,10 +657,7 @@ fn listbox_ranges() {
     let selectable = ["a", "b", "d"];
     let all = all_toggled(&keys(&["d"]), &selectable);
     assert_eq!(all, ["d", "a", "b"]);
-    assert_eq!(
-        all_toggled(&all, &selectable),
-        [] as [std::string::String; 0]
-    );
+    assert_eq!(all_toggled(&all, &selectable), Vec::<String>::new());
     assert_eq!(
         all_toggled(&keys(&["c", "a", "b", "d"]), &selectable),
         ["c"]
@@ -705,7 +692,7 @@ fn outline(text: &str) -> Vec<OutlineRow> {
         .filter(|line| !line.trim().is_empty())
         .map(|line| OutlineRow {
             key: line.trim().to_string(),
-            depth: (line.len() - line.trim_start().len()) / 2,
+            depth: line.len().saturating_sub(line.trim_start().len()) / 2,
         })
         .collect()
 }
@@ -878,7 +865,7 @@ fn outline_moves() {
 #[test]
 fn shortcuts() {
     use armature_core::keys::Modifiers;
-    use armature_core::shortcut::{Platform, Shortcut, shortcut_allowed};
+    use armature_core::shortcut::*;
     let held = |shift: bool, ctrl: bool, alt: bool| Modifiers { shift, ctrl, alt };
     let is = |text: &str, typed: &str, code: &str, mods: Modifiers| {
         Shortcut::parse(text)
@@ -962,10 +949,7 @@ fn shortcuts() {
     reason = "the rules are written as upstream writes them, one cloned into a list"
 )]
 fn trigger_matching() {
-    use armature_core::trigger_match::{
-        Boundary, Dismissed, Spaces, TriggerRule, find_trigger_match, is_at_boundary,
-        is_valid_query, look_behind, map_dismissed, normalize_trigger_text,
-    };
+    use armature_core::trigger_match::*;
     let mention = || TriggerRule::new("@");
     let found = |text: &str, rules: &[TriggerRule], offset: usize| {
         find_trigger_match(text, offset, rules)
@@ -991,6 +975,21 @@ fn trigger_matching() {
     for text in ["mail@al", "@ al", "@al ", "@al\n", "@a!b", "hello", ""] {
         assert_eq!(matched(text), None, "{text:?}");
     }
+}
+
+#[test]
+#[allow(
+    clippy::cloned_ref_to_slice_refs,
+    reason = "the rules are written as upstream writes them, one cloned into a list"
+)]
+fn trigger_matching_the_nearest_trigger_before_the_caret_wins() {
+    use armature_core::trigger_match::*;
+    let mention = || TriggerRule::new("@");
+    let found = |text: &str, rules: &[TriggerRule], offset: usize| {
+        find_trigger_match(text, offset, rules)
+            .map(|m| format!("{}{}@{}", m.trigger, m.query, m.start))
+    };
+    let matched = |text: &str| found(text, &[mention()], 0);
     // "the nearest trigger before the caret wins"
     assert_eq!(matched("@ann @bo").as_deref(), Some("@bo@5"));
     // "a full-width trigger an input method committed matches"
@@ -1010,6 +1009,20 @@ fn trigger_matching() {
     );
     assert_eq!(found(" /mod", &[command.clone()], 0), None);
     assert_eq!(found("a /mod", &[command], 0), None);
+}
+
+#[test]
+#[allow(
+    clippy::cloned_ref_to_slice_refs,
+    reason = "the rules are written as upstream writes them, one cloned into a list"
+)]
+fn trigger_matching_boundary_line_matches_at_the_start_of() {
+    use armature_core::trigger_match::*;
+    let mention = || TriggerRule::new("@");
+    let found = |text: &str, rules: &[TriggerRule], offset: usize| {
+        find_trigger_match(text, offset, rules)
+            .map(|m| format!("{}{}@{}", m.trigger, m.query, m.start))
+    };
     // "boundary line matches at the start of any line"
     let line = TriggerRule {
         boundary: Boundary::Line,
@@ -1033,6 +1046,20 @@ fn trigger_matching() {
         .as_deref(),
         Some("@al@4")
     );
+}
+
+#[test]
+#[allow(
+    clippy::cloned_ref_to_slice_refs,
+    reason = "the rules are written as upstream writes them, one cloned into a list"
+)]
+fn trigger_matching_spaces_allow_phrases_and_a_number_caps() {
+    use armature_core::trigger_match::*;
+    let mention = || TriggerRule::new("@");
+    let found = |text: &str, rules: &[TriggerRule], offset: usize| {
+        find_trigger_match(text, offset, rules)
+            .map(|m| format!("{}{}@{}", m.trigger, m.query, m.start))
+    };
     // "spaces allow phrases, and a number caps the words"
     let phrases = TriggerRule {
         spaces: Spaces::Any,
@@ -1057,6 +1084,19 @@ fn trigger_matching() {
         Some("@a b @0")
     );
     assert_eq!(found("@a b c", &[two], 0), None);
+}
+
+#[test]
+#[allow(
+    clippy::cloned_ref_to_slice_refs,
+    reason = "the rules are written as upstream writes them, one cloned into a list"
+)]
+fn trigger_matching_a_multi_character_trigger_matches() {
+    use armature_core::trigger_match::*;
+    let found = |text: &str, rules: &[TriggerRule], offset: usize| {
+        find_trigger_match(text, offset, rules)
+            .map(|m| format!("{}{}@{}", m.trigger, m.query, m.start))
+    };
     // "a multi-character trigger matches"
     assert_eq!(
         found("see [[Page", &[TriggerRule::new("[[")], 0).as_deref(),
@@ -1076,6 +1116,21 @@ fn trigger_matching() {
         found("x .*a", &[TriggerRule::new(".*")], 0).as_deref(),
         Some(".*a@2")
     );
+}
+
+#[test]
+#[allow(
+    clippy::cloned_ref_to_slice_refs,
+    reason = "the rules are written as upstream writes them, one cloned into a list"
+)]
+fn trigger_matching_maxlength_ends_a_long_query() {
+    use armature_core::trigger_match::*;
+    let mention = || TriggerRule::new("@");
+    let found = |text: &str, rules: &[TriggerRule], offset: usize| {
+        find_trigger_match(text, offset, rules)
+            .map(|m| format!("{}{}@{}", m.trigger, m.query, m.start))
+    };
+    let matched = |text: &str| found(text, &[mention()], 0);
     // "maxLength ends a long query"
     let short = TriggerRule {
         max_length: 3,
@@ -1095,6 +1150,16 @@ fn trigger_matching() {
             .rule,
         1
     );
+}
+
+#[test]
+#[allow(
+    clippy::cloned_ref_to_slice_refs,
+    reason = "the rules are written as upstream writes them, one cloned into a list"
+)]
+fn trigger_matching_isvalidquery_and_isatboundary() {
+    use armature_core::trigger_match::*;
+    let mention = || TriggerRule::new("@");
     // "isValidQuery and isAtBoundary"
     assert!(is_valid_query("", &mention()));
     let chars = |text: &str| text.chars().collect::<Vec<_>>();
@@ -1131,11 +1196,20 @@ fn trigger_matching() {
     assert_eq!(map_dismissed(&dismissed, 3, 4, 0), None);
     assert_eq!(map_dismissed(&dismissed, 2, 4, 1), None);
     assert_eq!(map_dismissed(&dismissed, 10, 12, 5), at(3, 6));
+}
+
+#[test]
+#[allow(
+    clippy::cloned_ref_to_slice_refs,
+    reason = "the rules are written as upstream writes them, one cloned into a list"
+)]
+fn trigger_matching_random_edits_never_leave_a_range_that() {
+    use armature_core::trigger_match::*;
     // "random edits never leave a range that ends before its trigger"
     let mut seed: u64 = 7;
     let mut random = || {
         seed = (seed * 1_103_515_245 + 12_345) % (1 << 31);
-        seed as f64 / (1u64 << 31) as f64
+        seed.cast::<f64>() / (1u64 << 31).cast::<f64>()
     };
     for _ in 0..2000 {
         let mut range = Some(Dismissed {
@@ -1145,9 +1219,9 @@ fn trigger_matching() {
         });
         for _ in 0..10 {
             let Some(current) = range.clone() else { break };
-            let start = (random() * 20.0) as usize;
-            let end = start + (random() * 4.0) as usize;
-            range = map_dismissed(&current, start, end, (random() * 4.0) as usize);
+            let start = (random() * 20.0).cast::<usize>();
+            let end = start + (random() * 4.0).cast::<usize>();
+            range = map_dismissed(&current, start, end, (random() * 4.0).cast::<usize>());
             if let Some(range) = &range {
                 assert!(range.end > range.start);
             }
@@ -1160,7 +1234,6 @@ fn trigger_matching() {
 fn token_text_model() {
     use armature_core::token_text::*;
     let alice = || Token::new("mention", "alice", "@Alice").with_id("a");
-    let file = || Token::new("file", "src/a.ts", "a.ts").with_id("f");
     let text = |text: &str| Segment::Text(text.to_string());
     let token = |segment: &Segment| match segment {
         Segment::Token(token) => token.clone(),
@@ -1178,8 +1251,22 @@ fn token_text_model() {
     assert_eq!(value.len(), 3);
     assert_eq!(value[0], text("ab"));
     let made = token(&value[1]).id;
-    assert!(made.starts_with('t') && made[1..].chars().all(|ch| ch.is_ascii_digit()));
+    assert!(
+        made.strip_prefix('t')
+            .is_some_and(|digits| digits.chars().all(|ch| ch.is_ascii_digit()))
+    );
     assert_eq!(normalize(vec![alice().into()])[0], Segment::Token(alice()));
+}
+
+#[test]
+fn token_text_model_a_repeated_id_stays_with_the_first() {
+    use armature_core::token_text::*;
+    let alice = || Token::new("mention", "alice", "@Alice").with_id("a");
+    let file = || Token::new("file", "src/a.ts", "a.ts").with_id("f");
+    let token = |segment: &Segment| match segment {
+        Segment::Token(token) => token.clone(),
+        Segment::Text(_) => panic!("expected a token"),
+    };
     // "a repeated id stays with the first token, and the next gets a new one"
     let pair = normalize(vec![alice().into(), alice().into()]);
     assert_eq!(token(&pair[0]).id, "a");
@@ -1204,6 +1291,13 @@ fn token_text_model() {
     assert_eq!(offset_text(&value), "hi \u{FFFC} and \u{FFFC}");
     assert_eq!(token_at(&value, 3), Some(&alice()));
     assert_eq!(offset_of_token(&value, "f"), Some(9));
+}
+
+#[test]
+fn token_text_model_slicing_keeps_whole_tokens() {
+    use armature_core::token_text::*;
+    let alice = || Token::new("mention", "alice", "@Alice").with_id("a");
+    let text = |text: &str| Segment::Text(text.to_string());
     // "slicing keeps whole tokens"
     let value = normalize(vec!["hi ".into(), alice().into(), "!".into()]);
     assert_eq!(slice_value(&value, 2, 4), [text(" "), alice().into()]);
@@ -1222,6 +1316,13 @@ fn token_text_model() {
         removed_tokens(&value, &replace_range(&value, 2, 3, vec![])),
         [alice()]
     );
+}
+
+#[test]
+fn token_text_model_word_deletion_stops_at_tokens_and_removes() {
+    use armature_core::token_text::*;
+    let alice = || Token::new("mention", "alice", "@Alice").with_id("a");
+    let file = || Token::new("file", "src/a.ts", "a.ts").with_id("f");
     // "word deletion stops at tokens, and removes just the token when it's next"
     let value = normalize(vec!["one ".into(), alice().into(), "two three".into()]);
     assert_eq!(word_boundary(&value, 14, false), 9);
@@ -1246,6 +1347,11 @@ fn token_text_model() {
         "Summarize [@a.ts](file:src/a.ts) for [@@Alice](mention:alice)"
     );
     assert_eq!(to_label(&value), "Summarize a.ts for @Alice");
+}
+
+#[test]
+fn token_text_model_compares_content_since_reading_text_back_makes() {
+    use armature_core::token_text::*;
     // Compares content, since reading text back makes new ids.
     let strip = |value: &[Segment]| -> Vec<Segment> {
         value
@@ -1265,6 +1371,24 @@ fn token_text_model() {
         strip(&from_text(&to_text(&[odd.clone().into()]))),
         strip(&[odd.into()])
     );
+}
+
+#[test]
+fn token_text_model_text_that_looks_like_a_token_stays() {
+    use armature_core::token_text::*;
+    let text = |text: &str| Segment::Text(text.to_string());
+    let strip = |value: &[Segment]| -> Vec<Segment> {
+        value
+            .iter()
+            .map(|segment| match segment {
+                Segment::Token(token) => Segment::Token(Token {
+                    id: String::new(),
+                    ..token.clone()
+                }),
+                other @ Segment::Text(_) => other.clone(),
+            })
+            .collect()
+    };
     // "text that looks like a token stays text"
     let value = normalize(vec!["see [@x](y:z) and \\[@q](r:s)".into()]);
     assert_eq!(from_text(&to_text(&value)), value);
@@ -1275,7 +1399,7 @@ fn token_text_model() {
     let mut seed: u64 = 42;
     let mut random = || {
         seed = (seed * 1_103_515_245 + 12_345) % (1 << 31);
-        seed as f64 / (1u64 << 31) as f64
+        seed.cast::<f64>() / (1u64 << 31).cast::<f64>()
     };
     let alphabet = [
         "a", "b", " ", "\n", "[", "]", "(", ")", "@", "\\", ":", "é", "山", "[@", "\\[@",
@@ -1283,17 +1407,17 @@ fn token_text_model() {
     let kinds = ["mention", "file", "skill-run", "a_b"];
     for run in 0..3000 {
         let words = |random: &mut dyn FnMut() -> f64| -> String {
-            let count = (random() * 8.0) as usize;
+            let count = (random() * 8.0).cast::<usize>();
             (0..count)
-                .map(|_| alphabet[(random() * alphabet.len() as f64) as usize])
+                .map(|_| alphabet[(random() * alphabet.len().cast::<f64>()).cast::<usize>()])
                 .collect()
         };
         let mut segments: Vec<Segment> = Vec::new();
-        for _ in 0..(random() * 6.0) as usize {
+        for _ in 0..(random() * 6.0).cast::<usize>() {
             if random() < 0.5 {
                 segments.push(Segment::Text(words(&mut random)));
             } else {
-                let kind = kinds[(random() * kinds.len() as f64) as usize];
+                let kind = kinds[(random() * kinds.len().cast::<f64>()).cast::<usize>()];
                 let value = words(&mut random);
                 let label = words(&mut random);
                 // Upstream draws twice more here, for a status and for data.
@@ -1346,8 +1470,7 @@ fn fuzzy_scores() {
 // roving.test.ts
 #[test]
 fn roving_tab_stops() {
-    use armature_core::keys::Key;
-    use armature_core::roving::{FieldCaret, Stop, field_keeps_key, roving_stop};
+    use armature_core::roving::*;
     let item = |key| Stop {
         key,
         disabled: false,
@@ -1370,6 +1493,17 @@ fn roving_tab_stops() {
         Some("a")
     );
     assert_eq!(roving_stop(&[item("a")], Some("gone")), Some("a"));
+}
+
+#[test]
+fn roving_tab_stops_otherwise_the_first_preferred_enabled_item_then() {
+    use armature_core::roving::*;
+    let item = |key| Stop {
+        key,
+        disabled: false,
+        focusable: true,
+        preferred: false,
+    };
     // "otherwise the first preferred enabled item, then the first enabled one"
     assert_eq!(
         roving_stop(
@@ -1411,6 +1545,17 @@ fn roving_tab_stops() {
         ),
         Some("b")
     );
+}
+
+#[test]
+fn roving_tab_stops_a_group_where_every_item_is_disabled() {
+    use armature_core::roving::*;
+    let item = |key| Stop {
+        key,
+        disabled: false,
+        focusable: true,
+        preferred: false,
+    };
     // "a group where every item is disabled keeps a focusable one, unless none can take focus"
     assert_eq!(
         roving_stop(
@@ -1439,6 +1584,12 @@ fn roving_tab_stops() {
         ),
         None
     );
+}
+
+#[test]
+fn roving_tab_stops_left_and_right_leave_only_from_the() {
+    use armature_core::keys::Key;
+    use armature_core::roving::*;
     // "Left and Right leave only from the end they point at, with nothing selected"
     let field = |start, end, rtl| FieldCaret {
         selection: Some((start, end)),
@@ -1498,10 +1649,6 @@ fn locale_tags() {
 #[test]
 fn panel_layouts() {
     use armature_core::panel_layout::*;
-    let panel = PanelConstraints::default;
-    let moved = |layout: &[f64], panels: &[PanelConstraints], handle, delta| {
-        resize_at(layout, panels, handle, delta, 0.5, &[])
-    };
     // "numbers are percentages, and pixel and rem sizes resolve against the space"
     assert_eq!(to_percent(PanelSize::Percent(30.0), 0.0, 16.0), Some(30.0));
     assert_eq!(to_percent(PanelSize::Px(200.0), 800.0, 16.0), Some(25.0));
@@ -1520,6 +1667,12 @@ fn panel_layouts() {
         .min,
         0.0
     );
+}
+
+#[test]
+fn panel_layouts_constraints_keep_collapsed_at_most_the_minimum() {
+    use armature_core::panel_layout::*;
+    let panel = PanelConstraints::default;
     // "constraints keep collapsed at most the minimum and the maximum at least the minimum"
     let odd = PanelSizes {
         min_size: Some(PanelSize::Percent(30.0)),
@@ -1576,6 +1729,15 @@ fn panel_layouts() {
         ),
         20.0
     );
+}
+
+#[test]
+fn panel_layouts_the_panels_on_either_side_give_and() {
+    use armature_core::panel_layout::*;
+    let panel = PanelConstraints::default;
+    let moved = |layout: &[f64], panels: &[PanelConstraints], handle, delta| {
+        resize_at(layout, panels, handle, delta, 0.5, &[])
+    };
     // "the panels on either side give and take the same amount"
     assert_eq!(
         moved(&[30.0, 70.0], &[panel(), panel()], 0, 10.0),
@@ -1603,6 +1765,15 @@ fn panel_layouts() {
     );
     assert_eq!(moved(&[30.0, 70.0], &[panel(), panel()], 0, 0.0), None);
     assert_eq!(moved(&[30.0, 70.0], &[panel(), panel()], 1, 10.0), None);
+}
+
+#[test]
+fn panel_layouts_a_panel_at_its_minimum_passes_the() {
+    use armature_core::panel_layout::*;
+    let panel = PanelConstraints::default;
+    let moved = |layout: &[f64], panels: &[PanelConstraints], handle, delta| {
+        resize_at(layout, panels, handle, delta, 0.5, &[])
+    };
     // "a panel at its minimum passes the rest on to the next one"
     let three = [
         panel(),
@@ -1647,6 +1818,24 @@ fn panel_layouts() {
         moved(&layout, &four, 0, 30.0),
         Some(vec![50.0, 20.0, 10.0, 20.0])
     );
+}
+
+#[test]
+fn panel_layouts_a_handle_s_bounds_stop_at_a() {
+    use armature_core::panel_layout::*;
+    let panel = PanelConstraints::default;
+    let moved = |layout: &[f64], panels: &[PanelConstraints], handle, delta| {
+        resize_at(layout, panels, handle, delta, 0.5, &[])
+    };
+    let three = [
+        panel(),
+        PanelConstraints {
+            min: 20.0,
+            ..panel()
+        },
+        panel(),
+    ];
+    let locked = [false, true];
     // "a handle's bounds stop at a disabled handle"
     assert_eq!(
         handle_bounds(&[20.0, 30.0, 50.0], &three, 0, &locked),
@@ -1672,6 +1861,20 @@ fn panel_layouts() {
         ),
         Some(vec![40.0, 60.0])
     );
+}
+
+#[test]
+fn panel_layouts_a_shrinking_panel_collapses_past_half_the() {
+    use armature_core::panel_layout::*;
+    let panel = PanelConstraints::default;
+    let moved = |layout: &[f64], panels: &[PanelConstraints], handle, delta| {
+        resize_at(layout, panels, handle, delta, 0.5, &[])
+    };
+    let sidebar = PanelConstraints {
+        min: 20.0,
+        collapsible: true,
+        ..panel()
+    };
     // "a shrinking panel collapses past half the way, and the other takes all it frees"
     let shutting = [sidebar, panel()];
     assert_eq!(
@@ -1704,6 +1907,15 @@ fn panel_layouts() {
         ),
         Some(vec![25.0, 75.0])
     );
+}
+
+#[test]
+fn panel_layouts_a_collapsed_panel_stays_shut_when_its() {
+    use armature_core::panel_layout::*;
+    let panel = PanelConstraints::default;
+    let moved = |layout: &[f64], panels: &[PanelConstraints], handle, delta| {
+        resize_at(layout, panels, handle, delta, 0.5, &[])
+    };
     // "a collapsed panel stays shut when its neighbours can't free its minimum"
     let tight = [
         PanelConstraints {
@@ -1749,6 +1961,18 @@ fn panel_layouts() {
         ),
         (10.0, 50.0)
     );
+}
+
+#[test]
+fn panel_layouts_every_handle_s_bounds_at_once_work() {
+    use armature_core::panel_layout::*;
+    let panel = PanelConstraints::default;
+    let sidebar = PanelConstraints {
+        min: 20.0,
+        collapsible: true,
+        ..panel()
+    };
+    let shutting = [sidebar, panel()];
     // "every handle's bounds at once work each handle out alone when a panel can collapse or is out of its bounds"
     assert_eq!(
         all_handle_bounds(&[30.0, 70.0], &shutting, &[]),
@@ -1768,15 +1992,20 @@ fn panel_layouts() {
         ),
         [(10.0, 100.0)]
     );
+}
+
+#[test]
+fn panel_layouts_every_handle_s_bounds_at_once_match() {
+    use armature_core::panel_layout::*;
     // "every handle's bounds at once match each handle's own", with upstream's seeded generator
     let mut seed: u64 = 7;
     let mut random = || {
         seed = seed * 16807 % 2_147_483_647;
-        (seed - 1) as f64 / 2_147_483_646.0
+        (seed - 1).cast::<f64>() / 2_147_483_646.0
     };
     let mut one_pass = 0;
     for run in 0..500 {
-        let count = 2 + (random() * 7.0) as usize;
+        let count = 2 + (random() * 7.0).cast::<usize>();
         let collapsing = run % 4 == 0;
         let bound = |random: &mut dyn FnMut() -> f64, most: f64| {
             if random() < 0.5 {
@@ -1826,7 +2055,7 @@ fn panel_layouts() {
             layout = resize_at(&layout, &panels, handle, delta, 1.0, &[]).unwrap_or(layout);
         }
         if run % 10 == 5 {
-            layout = vec![100.0 / count as f64; count];
+            layout = vec![100.0 / count.cast::<f64>(); count];
         }
         if panels.iter().zip(&layout).all(|(one, size)| {
             !one.collapsible && *size >= one.min - 1e-6 && *size <= one.max + 1e-6
@@ -1845,6 +2074,17 @@ fn panel_layouts() {
         }
     }
     assert!(one_pass > 250, "most runs take the one pass: {one_pass}");
+}
+
+#[test]
+fn panel_layouts_fitting_a_layout() {
+    use armature_core::panel_layout::*;
+    let panel = PanelConstraints::default;
+    let sidebar = PanelConstraints {
+        min: 20.0,
+        collapsible: true,
+        ..panel()
+    };
     // fitting a layout
     assert_eq!(fit_layout(&[1.0, 3.0], &[panel(), panel()]), [25.0, 75.0]);
     assert_eq!(
@@ -1877,6 +2117,12 @@ fn panel_layouts() {
         fit_layout(&[0.0, 50.0, 50.0], &[sidebar, panel(), panel()]),
         [0.0, 50.0, 50.0]
     );
+}
+
+#[test]
+fn panel_layouts_panels_without_a_default_share_what_s() {
+    use armature_core::panel_layout::*;
+    let panel = PanelConstraints::default;
     // "panels without a default share what's left evenly"
     assert_eq!(
         initial_layout(&[
@@ -1913,6 +2159,12 @@ fn panel_layouts() {
         ),
         [25.0, 75.0]
     );
+}
+
+#[test]
+fn panel_layouts_resizing_a_panel_goes_through_the_handle() {
+    use armature_core::panel_layout::*;
+    let panel = PanelConstraints::default;
     // "resizing a panel goes through the handle after it, or before it for the last"
     let plain = [panel(), panel(), panel()];
     assert_eq!(
@@ -1940,18 +2192,10 @@ fn carousel_layouts() {
     let row = |count: usize, size: f64, gap: f64| -> Vec<SlideBox> {
         (0..count)
             .map(|index| SlideBox {
-                start: index as f64 * (size + gap),
+                start: index.cast::<f64>() * (size + gap),
                 size,
             })
             .collect()
-    };
-    let positions = |pages: &[Page]| pages.iter().map(|page| page.position).collect::<Vec<_>>();
-    let view = LoopView {
-        snapport: 300.0,
-        padding_start: 0.0,
-        max_scroll: 1200.0,
-        align: Align::Start,
-        per_page: PerPage::Count(1),
     };
     // "reads the track from any rotation, and refuses a layout that isn't one"
     let track = measure_track(&row(5, 300.0, 10.0), 0).unwrap();
@@ -1971,6 +2215,27 @@ fn carousel_layouts() {
     assert_eq!(measure_track(&rotated, 3), Some(track));
     assert_eq!(measure_track(&row(5, 300.0, 10.0), 3), None);
     assert_eq!(measure_track(&row(1, 300.0, 0.0), 0), None);
+}
+
+#[test]
+fn carousel_layouts_pages_keep_their_slides_own_order_wherever() {
+    use armature_core::carousel_layout::*;
+    let row = |count: usize, size: f64, gap: f64| -> Vec<SlideBox> {
+        (0..count)
+            .map(|index| SlideBox {
+                start: index.cast::<f64>() * (size + gap),
+                size,
+            })
+            .collect()
+    };
+    let positions = |pages: &[Page]| pages.iter().map(|page| page.position).collect::<Vec<_>>();
+    let view = LoopView {
+        snapport: 300.0,
+        padding_start: 0.0,
+        max_scroll: 1200.0,
+        align: Align::Start,
+        per_page: PerPage::Count(1),
+    };
     // "pages keep their slides' own order wherever the track starts"
     let track = measure_track(&row(5, 300.0, 0.0), 0).unwrap();
     let pages = loop_pages(&track, &view, 3);
@@ -1981,12 +2246,6 @@ fn carousel_layouts() {
     assert_eq!(positions(&pages), [600.0, 900.0, 1200.0, 0.0, 300.0]);
     // "at rest, the current page moves mid-track with the same slides in view"
     let at = |position, first| LoopAt { position, first };
-    let forward_to = |page| {
-        Some(Heading {
-            page,
-            forward: true,
-        })
-    };
     let rotated = |first, delta| Some(Rotation { first, delta });
     assert_eq!(
         loop_rotation(&track, &view, at(0.0, 0), None, false),
@@ -1996,6 +2255,35 @@ fn carousel_layouts() {
         loop_rotation(&track, &view, at(600.0, 3), None, false),
         rotated(3, 0.0)
     );
+}
+
+#[test]
+fn carousel_layouts_a_step_past_the_end_rotates_only() {
+    use armature_core::carousel_layout::*;
+    let row = |count: usize, size: f64, gap: f64| -> Vec<SlideBox> {
+        (0..count)
+            .map(|index| SlideBox {
+                start: index.cast::<f64>() * (size + gap),
+                size,
+            })
+            .collect()
+    };
+    let view = LoopView {
+        snapport: 300.0,
+        padding_start: 0.0,
+        max_scroll: 1200.0,
+        align: Align::Start,
+        per_page: PerPage::Count(1),
+    };
+    let track = measure_track(&row(5, 300.0, 0.0), 0).unwrap();
+    let at = |position, first| LoopAt { position, first };
+    let forward_to = |page| {
+        Some(Heading {
+            page,
+            forward: true,
+        })
+    };
+    let rotated = |first, delta| Some(Rotation { first, delta });
     // "a step past the end rotates only when the next page doesn't lie ahead"
     assert_eq!(
         loop_rotation(&track, &view, at(1200.0, 0), forward_to(0), true),
@@ -2027,6 +2315,27 @@ fn carousel_layouts() {
             ..view
         }
     ));
+}
+
+#[test]
+fn carousel_layouts_a_track_too_short_to_rotate_gives() {
+    use armature_core::carousel_layout::*;
+    let view = LoopView {
+        snapport: 300.0,
+        padding_start: 0.0,
+        max_scroll: 1200.0,
+        align: Align::Start,
+        per_page: PerPage::Count(1),
+    };
+    let row = |count: usize, size: f64, gap: f64| -> Vec<SlideBox> {
+        (0..count)
+            .map(|index| SlideBox {
+                start: index.cast::<f64>() * (size + gap),
+                size,
+            })
+            .collect()
+    };
+    let at = |position, first| LoopAt { position, first };
     // "a track too short to rotate gives no rotation"
     let short = measure_track(&row(2, 100.0, 0.0), 0).unwrap();
     assert_eq!(
@@ -2045,6 +2354,20 @@ fn carousel_layouts() {
         ),
         None
     );
+}
+
+#[test]
+fn carousel_layouts_pages() {
+    use armature_core::carousel_layout::*;
+    let row = |count: usize, size: f64, gap: f64| -> Vec<SlideBox> {
+        (0..count)
+            .map(|index| SlideBox {
+                start: index.cast::<f64>() * (size + gap),
+                size,
+            })
+            .collect()
+    };
+    let positions = |pages: &[Page]| pages.iter().map(|page| page.position).collect::<Vec<_>>();
     // pages
     let pages_of =
         |slides: &[SlideBox], viewport: f64, before: f64, after: f64, align, per_page| {
@@ -2074,6 +2397,31 @@ fn carousel_layouts() {
             .collect::<Vec<_>>(),
         [[0], [1], [2], [3], [4]]
     );
+}
+
+#[test]
+fn carousel_layouts_pages_that_can_t_reach_the_start() {
+    use armature_core::carousel_layout::*;
+    let row = |count: usize, size: f64, gap: f64| -> Vec<SlideBox> {
+        (0..count)
+            .map(|index| SlideBox {
+                start: index.cast::<f64>() * (size + gap),
+                size,
+            })
+            .collect()
+    };
+    let positions = |pages: &[Page]| pages.iter().map(|page| page.position).collect::<Vec<_>>();
+    let pages_of =
+        |slides: &[SlideBox], viewport: f64, before: f64, after: f64, align, per_page| {
+            let last = slides[slides.len() - 1];
+            let geometry = Geometry {
+                slides,
+                snapport: viewport - before - after,
+                padding_start: before,
+                max_scroll: (last.start + last.size - viewport).max(0.0),
+            };
+            carousel_pages(&geometry, align, per_page)
+        };
     // "pages that can't reach the start merge, like the last slides of a full row"
     let pages = pages_of(
         &row(5, 100.0, 0.0),
@@ -2099,6 +2447,31 @@ fn carousel_layouts() {
         pages.iter().map(|page| page.leader).collect::<Vec<_>>(),
         [0, 3]
     );
+}
+
+#[test]
+fn carousel_layouts_auto_fits_as_many_slides_as_the() {
+    use armature_core::carousel_layout::*;
+    let row = |count: usize, size: f64, gap: f64| -> Vec<SlideBox> {
+        (0..count)
+            .map(|index| SlideBox {
+                start: index.cast::<f64>() * (size + gap),
+                size,
+            })
+            .collect()
+    };
+    let positions = |pages: &[Page]| pages.iter().map(|page| page.position).collect::<Vec<_>>();
+    let pages_of =
+        |slides: &[SlideBox], viewport: f64, before: f64, after: f64, align, per_page| {
+            let last = slides[slides.len() - 1];
+            let geometry = Geometry {
+                slides,
+                snapport: viewport - before - after,
+                padding_start: before,
+                max_scroll: (last.start + last.size - viewport).max(0.0),
+            };
+            carousel_pages(&geometry, align, per_page)
+        };
     // "auto fits as many slides as the snapport shows"
     assert_eq!(
         group_slides(&row(7, 100.0, 10.0), 320.0, PerPage::Auto),
@@ -2127,6 +2500,31 @@ fn carousel_layouts() {
     assert_eq!((pages[0].position, pages[0].margin), (0.0, 50.0));
     assert_eq!((pages[1].position, pages[1].margin), (150.0, 50.0));
     assert_eq!(positions(&pages), [0.0, 150.0, 350.0, 550.0, 700.0]);
+}
+
+#[test]
+fn carousel_layouts_end_alignment_lines_a_page_up_with() {
+    use armature_core::carousel_layout::*;
+    let row = |count: usize, size: f64, gap: f64| -> Vec<SlideBox> {
+        (0..count)
+            .map(|index| SlideBox {
+                start: index.cast::<f64>() * (size + gap),
+                size,
+            })
+            .collect()
+    };
+    let positions = |pages: &[Page]| pages.iter().map(|page| page.position).collect::<Vec<_>>();
+    let pages_of =
+        |slides: &[SlideBox], viewport: f64, before: f64, after: f64, align, per_page| {
+            let last = slides[slides.len() - 1];
+            let geometry = Geometry {
+                slides,
+                snapport: viewport - before - after,
+                padding_start: before,
+                max_scroll: (last.start + last.size - viewport).max(0.0),
+            };
+            carousel_pages(&geometry, align, per_page)
+        };
     // "end alignment lines a page up with the viewport's end"
     assert_eq!(
         positions(&pages_of(
@@ -2151,6 +2549,11 @@ fn carousel_layouts() {
         )),
         [0.0, 180.0, 380.0, 500.0]
     );
+}
+
+#[test]
+fn carousel_layouts_the_nearest_page_wins_and_none_without() {
+    use armature_core::carousel_layout::*;
     // "the nearest page wins, and none without pages"
     let at = [0.0, 300.0, 600.0];
     assert_eq!(
@@ -2171,6 +2574,11 @@ fn carousel_layouts() {
         [0.0, 140.0, 150.0, 300.0].map(|scroll| is_slide_in_view(slide, scroll, 300.0)),
         [false, false, true, true]
     );
+}
+
+#[test]
+fn carousel_layouts_a_slide_larger_than_the_viewport_counts() {
+    use armature_core::carousel_layout::*;
     // "a slide larger than the viewport counts once it fills half of it"
     let large = SlideBox {
         start: 0.0,
@@ -2198,7 +2606,7 @@ fn carousel_layouts() {
 // resizable.test.ts, "saved layouts"
 #[test]
 fn saved_panel_layouts() {
-    use armature_core::panel_layout::{load_layout, save_layout};
+    use armature_core::panel_layout::*;
     // "each set of panels keeps its own layout"
     let stored = save_layout("", &["a", "b"], &[25.0, 75.0]);
     let stored = save_layout(&stored, &["a", "b", "c"], &[20.0, 60.0, 20.0]);
@@ -2231,7 +2639,6 @@ fn saved_panel_layouts() {
 // scroll-area.test.ts: geometry, edges, scrollbar visibility, sticking to the end
 #[test]
 fn scroll_area_model() {
-    use armature_core::keys::Key;
     use armature_core::scroll_model::*;
     let list = AxisMetrics {
         position: 0.0,
@@ -2276,6 +2683,16 @@ fn scroll_area_model() {
         ),
         (0.0, 0.0)
     );
+}
+
+#[test]
+fn scroll_area_model_dragging_and_pressing_the_track() {
+    use armature_core::scroll_model::*;
+    let list = AxisMetrics {
+        position: 0.0,
+        client: 200.0,
+        scroll: 1000.0,
+    };
     // dragging and pressing the track
     assert_eq!(dragged_position(0.0, 80.0, list, 200.0), 400.0);
     assert_eq!(dragged_position(400.0, -1000.0, list, 200.0), 0.0);
@@ -2309,6 +2726,17 @@ fn scroll_area_model() {
         (Some(PageTowards::Start), Some(PageTowards::End), None)
     );
     assert_eq!(page_length(200.0), 175.0);
+}
+
+#[test]
+fn scroll_area_model_edges() {
+    use armature_core::scroll_model::*;
+    let list = AxisMetrics {
+        position: 0.0,
+        client: 200.0,
+        scroll: 1000.0,
+    };
+    let at = |position| AxisMetrics { position, ..list };
     // edges
     assert!(edges_of(at(0.6)).at_start);
     assert!(edges_of(at(799.4)).at_end);
@@ -2339,6 +2767,11 @@ fn scroll_area_model() {
             progress: 0.0
         }
     );
+}
+
+#[test]
+fn scroll_area_model_a_firefox_wheel_in_lines_or_pages() {
+    use armature_core::scroll_model::*;
     // "a Firefox wheel in lines or pages scrolls as far as one in pixels"
     assert_eq!(
         (
@@ -2372,11 +2805,6 @@ fn scroll_area_model() {
         Activity::Moving
     ));
     assert!(scrollbar_shown(
-        ScrollbarType::Scroll,
-        true,
-        Activity::Moving
-    ));
-    assert!(scrollbar_shown(
         ScrollbarType::Hover,
         true,
         Activity::Hovering
@@ -2386,6 +2814,12 @@ fn scroll_area_model() {
         false,
         Activity::Hovering
     ));
+}
+
+#[test]
+fn scroll_area_model_sticking_to_the_end() {
+    use armature_core::keys::Key;
+    use armature_core::scroll_model::*;
     // sticking to the end
     assert!(!follows_end(true, -40.0, 40.0));
     assert!(
@@ -2409,7 +2843,7 @@ fn scroll_area_model() {
 // position.test.ts: placement and arrow offset
 #[test]
 fn popup_placement() {
-    use armature_core::geometry::{Rect, Size};
+    use armature_core::geometry::*;
     use armature_core::placement::*;
     let viewport = Rect::new(0.0, 0.0, 1000.0, 800.0);
     let size = Size {
@@ -2432,6 +2866,28 @@ fn popup_placement() {
         (below.x, below.y, below.side),
         (100.0, 134.0, PlaceSide::Bottom)
     );
+}
+
+#[test]
+fn popup_placement_reports_the_space_left_below_for_sizing() {
+    use armature_core::geometry::*;
+    use armature_core::placement::*;
+    let viewport = Rect::new(0.0, 0.0, 1000.0, 800.0);
+    let size = Size {
+        width: 200.0,
+        height: 300.0,
+    };
+    let options = PlaceOptions {
+        side: PlaceSide::Bottom,
+        align: PlaceAlign::Start,
+        side_offset: 4.0,
+        align_offset: 0.0,
+        collision_padding: 8.0,
+        rtl: false,
+    };
+    let placed =
+        |anchor: Rect, options: PlaceOptions| compute_placement(anchor, size, viewport, options);
+    let below = placed(Rect::new(100.0, 100.0, 80.0, 30.0), options);
     // "reports the space left below for sizing"
     assert_eq!(below.available.height, 800.0 - 8.0 - 134.0);
     // "flips above when there is no room below"
@@ -2453,6 +2909,27 @@ fn popup_placement() {
         placed(Rect::new(950.0, 100.0, 40.0, 30.0), options).x,
         1000.0 - 200.0 - 8.0
     );
+}
+
+#[test]
+fn popup_placement_submenus_flip_to_the_left_when_there() {
+    use armature_core::geometry::*;
+    use armature_core::placement::*;
+    let viewport = Rect::new(0.0, 0.0, 1000.0, 800.0);
+    let size = Size {
+        width: 200.0,
+        height: 300.0,
+    };
+    let options = PlaceOptions {
+        side: PlaceSide::Bottom,
+        align: PlaceAlign::Start,
+        side_offset: 4.0,
+        align_offset: 0.0,
+        collision_padding: 8.0,
+        rtl: false,
+    };
+    let placed =
+        |anchor: Rect, options: PlaceOptions| compute_placement(anchor, size, viewport, options);
     // "submenus flip to the left when there is no room on the right"
     let submenu = placed(
         Rect::new(850.0, 100.0, 120.0, 30.0),
@@ -2475,6 +2952,27 @@ fn popup_placement() {
         .x,
         580.0 - 200.0
     );
+}
+
+#[test]
+fn popup_placement_leaves_with_an_anchor_scrolled_off_screen() {
+    use armature_core::geometry::*;
+    use armature_core::placement::*;
+    let viewport = Rect::new(0.0, 0.0, 1000.0, 800.0);
+    let size = Size {
+        width: 200.0,
+        height: 300.0,
+    };
+    let options = PlaceOptions {
+        side: PlaceSide::Bottom,
+        align: PlaceAlign::Start,
+        side_offset: 4.0,
+        align_offset: 0.0,
+        collision_padding: 8.0,
+        rtl: false,
+    };
+    let placed =
+        |anchor: Rect, options: PlaceOptions| compute_placement(anchor, size, viewport, options);
     // "leaves with an anchor scrolled off screen instead of staying behind at the edge"
     assert_eq!(
         placed(Rect::new(-600.0, 100.0, 80.0, 30.0), options).x,
@@ -2504,6 +3002,24 @@ fn popup_placement() {
         .x,
         300.0
     );
+}
+
+#[test]
+fn popup_placement_keeps_to_the_part_of_the_page() {
+    use armature_core::geometry::*;
+    use armature_core::placement::*;
+    let size = Size {
+        width: 200.0,
+        height: 300.0,
+    };
+    let options = PlaceOptions {
+        side: PlaceSide::Bottom,
+        align: PlaceAlign::Start,
+        side_offset: 4.0,
+        align_offset: 0.0,
+        collision_padding: 8.0,
+        rtl: false,
+    };
     // "keeps to the part of the page a pinch zoom shows"
     let zoomed = Rect::new(640.0, 200.0, 640.0, 400.0);
     let shown = compute_placement(Rect::new(1100.0, 300.0, 80.0, 30.0), size, zoomed, options);

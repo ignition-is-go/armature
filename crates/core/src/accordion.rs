@@ -310,22 +310,6 @@ impl Primitive for Accordion {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::string_slice,
-    clippy::panic,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::cast_lossless,
-    clippy::float_cmp,
-    clippy::too_many_lines,
-    reason = "a test fails by panicking, and its arithmetic is on values it wrote itself"
-)]
 mod tests {
     use super::*;
     use crate::keys::{Key, Modifiers};
@@ -390,14 +374,14 @@ mod tests {
         });
         press(&mut loose, "shipping");
         press(&mut loose, "shipping");
-        assert_eq!(loose.value(), [] as [std::string::String; 0]);
+        assert_eq!(loose.value(), Vec::<String>::new());
     }
 
     #[test]
     fn disabled_sections_ignore_presses_and_agents() {
         let mut accordion = accordion(Options::default());
         press(&mut accordion, "legal");
-        assert_eq!(accordion.value(), [] as [std::string::String; 0]);
+        assert_eq!(accordion.value(), Vec::<String>::new());
         assert_eq!(
             accordion.act("open", Some("legal"), &mut |_| true),
             Err(ActError::Disabled("legal".into()))

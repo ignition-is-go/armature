@@ -1,23 +1,7 @@
 //! The contract features GPUI gets no help from the platform for: a text caret, Tab
 //! trapping, hover timing, scrolling and the clipboard.
 
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::string_slice,
-    clippy::panic,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::cast_lossless,
-    clippy::float_cmp,
-    clippy::too_many_lines,
-    reason = "a test fails by panicking, and its arithmetic is on values it wrote itself"
-)]
-
+use armature_core::convert::Cast;
 use std::time::Duration;
 
 use armature_core::command::{self, Command};
@@ -73,6 +57,10 @@ fn open<P: Primitive, E: IntoElement>(
     (machine, cx)
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "a helper for tests fails as a test does"
+)]
 fn focus<P: Primitive>(
     machine: &Entity<Machine<P>>,
     cx: &mut VisualTestContext,
@@ -80,7 +68,9 @@ fn focus<P: Primitive>(
     item: Option<&str>,
 ) {
     machine.update_in(cx, |m, window, cx| {
-        m.focus_handle(part, item).unwrap().focus(window, cx);
+        m.focus_handle(part, item)
+            .expect("the test names a part that takes focus")
+            .focus(window, cx);
     });
 }
 
@@ -90,7 +80,8 @@ fn is_focused<P: Primitive>(
     part: P::Part,
 ) -> bool {
     machine.update_in(cx, |m, window, _| {
-        m.focus_handle(part, None).unwrap().is_focused(window)
+        m.focus_handle(part, None)
+            .is_some_and(|handle| handle.is_focused(window))
     })
 }
 
@@ -191,11 +182,11 @@ fn a_long_list_renders_only_what_is_in_view_and_keys_scroll_it(cx: &mut TestAppC
             let visible = rows.read(cx).primitive().rows();
             let keys: Vec<String> = visible.iter().map(|row| row.key.clone()).collect();
             rows.update(cx, |m, cx| m.track(virtual_list::Part::Row, keys, cx));
-            let total = rows.read(cx).primitive().total_size() as f32;
+            let total = rows.read(cx).primitive().total_size().cast::<f32>();
             let drawn = visible.into_iter().map(|row| {
                 part(rows, virtual_list::Part::Row, Some(&row.key), cx)
                     .absolute()
-                    .top(px(row.offset as f32))
+                    .top(px(row.offset.cast::<f32>()))
                     .h(px(ROW))
                     .w_full()
             });

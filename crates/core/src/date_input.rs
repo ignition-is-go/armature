@@ -558,22 +558,6 @@ impl Primitive for DateInput {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::string_slice,
-    clippy::panic,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::cast_lossless,
-    clippy::float_cmp,
-    clippy::too_many_lines,
-    reason = "a test fails by panicking, and its arithmetic is on values it wrote itself"
-)]
 mod tests {
     use super::*;
     use crate::keys::Modifiers;
@@ -632,7 +616,7 @@ mod tests {
             "and the day is pulled back to fit"
         );
         key(&mut input, Key::Backspace);
-        assert_eq!(input.value(), [] as [std::string::String; 0]);
+        assert_eq!(input.value(), Vec::<String>::new());
         assert_eq!(
             input.text(Part::Segment, Some("month")).as_deref(),
             Some("--")
@@ -643,7 +627,7 @@ mod tests {
     fn a_time_makes_it_a_date_and_time() {
         let mut input = DateInput::new(true);
         type_digits(&mut input, "20261102");
-        assert_eq!(input.value(), [] as [std::string::String; 0]);
+        assert_eq!(input.value(), Vec::<String>::new());
         type_digits(&mut input, "1430");
         assert_eq!(input.value(), ["2026-11-02T14:30"]);
         input
@@ -666,7 +650,7 @@ mod tests {
         let earliest = Date::new(2026, 6, 1);
         let mut input = DateInput::default().between(earliest, None);
         type_digits(&mut input, "20260315");
-        assert_eq!(input.value(), [] as [std::string::String; 0]);
+        assert_eq!(input.value(), Vec::<String>::new());
         assert!(input.semantics(Part::Segment, Some("day")).invalid);
         assert_eq!(
             input.text(Part::Segment, Some("month")).as_deref(),

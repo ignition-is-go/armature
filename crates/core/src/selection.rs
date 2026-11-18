@@ -181,22 +181,6 @@ pub fn all_toggled(selected: &[String], selectable: &[&str]) -> Vec<String> {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::string_slice,
-    clippy::panic,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::cast_lossless,
-    clippy::float_cmp,
-    clippy::too_many_lines,
-    reason = "a test fails by panicking, and its arithmetic is on values it wrote itself"
-)]
 mod tests {
     use super::*;
 
@@ -268,7 +252,7 @@ mod tests {
     fn toggling_the_only_selected_item_in_single_mode_clears_it() {
         assert_eq!(
             propose(Mode::Single, &strings(&["a"]), Some("a"), "a", CTRL, &ORDER),
-            [] as [std::string::String; 0]
+            Vec::<String>::new()
         );
         assert_eq!(
             propose(Mode::Single, &strings(&["a"]), Some("a"), "b", CTRL, &ORDER),
@@ -282,7 +266,7 @@ mod tests {
         assert_eq!(all, strings(&ORDER));
         assert_eq!(
             toggle_all(Mode::Multiple, &all, &ORDER),
-            [] as [std::string::String; 0]
+            Vec::<String>::new()
         );
         assert_eq!(
             toggle_all(Mode::Single, &strings(&["b"]), &ORDER),

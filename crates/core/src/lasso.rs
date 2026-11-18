@@ -30,22 +30,6 @@ pub fn lasso_selection<K: Clone + PartialEq>(before: &[K], hits: &[K], mods: Mod
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::string_slice,
-    clippy::panic,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::cast_lossless,
-    clippy::float_cmp,
-    clippy::too_many_lines,
-    reason = "a test fails by panicking, and its arithmetic is on values it wrote itself"
-)]
 mod tests {
     use super::*;
 
@@ -69,7 +53,7 @@ mod tests {
     fn a_lasso_in_empty_space_selects_nothing() {
         assert_eq!(
             lasso_hits(Point::new(11., 0.), Point::new(19., 10.), &items()),
-            [] as [&str; 0]
+            Vec::<&str>::new()
         );
     }
 

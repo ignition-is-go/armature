@@ -176,29 +176,16 @@ fn subsequence(query: &[char], chars: &[(usize, char)]) -> Option<Vec<usize>> {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::string_slice,
-    clippy::panic,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::cast_lossless,
-    clippy::float_cmp,
-    clippy::too_many_lines,
-    reason = "a test fails by panicking, and its arithmetic is on values it wrote itself"
-)]
 mod tests {
     use super::*;
 
     /// Each matched run as its byte offset and text.
     fn matched<'a>(query: &str, text: &'a str) -> Vec<(usize, &'a str)> {
         let ranges = match_ranges(query, text).unwrap();
-        ranges.into_iter().map(|r| (r.start, &text[r])).collect()
+        ranges
+            .into_iter()
+            .filter_map(|run| Some((run.start, text.get(run)?)))
+            .collect()
     }
 
     #[test]

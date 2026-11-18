@@ -2,23 +2,6 @@
 //! against armature's primitives. Each test is titled after the upstream file, and
 //! each assertion carries the upstream test's own name where one maps across.
 
-#![allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::string_slice,
-    clippy::panic,
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::cast_lossless,
-    clippy::float_cmp,
-    clippy::too_many_lines,
-    reason = "a test fails by panicking, and its arithmetic is on values it wrote itself"
-)]
-
 use armature_core::accordion::{self, Accordion};
 use armature_core::keys::{Dir, Key, Modifiers, Orientation, apple_key};
 use armature_core::listbox::{self, Listbox};
@@ -111,7 +94,7 @@ fn accordion_behaviors() {
     multiple.act("open_all", None, &mut |_| true).unwrap();
     assert_eq!(multiple.value(), ["a", "b"]);
     multiple.act("close_all", None, &mut |_| true).unwrap();
-    assert_eq!(multiple.value(), [] as [std::string::String; 0]);
+    assert_eq!(multiple.value(), Vec::<String>::new());
 
     // "without collapsible, the open item stays open and says so"
     let mut fixed = accordion(accordion::Options::default());
@@ -191,8 +174,8 @@ fn tabs_behaviors() {
 // slider.test.ts
 #[test]
 fn slider_behaviors() {
-    use armature_core::geometry::{Point, Rect};
-    use armature_core::primitive::{Pointer, PointerPhase};
+    use armature_core::geometry::*;
+    use armature_core::primitive::*;
     let track = |_: range_slider::Part, _: Option<&str>| Some(Rect::new(0.0, 0.0, 100.0, 10.0));
     let press_at = |slider: &mut RangeSlider, x: f64| {
         for phase in [PointerPhase::Down, PointerPhase::Up] {
@@ -611,8 +594,6 @@ fn hold_behaviors() {
 #[test]
 fn calendar_behaviors() {
     let start = Date::new(2026, 10, 16).unwrap();
-    let on = |calendar: &Calendar| calendar.semantics(calendar::Part::Day, None);
-    let _ = on;
     let focus_of = |calendar: &mut Calendar, pressed: Key, mods: Modifiers| {
         calendar
             .send(
@@ -671,6 +652,25 @@ fn calendar_behaviors() {
         focus_of(&mut calendar, Key::End, plain).as_deref(),
         Some("2027-10-09")
     );
+}
+
+#[test]
+fn calendar_behaviors_left_and_right_swap_in_a_right() {
+    let start = Date::new(2026, 10, 16).unwrap();
+    let focus_of = |calendar: &mut Calendar, pressed: Key, mods: Modifiers| {
+        calendar
+            .send(
+                Input::Key {
+                    key: pressed,
+                    mods,
+                    now_ms: 0,
+                },
+                &mut |_| true,
+            )
+            .focus_item()
+            .map(str::to_string)
+    };
+    let plain = Modifiers::default();
     // "Left and Right swap in a right-to-left page"
     let mut rtl = Calendar::new(
         calendar::Options {
@@ -696,6 +696,25 @@ fn calendar_behaviors() {
         None,
         "no further than the last day allowed"
     );
+}
+
+#[test]
+fn calendar_behaviors_a_press_or_enter_selects_one_date() {
+    let start = Date::new(2026, 10, 16).unwrap();
+    let focus_of = |calendar: &mut Calendar, pressed: Key, mods: Modifiers| {
+        calendar
+            .send(
+                Input::Key {
+                    key: pressed,
+                    mods,
+                    now_ms: 0,
+                },
+                &mut |_| true,
+            )
+            .focus_item()
+            .map(str::to_string)
+    };
+    let plain = Modifiers::default();
     // "a press or Enter selects one date"
     let mut picking = Calendar::new(calendar::Options::default(), start);
     focus_of(&mut picking, Key::Enter, plain);
@@ -742,16 +761,6 @@ use armature_core::dialog::{self, Dialog, Dismiss, Refusal};
 #[test]
 fn dialog_behaviors() {
     let open = dialog::Options::default();
-    let press = |dialog: &mut Dialog, part: dialog::Part| {
-        dialog.send(
-            Input::Press {
-                part,
-                item: None,
-                mods: Modifiers::default(),
-            },
-            &mut |_| true,
-        );
-    };
     // "dismissals close unless dismissible is false, which makes them attempts"
     for dismiss in [Dismiss::Escape, Dismiss::OutsidePress, Dismiss::Back] {
         assert_eq!(open.refusal(dismiss), None);
@@ -764,6 +773,11 @@ fn dialog_behaviors() {
             Some(Refusal::Attempt)
         );
     }
+}
+
+#[test]
+fn dialog_behaviors_close_parts_triggers_and_the_controller_close() {
+    let open = dialog::Options::default();
     // "Close parts, triggers and the controller close a non-dismissible dialog"
     for dismiss in [
         Dismiss::ClosePress,
@@ -786,6 +800,21 @@ fn dialog_behaviors() {
     };
     assert_eq!(kept.refusal(Dismiss::OutsidePress), Some(Refusal::Attempt));
     assert_eq!(kept.refusal(Dismiss::Escape), None);
+}
+
+#[test]
+fn dialog_behaviors_a_refused_press_beside_a_non_modal() {
+    let open = dialog::Options::default();
+    let press = |dialog: &mut Dialog, part: dialog::Part| {
+        dialog.send(
+            Input::Press {
+                part,
+                item: None,
+                mods: Modifiers::default(),
+            },
+            &mut |_| true,
+        );
+    };
     // "a refused press beside a non-modal dialog is the page's, not an attempt"
     let beside = dialog::Options {
         dismiss_on_backdrop: false,
@@ -810,6 +839,21 @@ fn dialog_behaviors() {
     press(&mut alert, dialog::Part::Trigger);
     alert.send(Input::PressOutside, &mut |_| true);
     assert!(alert.is_open() && alert.semantics(dialog::Part::Content, None).modal);
+}
+
+#[test]
+fn dialog_behaviors_a_dialog_is_modal_by_default_and() {
+    let open = dialog::Options::default();
+    let press = |dialog: &mut Dialog, part: dialog::Part| {
+        dialog.send(
+            Input::Press {
+                part,
+                item: None,
+                mods: Modifiers::default(),
+            },
+            &mut |_| true,
+        );
+    };
     // "a dialog is modal by default, and marked modal"
     let mut modal = Dialog::default();
     press(&mut modal, dialog::Part::Trigger);
@@ -961,7 +1005,7 @@ fn select_behaviors() {
     let _ = select.act("clear", None, &mut |_| false);
     assert_eq!(select.value(), ["large"]);
     select.act("clear", None, &mut |_| true).unwrap();
-    assert_eq!(select.value(), [] as [std::string::String; 0]);
+    assert_eq!(select.value(), Vec::<String>::new());
 }
 
 // number-input.test.ts
@@ -1094,7 +1138,7 @@ fn combobox_behaviors() {
             true
         },
     );
-    assert_eq!(combobox.value(), [] as [std::string::String; 0]);
+    assert_eq!(combobox.value(), Vec::<String>::new());
     combobox.send(
         Input::Key {
             key: Key::Escape,
@@ -1118,7 +1162,7 @@ fn combobox_behaviors() {
     combobox.act("clear", None, &mut |_| true).unwrap();
     typed(&mut combobox, "N", true);
     key(&mut combobox, Key::Escape);
-    assert_eq!(combobox.value(), [] as [std::string::String; 0]);
+    assert_eq!(combobox.value(), Vec::<String>::new());
     // "Escape brings back the value deleted last, not an earlier one"
     let mut combobox = frameworks(combobox::Options::default());
     typed(&mut combobox, "", true);
@@ -1328,8 +1372,8 @@ use armature_core::popover::{self, Popover};
 // popover.test.ts
 #[test]
 fn popover_behaviors() {
-    use armature_core::geometry::{Point, Rect, Size};
-    use armature_core::popup::{arrow_along, bridges};
+    use armature_core::geometry::*;
+    use armature_core::popup::*;
     // "points at the anchor's center"
     let arrow = Size {
         width: 12.0,
