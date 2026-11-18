@@ -1,7 +1,7 @@
 use crate::agent::{ActError, Snapshot, SnapshotItem};
 use crate::change::{Gate, ValueChange};
 use crate::keys::{Dir, Key, Modifiers};
-use crate::menu::{self, Entry, Menu};
+use crate::menu::{self, Entry, Landing, Menu};
 use crate::popup::{Align, Placement, Side};
 use crate::primitive::{
     Focusable, Input, Item, PartOf, Primitive, Reaction, Relations, Role, Semantics,
@@ -151,13 +151,17 @@ impl Menubar {
         }
     }
 
-    fn open_menu_at(&mut self, at: usize, last: bool, gate: Gate) -> Reaction<Part> {
+    fn open_menu_at(&mut self, at: usize, landing: Landing, gate: Gate) -> Reaction<Part> {
         if let Some(was) = self.open.filter(|was| *was != at) {
             self.close_menu(was);
         }
         self.open = Some(at);
         self.focused = at;
-        let key = if last { Key::ArrowUp } else { Key::ArrowDown };
+        // The menu lands where it would if these keys had opened it.
+        let key = match landing {
+            Landing::First => Key::ArrowDown,
+            Landing::Last => Key::ArrowUp,
+        };
         self.forward(
             at,
             Input::Key {
@@ -215,9 +219,9 @@ impl Menubar {
             }
             _ if self.menus.is_empty() => Reaction::default(),
             Key::Enter | Key::Space | Key::ArrowDown => {
-                self.open_menu_at(self.focused, false, gate)
+                self.open_menu_at(self.focused, Landing::First, gate)
             }
-            Key::ArrowUp => self.open_menu_at(self.focused, true, gate),
+            Key::ArrowUp => self.open_menu_at(self.focused, Landing::Last, gate),
             _ => Reaction::default(),
         }
     }
@@ -235,7 +239,7 @@ impl Menubar {
         let reaction = self.forward(at, input, gate);
         if !reaction.handled && reaction.focus.is_none() && (key == forward || key == back) {
             let next = self.neighbour(key == forward);
-            return self.open_menu_at(next, false, gate);
+            return self.open_menu_at(next, Landing::First, gate);
         }
         reaction
     }
@@ -355,7 +359,7 @@ impl Primitive for Menubar {
                     self.open = None;
                     Reaction::handled()
                 }
-                Some(at) => self.open_menu_at(at, false, gate),
+                Some(at) => self.open_menu_at(at, Landing::First, gate),
                 None => Reaction::default(),
             },
             // With a menu open, the pointer moving along the bar opens each in turn.
@@ -368,7 +372,7 @@ impl Primitive for Menubar {
                 },
                 Some(open),
             ) => match self.at(&key) {
-                Some(at) if at != open => self.open_menu_at(at, false, gate),
+                Some(at) if at != open => self.open_menu_at(at, Landing::First, gate),
                 _ => Reaction::default(),
             },
             (
@@ -488,7 +492,7 @@ impl Primitive for Menubar {
             .at(menu)
             .ok_or_else(|| ActError::UnknownItem(item.to_string()))?;
         if action == "open" {
-            self.open_menu_at(at, false, gate);
+            self.open_menu_at(at, Landing::First, gate);
             return Ok(());
         }
         let key = self.key_at(at);

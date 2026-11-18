@@ -65,8 +65,13 @@ impl Popover {
         allowed
     }
 
+    /// Closes for the person, unless the owner refuses.
+    fn close(&mut self, reason: Reason, gate: Gate) -> bool {
+        self.change(false, Source::User, reason, gate)
+    }
+
     fn dismiss(&mut self, reason: Reason, gate: Gate) -> Reaction<Part> {
-        if self.change(false, Source::User, reason, gate) {
+        if self.close(reason, gate) {
             Reaction::focusing(Part::Trigger)
         } else {
             Reaction::handled()
@@ -197,7 +202,7 @@ impl Primitive for Popover {
             } if self.open => self.dismiss(Reason::Keyboard, gate),
             // A press elsewhere, or focus leaving, closes it without pulling focus back.
             Input::PressOutside | Input::Blur { .. } | Input::WindowBlur => {
-                self.change(false, Source::User, Reason::Press, gate);
+                self.close(Reason::Press, gate);
                 Reaction::default()
             }
             _ => Reaction::default(),

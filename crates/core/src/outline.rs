@@ -279,8 +279,38 @@ impl OutlineMove {
         }
     }
 
+    /// Moves it up one row on screen. Each of these returns whether anything moved.
+    pub fn move_up(&mut self, shown: &dyn Fn(&str) -> bool) -> bool {
+        self.step(false, shown)
+    }
+
+    /// Moves it down one row on screen.
+    pub fn move_down(&mut self, shown: &dyn Fn(&str) -> bool) -> bool {
+        self.step(true, shown)
+    }
+
+    /// Moves it above every other row on screen.
+    pub fn move_to_top(&mut self, shown: &dyn Fn(&str) -> bool) -> bool {
+        self.move_to_end(false, shown)
+    }
+
+    /// Moves it below every other row on screen.
+    pub fn move_to_bottom(&mut self, shown: &dyn Fn(&str) -> bool) -> bool {
+        self.move_to_end(true, shown)
+    }
+
+    /// Takes it in a level, if the row above allows.
+    pub fn indent(&mut self, shown: &dyn Fn(&str) -> bool) -> bool {
+        self.change_depth(true, shown)
+    }
+
+    /// Takes it out a level, if the row below allows.
+    pub fn outdent(&mut self, shown: &dyn Fn(&str) -> bool) -> bool {
+        self.change_depth(false, shown)
+    }
+
     /// Moves it up or down by one row on screen, keeping the depth aimed for.
-    pub fn step(&mut self, down: bool, shown: &dyn Fn(&str) -> bool) -> bool {
+    fn step(&mut self, down: bool, shown: &dyn Fn(&str) -> bool) -> bool {
         let (_, slot) = self.others(shown);
         let to = if down {
             slot.saturating_add(1)
@@ -291,13 +321,13 @@ impl OutlineMove {
     }
 
     /// Moves it to the top or the bottom of the rows on screen.
-    pub fn to_end(&mut self, last: bool, shown: &dyn Fn(&str) -> bool) -> bool {
+    fn move_to_end(&mut self, last: bool, shown: &dyn Fn(&str) -> bool) -> bool {
         let to = if last { usize::MAX } else { 0 };
         self.place(to, self.aim, shown)
     }
 
     /// Takes it in a level or out one, as far as the rows around it allow.
-    pub fn indent(&mut self, inward: bool, shown: &dyn Fn(&str) -> bool) -> bool {
+    fn change_depth(&mut self, inward: bool, shown: &dyn Fn(&str) -> bool) -> bool {
         let (_, slot) = self.others(shown);
         let depth = row_depth(&self.rows, self.at());
         let wanted = if inward {
@@ -497,12 +527,12 @@ impl Outline {
             (Key::ArrowRight, Key::ArrowLeft)
         };
         match key {
-            Key::ArrowUp => drop(moving.step(false, &every_row)),
-            Key::ArrowDown => drop(moving.step(true, &every_row)),
-            Key::Home => drop(moving.to_end(false, &every_row)),
-            Key::End => drop(moving.to_end(true, &every_row)),
-            key if key == inward => drop(moving.indent(true, &every_row)),
-            key if key == outward => drop(moving.indent(false, &every_row)),
+            Key::ArrowUp => drop(moving.move_up(&every_row)),
+            Key::ArrowDown => drop(moving.move_down(&every_row)),
+            Key::Home => drop(moving.move_to_top(&every_row)),
+            Key::End => drop(moving.move_to_bottom(&every_row)),
+            key if key == inward => drop(moving.indent(&every_row)),
+            key if key == outward => drop(moving.outdent(&every_row)),
             Key::Escape => return Reaction::handled().alerting("Move cancelled"),
             // Leaving puts the row back and lets focus move on.
             Key::Tab => return Reaction::default(),
@@ -727,10 +757,10 @@ impl Primitive for Outline {
             .ok_or_else(|| ActError::UnknownItem(key.to_string()))?;
         let every_row = |_: &str| true;
         match action {
-            "move_up" => moving.step(false, &every_row),
-            "move_down" => moving.step(true, &every_row),
-            "indent" => moving.indent(true, &every_row),
-            _ => moving.indent(false, &every_row),
+            "move_up" => moving.move_up(&every_row),
+            "move_down" => moving.move_down(&every_row),
+            "indent" => moving.indent(&every_row),
+            _ => moving.outdent(&every_row),
         };
         // With nowhere to go that way there is nothing to commit, or to refuse.
         let Some(landed) = moving.dropped(&self.rows) else {

@@ -98,6 +98,14 @@ pub enum Part {
 
 const ACTIONS: &[&str] = &["open", "close", "run", "toggle"];
 
+/// The entry a menu lands on when it opens.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Landing {
+    First,
+    /// As when it is opened with the up arrow.
+    Last,
+}
+
 /// A menu of actions, checkboxes, radio choices and submenus, opened from a button.
 ///
 /// A submenu takes the place of the entries it was opened from, and `ArrowLeft` or
@@ -202,19 +210,19 @@ impl Menu {
         self.active = None;
     }
 
-    fn open_at(&mut self, last: bool) -> Reaction<Part> {
+    fn open_at(&mut self, landing: Landing) -> Reaction<Part> {
         self.open = true;
         self.path.clear();
-        self.active = self.edge(last);
+        self.active = self.edge(landing);
         Reaction::to_item(Part::Item, self.active.clone())
     }
 
-    fn edge(&self, last: bool) -> Option<String> {
+    /// The first or last entry on show that can be chosen.
+    fn edge(&self, landing: Landing) -> Option<String> {
         let mut enabled = self.shown().into_iter().filter(|entry| !entry.disabled);
-        if last {
-            enabled.next_back()
-        } else {
-            enabled.next()
+        match landing {
+            Landing::First => enabled.next(),
+            Landing::Last => enabled.next_back(),
         }
         .map(|entry| entry.key.clone())
     }
@@ -248,7 +256,7 @@ impl Menu {
             }
             Kind::Submenu => {
                 self.path.push(entry.key);
-                self.active = self.edge(false);
+                self.active = self.edge(Landing::First);
                 Ok(Reaction::to_item(Part::Item, self.active.clone()))
             }
             Kind::Checkbox | Kind::Radio(_) => self.switch(&entry, source, reason, gate),
@@ -534,7 +542,7 @@ impl Primitive for Menu {
             (Input::Hotkey { shortcut }, _) => self.on_hotkey(shortcut, gate),
             // Called up where the pointer is, as a context menu.
             (Input::ContextMenu { at, .. }, _) => {
-                let reaction = self.open_at(false);
+                let reaction = self.open_at(Landing::First);
                 self.point = Some(at);
                 reaction
             }
@@ -548,7 +556,7 @@ impl Primitive for Menu {
                     ..
                 },
                 false,
-            ) => self.open_at(false),
+            ) => self.open_at(Landing::First),
             (
                 Input::Press {
                     part: Part::Trigger,
@@ -564,7 +572,7 @@ impl Primitive for Menu {
                     key: Key::ArrowUp, ..
                 },
                 false,
-            ) => self.open_at(true),
+            ) => self.open_at(Landing::Last),
             (Input::PressOutside | Input::WindowBlur | Input::Blur { .. }, true) => {
                 self.close();
                 Reaction::default()
@@ -650,7 +658,7 @@ impl Primitive for Menu {
     fn act(&mut self, action: &str, item: Option<&str>, gate: Gate) -> Result<(), ActError> {
         let action: &'static str = match action {
             "open" => {
-                self.open_at(false);
+                self.open_at(Landing::First);
                 return Ok(());
             }
             "close" => {
