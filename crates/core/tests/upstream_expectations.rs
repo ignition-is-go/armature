@@ -27,7 +27,10 @@ fn row(page: usize, count: usize, siblings: usize, boundaries: usize) -> String 
 // pagination.test.ts
 #[test]
 fn pagination_range() {
-    assert!(page_range(1, 0, 1, 1).is_empty());
+    assert_eq!(
+        page_range(1, 0, 1, 1),
+        [] as [armature_core::pagination::PageItem; 0]
+    );
     assert_eq!(row(1, 1, 1, 1), "1");
     assert_eq!(row(1, 2, 1, 1), "1 2");
     assert_eq!(row(4, 7, 1, 1), "1 2 3 4 5 6 7");
@@ -134,7 +137,7 @@ fn sheet_curves() {
 fn velocity() {
     let mut rested = VelocityTracker::default();
     for t in (0..=100).step_by(8) {
-        rested.push(t as f64, t as f64 * 2.0);
+        rested.push(f64::from(t), f64::from(t) * 2.0);
     }
     assert_eq!(
         rested.velocity_at(150.0),
@@ -154,7 +157,7 @@ fn velocity() {
 
     let mut fast = VelocityTracker::default();
     for t in (0..=40).step_by(8) {
-        fast.push(t as f64, t as f64 * 20.0);
+        fast.push(f64::from(t), f64::from(t) * 20.0);
     }
     assert_eq!(
         fast.velocity_at(40.0),
@@ -246,11 +249,15 @@ fn date_arithmetic() {
         assert!(Date::parse(bad).is_none(), "{bad} is not a date");
     }
     assert_eq!(
-        Date::new(2026, 10, 16).map(|date| date.format()).as_deref(),
+        Date::new(2026, 10, 16)
+            .map(armature_core::date::Date::format)
+            .as_deref(),
         Some("2026-10-16")
     );
     assert_eq!(
-        Date::new(33, 1, 5).map(|date| date.format()).as_deref(),
+        Date::new(33, 1, 5)
+            .map(armature_core::date::Date::format)
+            .as_deref(),
         Some("0033-01-05")
     );
     assert!(Date::new(2026, 2, 30).is_none());
@@ -374,7 +381,7 @@ fn produce() -> Vec<TreeItem> {
 }
 
 fn set(keys: &[&str]) -> HashSet<String> {
-    keys.iter().map(|key| key.to_string()).collect()
+    keys.iter().map(std::string::ToString::to_string).collect()
 }
 
 // tree-checked.test.ts
@@ -416,7 +423,10 @@ fn tree_checking() {
         ["apple", "straw", "blue", "lemon", "carrot"]
     );
     let cleared = tree.toggle_checked("fruit", &set(&["apple", "straw", "blue", "lemon"]));
-    assert!(tree.checked_value(&cleared, CheckStrategy::Leaf).is_empty());
+    assert_eq!(
+        tree.checked_value(&cleared, CheckStrategy::Leaf),
+        [] as [std::string::String; 0]
+    );
 }
 
 use armature_core::number::{NumberRange, decimals_of, wrap};
@@ -599,7 +609,7 @@ use armature_core::primitive::Primitive;
 use armature_core::selection::{all_toggled, keys_between, range_selection, toggled_keys};
 
 fn keys(list: &[&str]) -> Vec<String> {
-    list.iter().map(|key| key.to_string()).collect()
+    list.iter().map(std::string::ToString::to_string).collect()
 }
 
 // listbox-range.test.ts
@@ -640,7 +650,10 @@ fn listbox_ranges() {
     let selectable = ["a", "b", "d"];
     let all = all_toggled(&keys(&["d"]), &selectable);
     assert_eq!(all, ["d", "a", "b"]);
-    assert!(all_toggled(&all, &selectable).is_empty());
+    assert_eq!(
+        all_toggled(&all, &selectable),
+        [] as [std::string::String; 0]
+    );
     assert_eq!(
         all_toggled(&keys(&["c", "a", "b", "d"]), &selectable),
         ["c"]

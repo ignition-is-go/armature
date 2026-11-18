@@ -43,18 +43,18 @@ fn described(paths: &[std::path::PathBuf]) -> Vec<FileInfo> {
                 .map(|name| name.to_string_lossy().into_owned())
                 .unwrap_or_default(),
             kind: String::new(),
-            size: std::fs::metadata(path).map(|file| file.len()).unwrap_or(0),
+            size: std::fs::metadata(path).map_or(0, |file| file.len()),
             path: Some(path.to_string_lossy().into_owned()),
         })
         .collect()
 }
 
 fn core_point(point: Point<Pixels>) -> CorePoint {
-    CorePoint::new(f32::from(point.x) as f64, f32::from(point.y) as f64)
+    CorePoint::new(f64::from(f32::from(point.x)), f64::from(f32::from(point.y)))
 }
 
 fn core_rect(bounds: Bounds<Pixels>) -> Rect {
-    let number = |pixels: Pixels| f32::from(pixels) as f64;
+    let number = |pixels: Pixels| f64::from(f32::from(pixels));
     Rect {
         x: number(bounds.origin.x),
         y: number(bounds.origin.y),
@@ -72,6 +72,7 @@ impl gpui::Global for Layers {}
 /// The text GPUI's key bindings use for a shortcut, so one written once as
 /// `mod+shift+k` can be bound with `KeyBinding::new`. `mod` becomes Cmd on macOS and
 /// Ctrl elsewhere.
+#[must_use]
 pub fn binding_for(shortcut: &Shortcut) -> String {
     let key = match shortcut.key {
         Key::ArrowUp => "up".to_string(),
@@ -236,7 +237,7 @@ impl<P: Primitive> Machine<P> {
         cx.on_release(move |_, cx| agent::registry(cx).unregister(registration))
             .detach();
 
-        Machine {
+        Self {
             machine,
             label: label.into(),
             handles,
@@ -624,7 +625,10 @@ impl<P: Primitive> Machine<P> {
             phase,
             part,
             item: item.clone(),
-            at: CorePoint::new(f32::from(position.x) as f64, f32::from(position.y) as f64),
+            at: CorePoint::new(
+                f64::from(f32::from(position.x)),
+                f64::from(f32::from(position.y)),
+            ),
             mods: modifiers(mods),
             now_ms: self.now_ms(),
         };
@@ -698,7 +702,7 @@ impl<P: Primitive> Machine<P> {
         let bounds = &self.bounds;
         let measure = |part: P::Part, item: Option<&str>| {
             let bounds = bounds.get(&(part, item.map(str::to_string)))?;
-            let number = |pixels: Pixels| f32::from(pixels) as f64;
+            let number = |pixels: Pixels| f64::from(f32::from(pixels));
             Some(Rect {
                 x: number(bounds.origin.x),
                 y: number(bounds.origin.y),
@@ -923,7 +927,7 @@ pub fn part<K: PartOf>(
                             .timer(Duration::from_millis(400))
                             .await;
                         let _ = this.update_in(cx, |state, window, cx| {
-                            state.end_crossing(false, window, cx)
+                            state.end_crossing(false, window, cx);
                         });
                     })
                     .detach();
@@ -940,7 +944,7 @@ pub fn part<K: PartOf>(
         });
         // While the pointer crosses towards the popup, its path is followed.
         let crossing = state.clone();
-        let follow = move |_: Bounds<Pixels>, _: (), window: &mut Window, _: &mut App| {
+        let follow = move |_: Bounds<Pixels>, (): (), window: &mut Window, _: &mut App| {
             let crossing = crossing.clone();
             window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
                 if phase != DispatchPhase::Bubble {
@@ -976,8 +980,8 @@ pub fn part<K: PartOf>(
         let (state, item) = (state.clone(), item.map(str::to_string));
         el = el.on_scroll(move |event: &gpui::ScrollEvent, window, cx| {
             let lines = match event.delta {
-                gpui::ScrollDelta::Lines(lines) => lines.y as f64,
-                gpui::ScrollDelta::Pixels(pixels) => f32::from(pixels.y) as f64 / 20.0,
+                gpui::ScrollDelta::Lines(lines) => f64::from(lines.y),
+                gpui::ScrollDelta::Pixels(pixels) => f64::from(f32::from(pixels.y)) / 20.0,
             };
             let taken = state.update(cx, |state, cx| {
                 // The wheel goes to a part that asks for it now, and scrolls otherwise.
@@ -1005,8 +1009,8 @@ pub fn part<K: PartOf>(
             MouseButton::Right,
             move |event: &MouseDownEvent, window, cx| {
                 let at = CorePoint::new(
-                    f32::from(event.position.x) as f64,
-                    f32::from(event.position.y) as f64,
+                    f64::from(f32::from(event.position.x)),
+                    f64::from(f32::from(event.position.y)),
                 );
                 let input = Input::ContextMenu {
                     part,
@@ -1070,7 +1074,7 @@ pub fn part<K: PartOf>(
         // A captured gesture is followed on the window, so it continues when the
         // pointer leaves the part it began on.
         let followed = (state.clone(), key.clone());
-        let listen = move |_: Bounds<Pixels>, _: (), window: &mut Window, _: &mut App| {
+        let listen = move |_: Bounds<Pixels>, (): (), window: &mut Window, _: &mut App| {
             let (state, key) = followed.clone();
             let follow = move |phase, at, mods, window: &mut Window, cx: &mut App| {
                 state.update(cx, |state, cx| {
@@ -1182,18 +1186,18 @@ pub fn part<K: PartOf>(
                         bounds.size.height,
                     )
                 };
-                let viewport = f32::from(length) as f64;
+                let viewport = f64::from(f32::from(length));
                 let now = (
-                    -f32::from(offset) as f64,
+                    f64::from(-f32::from(offset)),
                     viewport,
-                    viewport + f32::from(max) as f64,
+                    viewport + f64::from(f32::from(max)),
                 );
                 ((scrolls && now != state.scrolled).then_some(now), relinked)
             });
             if listen {
                 let state = state.clone();
                 window.defer(cx, move |_, cx| {
-                    state.update(cx, |state, cx| state.watch_hotkey(cx))
+                    state.update(cx, Machine::watch_hotkey);
                 });
             }
             if let Some(at_ms) = wake {
@@ -1686,7 +1690,7 @@ mod tests {
         Element::write_a11y_info(&part, &mut node);
         assert_eq!(node.labelled_by(), [accesskit::NodeId(7)]);
         assert_eq!(node.controls(), [accesskit::NodeId(8)]);
-        assert!(node.described_by().is_empty());
+        assert_eq!(node.described_by(), []);
     }
 
     #[test]

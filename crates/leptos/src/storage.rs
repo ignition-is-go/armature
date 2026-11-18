@@ -55,9 +55,7 @@ impl Storage for CookieStorage {
         cookies()?.split("; ").find_map(|pair| {
             let (found, value) = pair.split_once('=')?;
             (found == name).then(|| {
-                js_sys::decode_uri_component(value)
-                    .map(String::from)
-                    .unwrap_or_else(|_| value.to_string())
+                js_sys::decode_uri_component(value).map_or_else(|_| value.to_string(), String::from)
             })
         })
     }
@@ -80,6 +78,7 @@ impl Storage for CookieStorage {
 
 /// Whether the operating system asks for a dark colour scheme, which is what a
 /// stored choice of `system` resolves to.
+#[must_use]
 pub fn system_prefers_dark() -> bool {
     let query = web_sys::window().and_then(|window| {
         window
@@ -119,6 +118,7 @@ impl Storage for SessionStorage {
 
 /// Whether the person has asked their system for less motion. Skip or shorten
 /// animations when they have.
+#[must_use]
 pub fn prefers_reduced_motion() -> bool {
     let query = web_sys::window().and_then(|window| {
         window
@@ -132,6 +132,7 @@ pub fn prefers_reduced_motion() -> bool {
 /// Whether the person last used the keyboard or a pointer. The page's root element
 /// carries the same as `data-armature-modality`, so a style sheet can show focus
 /// boldly for the keyboard alone.
+#[must_use]
 pub fn modality() -> armature_core::preference::Modality {
     let root = web_sys::window()
         .and_then(|window| window.document())

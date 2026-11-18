@@ -39,7 +39,7 @@ impl Demo {
     fn new(cx: &mut Context<Self>) -> Self {
         let commands = [item("open file"), item("save file"), item("close window")];
         let groceries = [item("milk"), item("eggs"), item("bread"), item("jam")];
-        Demo {
+        Self {
             volume: cx.new(|cx| Machine::new(Slider::default(), "Volume", [], cx)),
             quantity: cx.new(|cx| Machine::new(NumberInput::default(), "Quantity", [], cx)),
             commands: cx.new(|cx| Machine::new(Command::default(), "Commands", commands, cx)),
@@ -306,7 +306,7 @@ fn a_calendar_keeps_focus_when_the_keyboard_pages_to_another_month(cx: &mut Test
                 .map(|day| day.format())
                 .collect();
             self.0.update(cx, |calendar, cx| {
-                calendar.track(calendar::Part::Day, days.clone(), cx)
+                calendar.track(calendar::Part::Day, days.clone(), cx);
             });
             let cells = days
                 .iter()
@@ -315,7 +315,7 @@ fn a_calendar_keeps_focus_when_the_keyboard_pages_to_another_month(cx: &mut Test
                 .flex()
                 .flex_wrap()
                 .w(px(7. * ROW))
-                .children(cells.collect::<Vec<_>>())
+                .children(cells)
         }
     }
     let start = Date::parse("2026-11-30").unwrap();
@@ -360,7 +360,7 @@ fn dragging_a_divider_resizes_the_panels(cx: &mut TestAppContext) {
                 .flex()
                 .w(px(400.))
                 .h(px(100.))
-                .child(div().w(px(4. * share - 5.)))
+                .child(div().w(px(4.0f32.mul_add(share, -5.))))
                 .child(
                     part(&self.0, resizable::Part::Handle, None, cx)
                         .w(px(10.))

@@ -63,7 +63,7 @@ fn focus<P: Primitive>(
     item: Option<&str>,
 ) {
     machine.update_in(cx, |m, window, cx| {
-        m.focus_handle(part, item).unwrap().focus(window, cx)
+        m.focus_handle(part, item).unwrap().focus(window, cx);
     });
 }
 
@@ -169,7 +169,7 @@ fn a_tooltip_shows_after_the_pointer_rests_and_hides_when_it_leaves(cx: &mut Tes
 fn a_long_list_renders_only_what_is_in_view_and_keys_scroll_it(cx: &mut TestAppContext) {
     let (rows, cx) = open(
         cx,
-        VirtualList::new(10_000, ROW as f64),
+        VirtualList::new(10_000, f64::from(ROW)),
         |rows: &Entity<Machine<VirtualList>>, cx: &mut App| {
             let visible = rows.read(cx).primitive().rows();
             let keys: Vec<String> = visible.iter().map(|row| row.key.clone()).collect();
@@ -248,7 +248,7 @@ fn a_grid_copies_its_selection_and_pastes_from_the_clipboard(cx: &mut TestAppCon
         |grid: &Entity<Machine<DataGrid>>, cx: &mut App| {
             let keys = ["0,0", "0,1", "1,0", "1,1"];
             grid.update(cx, |m, cx| {
-                m.track(data_grid::Part::Cell, keys.map(String::from), cx)
+                m.track(data_grid::Part::Cell, keys.map(String::from), cx);
             });
             let cells =
                 keys.map(|key| part(grid, data_grid::Part::Cell, Some(key), cx).size(px(ROW)));
@@ -346,7 +346,7 @@ fn a_wheel_picker_scrolls_to_what_the_keys_choose_and_follows_the_scroll(cx: &mu
         })
         .collect();
     let (page, cx) = cx.add_window_view(|_, cx| Page {
-        machine: cx.new(|cx| Machine::new(Picker::new(ROW as f64), "Hour", hours, cx)),
+        machine: cx.new(|cx| Machine::new(Picker::new(f64::from(ROW)), "Hour", hours, cx)),
         draw: Box::new(|picker: &Entity<Machine<Picker>>, cx: &mut App| {
             let options = (1..=12).map(|hour| {
                 part(picker, picker::Part::Option, Some(&hour.to_string()), cx)
@@ -373,7 +373,7 @@ fn a_wheel_picker_scrolls_to_what_the_keys_choose_and_follows_the_scroll(cx: &mu
     assert_eq!(picker.read_with(cx, |m, _| m.value()), ["3"]);
     assert_eq!(
         picker.read_with(cx, |m, _| m.primitive().wanted_scroll()),
-        Some(2. * ROW as f64)
+        Some(2. * f64::from(ROW))
     );
 
     // The column really moved, and once it rests the choice it reports is unchanged.
@@ -521,7 +521,7 @@ fn a_toast_set_from_outside_starts_its_own_clock_and_leaves(cx: &mut TestAppCont
         .detach();
     });
     toaster.update(cx, |m, cx| {
-        m.set_value(vec![Toast::new("a", "Saved").encode()], cx)
+        m.set_value(vec![Toast::new("a", "Saved").encode()], cx);
     });
     cx.run_until_parked();
     // A test window redraws on an event, so nudge it.
@@ -659,7 +659,7 @@ fn the_toast_hotkey_moves_focus_into_the_stack_and_back(cx: &mut TestAppContext)
     impl Render for Both {
         fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
             self.toaster.update(cx, |m, cx| {
-                m.track(toast::Part::Close, ["a".to_string()], cx)
+                m.track(toast::Part::Close, ["a".to_string()], cx);
             });
             div()
                 .child(part(&self.other, toggle::Part::Root, None, cx).size(px(ROW)))
@@ -959,7 +959,7 @@ fn a_destructive_menu_entry_and_a_disabled_trigger_reach_the_adapter(cx: &mut Te
         Menu::new(entries).disabled(),
         |menu: &Entity<Machine<Menu>>, cx: &mut App| {
             menu.update(cx, |m, cx| {
-                m.track(menu::Part::Item, vec!["erase".to_string()], cx)
+                m.track(menu::Part::Item, vec!["erase".to_string()], cx);
             });
             div()
                 .child(part(menu, menu::Part::Trigger, None, cx).size(px(ROW)))
@@ -1001,7 +1001,7 @@ fn a_token_editor_takes_typing_and_deletes_a_token_whole(cx: &mut TestAppContext
     assert_eq!(editor.read_with(cx, |m, _| m.primitive().value()), ["hi "]);
     // The owner sets the content with a token in it; the caret goes to the end.
     editor.update(cx, |m, cx| {
-        m.set_value(vec!["hi [@a.ts](file:src/a.ts)".into()], cx)
+        m.set_value(vec!["hi [@a.ts](file:src/a.ts)".into()], cx);
     });
     cx.simulate_keystrokes("x left backspace");
     cx.run_until_parked();

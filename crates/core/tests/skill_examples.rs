@@ -38,7 +38,7 @@ fn a_refused_change_keeps_the_tab() {
         manual: true,
         ..Default::default()
     });
-    assert!(manual.value().is_empty());
+    assert_eq!(manual.value(), [] as [std::string::String; 0]);
 }
 
 #[test]
@@ -137,7 +137,7 @@ fn the_details_the_skill_states() {
         label: "a".into(),
         disabled: false,
     });
-    assert!(accordion.value().is_empty());
+    assert_eq!(accordion.value(), [] as [std::string::String; 0]);
 
     // Lists: arrows skip disabled items and only move focus; Enter chooses.
     let mut list = Listbox::default();

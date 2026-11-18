@@ -56,6 +56,7 @@ fn registry() -> Registry<()> {
 }
 
 /// Every mounted component an agent may see, as `(ref, snapshot)`.
+#[must_use]
 pub fn snapshot() -> Vec<(String, Snapshot)> {
     registry().snapshot(&())
 }
@@ -66,6 +67,7 @@ pub fn act(reference: &str, action: &str, item: Option<&str>) -> Result<Vec<Stri
 }
 
 /// Components and items whose labels match `text`, best match first.
+#[must_use]
 pub fn query(text: &str) -> Vec<Found> {
     registry().query(&(), text)
 }
@@ -73,7 +75,7 @@ pub fn query(text: &str) -> Vec<Found> {
 /// Runs steps in order, stopping at the first failure. `approve` is asked before any
 /// step on a component that needs a person's approval.
 pub fn run(steps: &[Step], approve: impl FnMut(&Step, &str) -> bool) -> Run {
-    armature_core::agent::run(|_| registry(), &mut (), steps, approve)
+    armature_core::agent::run(|()| registry(), &mut (), steps, approve)
 }
 
 /// Every committed change so far, oldest first.
@@ -108,7 +110,7 @@ pub fn install() {
                 set(
                     &js,
                     "item",
-                    &found.item.map(JsValue::from).unwrap_or(JsValue::NULL),
+                    &found.item.map_or(JsValue::NULL, JsValue::from),
                 );
                 set(&js, "label", &found.label.into());
                 JsValue::from(js)
@@ -186,7 +188,8 @@ pub fn install() {
 }
 
 /// Offers the tools to an agent built into the browser, where the browser supports
-/// WebMCP. Returns whether they were registered. Call it after `install`.
+/// `WebMCP`. Returns whether they were registered. Call it after `install`.
+#[must_use]
 pub fn register_tools() -> bool {
     let Ok(navigator) = Reflect::get(&window(), &"navigator".into()) else {
         return false;
@@ -314,7 +317,11 @@ fn snapshot_to_js(reference: &str, snapshot: &Snapshot) -> JsValue {
     if let Some(expanded) = snapshot.expanded {
         set(&out, "expanded", &expanded.into());
     }
-    let actions: Vec<String> = snapshot.actions.iter().map(|a| a.to_string()).collect();
+    let actions: Vec<String> = snapshot
+        .actions
+        .iter()
+        .map(std::string::ToString::to_string)
+        .collect();
     set(&out, "actions", &strings(&actions));
     let items: Array = snapshot
         .items

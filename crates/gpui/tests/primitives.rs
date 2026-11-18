@@ -30,7 +30,7 @@ impl Demo {
             item("banana", true),
             item("blueberry", false),
         ];
-        Demo {
+        Self {
             tabs: cx.new(|cx| Machine::new(Tabs::default(), "Settings", tabs, cx)),
             fruit: cx.new(|cx| {
                 Machine::new(Listbox::default(), "Fruit", fruit, cx).on_value_change(|change, _| {
@@ -130,7 +130,7 @@ fn an_agent_reads_and_operates_components_without_input_events(cx: &mut TestAppC
         );
     });
     demo.update(cx, |demo, cx| {
-        assert_eq!(demo.fruit.read(cx).value(), ["apple"])
+        assert_eq!(demo.fruit.read(cx).value(), ["apple"]);
     });
 }
 
@@ -211,7 +211,7 @@ fn the_json_protocol_reads_and_operates_components(cx: &mut TestAppContext) {
         format!(r#"{{"method":"act","ref":"{reference}","action":"select","item":"apple"}}"#);
     assert_eq!(ask(cx, &select)["value"][0], "apple");
     demo.update(cx, |demo, cx| {
-        assert_eq!(demo.fruit.read(cx).value(), ["apple"])
+        assert_eq!(demo.fruit.read(cx).value(), ["apple"]);
     });
 
     assert_eq!(ask(cx, "not json")["ok"], false);

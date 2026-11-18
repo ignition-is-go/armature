@@ -27,11 +27,12 @@ fn visible_now() -> Rect {
 
 /// The part of the window that is actually showing, which shrinks when an on-screen
 /// keyboard opens or the person pinch-zooms. It updates as that changes.
+#[must_use]
 pub fn use_visible_viewport() -> ReadSignal<Rect> {
     let (visible, set_visible) = signal(visible_now());
     if let Some(target) = window().visual_viewport() {
         let update = SendWrapper::new(Closure::<dyn Fn()>::new(move || {
-            set_visible.set(visible_now())
+            set_visible.set(visible_now());
         }));
         let target = SendWrapper::new(target);
         for event in ["resize", "scroll"] {
@@ -49,6 +50,7 @@ pub fn use_visible_viewport() -> ReadSignal<Rect> {
 
 /// How far to lift content so that `field` clears an on-screen keyboard, keeping
 /// `margin` between it and the keyboard.
+#[must_use]
 pub fn keyboard_lift(field: &web_sys::Element, visible: Rect, margin: f64) -> f64 {
     let bounds = field.get_bounding_client_rect();
     // The field is measured against the window; the visible part against the page.

@@ -99,7 +99,10 @@ fn escape_closes_and_returns_focus_without_choosing(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("enter down escape");
     assert!(!is_open(&size, cx));
     assert!(trigger_has_focus(&size, cx));
-    assert!(size.update(cx, |size, _| size.value()).is_empty());
+    assert_eq!(
+        size.update(cx, |size, _| size.value()),
+        [] as [std::string::String; 0]
+    );
 }
 
 #[gpui::test]

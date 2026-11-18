@@ -10,7 +10,7 @@ thread_local! {
 }
 
 /// Keeps the files and describes them for the primitive.
-pub(crate) fn remember(list: Option<web_sys::FileList>) -> Vec<FileInfo> {
+pub fn remember(list: Option<web_sys::FileList>) -> Vec<FileInfo> {
     let files: Vec<web_sys::File> = list
         .map(|list| (0..list.length()).filter_map(|at| list.get(at)).collect())
         .unwrap_or_default();
@@ -35,6 +35,7 @@ pub(crate) fn remember(list: Option<web_sys::FileList>) -> Vec<FileInfo> {
 
 /// The file a person chose or dropped under this name, to read or upload. Names come
 /// from a file input's value.
+#[must_use]
 pub fn chosen_file(name: &str) -> Option<web_sys::File> {
     CHOSEN.with_borrow(|chosen| chosen.iter().find(|file| file.name() == name).cloned())
 }

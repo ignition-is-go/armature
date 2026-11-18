@@ -75,7 +75,7 @@ impl<P: Primitive + Send + Sync> Context<P> {
             phase,
             part,
             item,
-            at: Point::new(ev.client_x() as f64, ev.client_y() as f64),
+            at: Point::new(f64::from(ev.client_x()), f64::from(ev.client_y())),
             mods: modifiers(ev.shift_key(), ev.ctrl_key() || ev.meta_key(), ev.alt_key()),
             now_ms: js_sys::Date::now() as u64,
         };
@@ -153,8 +153,10 @@ impl<P: Primitive + Send + Sync> Context<P> {
                 Ask::CapturePointer => {}
                 Ask::ScrollTo { offset } => {
                     let scrolling = P::parts().iter().copied().find(|part| P::scrolls(*part));
-                    let across =
-                        self.machine.with_untracked(|m| m.scroll_axis()) == Orientation::Horizontal;
+                    let across = self
+                        .machine
+                        .with_untracked(armature_core::primitive::Primitive::scroll_axis)
+                        == Orientation::Horizontal;
                     if let Some(element) = scrolling.and_then(|part| self.element_of(part, None)) {
                         if across {
                             element.set_scroll_left(offset as i32);
@@ -253,7 +255,9 @@ impl<P: Primitive + Send + Sync> Context<P> {
             .as_deref()
             .and_then(|item| self.element_of(placement.anchor, Some(item)));
         // A popup called up at a point, as a context menu is, sits against that point.
-        let point = self.machine.with_untracked(|m| m.popup_point());
+        let point = self
+            .machine
+            .with_untracked(armature_core::primitive::Primitive::popup_point);
         let at_point = point.and_then(|point| {
             web_sys::DomRect::new_with_x_and_y_and_width_and_height(point.x, point.y, 0.0, 0.0).ok()
         });
@@ -389,7 +393,7 @@ fn orientation_name(orientation: Option<Orientation>) -> Option<&'static str> {
     })
 }
 
-pub(crate) fn key_from_dom(key: &str) -> Option<Key> {
+pub fn key_from_dom(key: &str) -> Option<Key> {
     Some(match key {
         "ArrowUp" => Key::ArrowUp,
         "ArrowDown" => Key::ArrowDown,
@@ -465,6 +469,7 @@ fn aria_role(role: Role) -> &'static str {
 
 /// The primitive owned by the nearest `Root`, for what only it knows, such as a
 /// calendar's weeks or a slider's fraction. Call it from a component inside the `Root`.
+#[must_use]
 pub fn use_primitive<P>() -> ReadSignal<P>
 where
     P: Primitive + Send + Sync,
@@ -565,8 +570,10 @@ where
     }
 
     let registration = agent::register(Target {
-        snapshot: Rc::new(move |_| Some(ctx.synced(&ctx.rendered())?.snapshot(&label.get_value()))),
-        act: Rc::new(move |_, action, item| {
+        snapshot: Rc::new(move |()| {
+            Some(ctx.synced(&ctx.rendered())?.snapshot(&label.get_value()))
+        }),
+        act: Rc::new(move |(), action, item| {
             let mut next = ctx.synced(&ctx.rendered()).ok_or(ActError::Refused)?;
             let before = next.value();
             next.act(action, item, &mut |change| allows(on_value_change, change))?;
@@ -590,7 +597,7 @@ where
             );
             Ok(value)
         }),
-        set: Rc::new(move |_, value| {
+        set: Rc::new(move |(), value| {
             machine.try_update(|m| m.set_value(value));
         }),
         access: Access {
@@ -637,12 +644,15 @@ where
 
     // A key that reaches the component from anywhere on the page.
     // The keys are read as they stand when the key is pressed, since they may change.
-    if !machine.with_untracked(|m| m.hotkeys()).is_empty() {
+    if !machine
+        .with_untracked(armature_core::primitive::Primitive::hotkeys)
+        .is_empty()
+    {
         let inside = format!("[data-armature=\"{instance}\"]");
         let listener = window_event_listener(leptos::ev::keydown, move |ev| {
             let mods = modifiers(ev.shift_key(), ev.ctrl_key() || ev.meta_key(), ev.alt_key());
             let pressed = key_from_dom(&ev.key());
-            let keys = machine.with_untracked(|m| m.hotkeys());
+            let keys = machine.with_untracked(armature_core::primitive::Primitive::hotkeys);
             let Some(shortcut) = keys
                 .into_iter()
                 .find(|shortcut| pressed.is_some_and(|key| shortcut.matches(key, mods)))
@@ -683,13 +693,13 @@ where
         // These last as long as the page does.
         std::mem::forget(window_event_listener(leptos::ev::keydown, move |_| keys()));
         std::mem::forget(window_event_listener(leptos::ev::pointerdown, move |_| {
-            pointer()
+            pointer();
         }));
     }
 
     // A primitive that lays itself out from where its parts are drawn hears of it
     // after every change and whenever the window is resized.
-    if machine.with_untracked(|m| m.measures()) {
+    if machine.with_untracked(armature_core::primitive::Primitive::measures) {
         let report = move || {
             let measure = move |part: P::Part, item: Option<&str>| {
                 let rect = ctx.element_of(part, item)?.get_bounding_client_rect();
@@ -714,7 +724,7 @@ where
     {
         let waking = StoredValue::new(false);
         Effect::new(move |_| {
-            let Some(delay) = machine.with(|m| m.wake_after()) else {
+            let Some(delay) = machine.with(armature_core::primitive::Primitive::wake_after) else {
                 return;
             };
             if waking.get_value() {
@@ -771,13 +781,13 @@ where
             ctx.pointer(phase, part, item, ev);
         };
         let moved = window_event_listener(leptos::ev::pointermove, move |ev| {
-            follow(PointerPhase::Move, &ev)
+            follow(PointerPhase::Move, &ev);
         });
         let released = window_event_listener(leptos::ev::pointerup, move |ev| {
-            follow(PointerPhase::Up, &ev)
+            follow(PointerPhase::Up, &ev);
         });
         let cancelled = window_event_listener(leptos::ev::pointercancel, move |ev| {
-            follow(PointerPhase::Cancel, &ev)
+            follow(PointerPhase::Cancel, &ev);
         });
         on_cleanup(move || {
             moved.remove();
@@ -822,7 +832,7 @@ where
                 key: key.clone(),
                 label,
                 disabled,
-            })
+            });
         });
         on_cleanup(move || {
             ctx.machine.try_update(|m| m.remove_item(&key));
@@ -835,8 +845,11 @@ where
     });
     let role = semantics.get_untracked().role;
     let interactive = move || semantics.get_untracked().focusable != Focusable::No;
-    let names_component =
-        item.is_none() && ctx.machine.with_untracked(|m| m.named_part()) == Some(part);
+    let names_component = item.is_none()
+        && ctx
+            .machine
+            .with_untracked(armature_core::primitive::Primitive::named_part)
+            == Some(part);
     // A part the primitive keeps text for is a native field. One that edits its
     // own content, key by key, is not.
     let takes_text = matches!(role, Some(Role::TextBox | Role::SpinButton))
@@ -1081,7 +1094,7 @@ where
                 let asked =
                     Closure::<dyn Fn(web_sys::MouseEvent)>::new(move |ev: web_sys::MouseEvent| {
                         ev.prevent_default();
-                        let at = Point::new(ev.client_x() as f64, ev.client_y() as f64);
+                        let at = Point::new(f64::from(ev.client_x()), f64::from(ev.client_y()));
                         ctx.dispatch(Input::ContextMenu {
                             part,
                             item: item.clone(),
@@ -1224,7 +1237,7 @@ where
                 leave();
                 return;
             };
-            let from = Point::new(ev.client_x() as f64, ev.client_y() as f64);
+            let from = Point::new(f64::from(ev.client_x()), f64::from(ev.client_y()));
             let axis = if from.y < popup.y || from.y > popup.bottom() {
                 Axis::Y
             } else {
@@ -1265,7 +1278,7 @@ where
             let moves = window_event_listener(leptos::ev::pointermove, {
                 let (area, last, finish) = (area.clone(), last.clone(), finish.clone());
                 move |ev| {
-                    let at = Point::new(ev.client_x() as f64, ev.client_y() as f64);
+                    let at = Point::new(f64::from(ev.client_x()), f64::from(ev.client_y()));
                     last.set(at);
                     if popup.contains(at) {
                         finish(true);
@@ -1298,7 +1311,10 @@ where
     let scrolls = K::Primitive::scrolls(part);
     let report_scroll = move || {
         if let Some(scroller) = element.get_untracked() {
-            let across = ctx.machine.with_untracked(|m| m.scroll_axis()) == Orientation::Horizontal;
+            let across = ctx
+                .machine
+                .with_untracked(armature_core::primitive::Primitive::scroll_axis)
+                == Orientation::Horizontal;
             let (offset, viewport, content) = if across {
                 (
                     scroller.scroll_left(),
@@ -1314,9 +1330,9 @@ where
             };
             ctx.dispatch(Input::Scrolled {
                 part,
-                offset: offset as f64,
-                viewport: viewport as f64,
-                content: content as f64,
+                offset: f64::from(offset),
+                viewport: f64::from(viewport),
+                content: f64::from(content),
                 now_ms: js_sys::Date::now() as u64,
             });
         }
