@@ -122,58 +122,16 @@ pub fn handle(request: &str, cx: &mut App) -> String {
                 .and_then(Value::as_array)
                 .into_iter()
                 .flatten()
-                .map(|step| Step {
-                    target: step["target"]
-                        .as_str()
-                        .or_else(|| step["ref"].as_str())
-                        .unwrap_or_default()
-                        .to_string(),
-                    action: step["action"].as_str().unwrap_or_default().to_string(),
-                    item: step["item"].as_str().map(str::to_string),
-                })
+                .map(step_from_json)
                 .collect();
-            let outcome = run(cx, &steps, |_, _| false);
-            let changes: Vec<Value> = outcome
-                .changes
-                .iter()
-                .map(|change| {
-                    json!({
-                        "ref": change.reference,
-                        "label": change.label,
-                        "before": change.before,
-                        "after": change.after,
-                    })
-                })
-                .collect();
-            let failed = outcome
-                .failed
-                .as_ref()
-                .map(|(step, error)| json!({ "step": step, "error": error.to_string() }));
-            json!({ "ok": outcome.ok(), "changes": changes, "appeared": outcome.appeared, "failed": failed })
+            run_to_json(&run(cx, &steps, |_, _| false))
         }
         Some("history") => {
-            let entries: Vec<Value> = history(cx)
-                .iter()
-                .map(|entry| {
-                    json!({
-                        "text": describe_entry(entry),
-                        "label": entry.label,
-                        "before": entry.before,
-                        "after": entry.after,
-                        "source": if entry.source == Source::Agent { "agent" } else { "user" },
-                    })
-                })
-                .collect();
+            let entries: Vec<Value> = history(cx).iter().map(entry_to_json).collect();
             json!({ "ok": true, "entries": entries })
         }
         Some("tools") => {
-            let tools: Vec<Value> = TOOLS
-                .iter()
-                .map(|tool| {
-                    let schema: Value = serde_json::from_str(tool.input_schema).unwrap_or(Value::Null);
-                    json!({ "name": tool.name, "description": tool.description, "inputSchema": schema })
-                })
-                .collect();
+            let tools: Vec<Value> = TOOLS.iter().map(tool_to_json).collect();
             json!({ "ok": true, "tools": tools })
         }
         _ => failure(
@@ -181,6 +139,58 @@ pub fn handle(request: &str, cx: &mut App) -> String {
         ),
     };
     response.to_string()
+}
+
+/// One step of a `run` request. A step names its component by `target`, or by `ref`.
+fn step_from_json(step: &Value) -> Step {
+    let text = |key: &str| step.get(key).and_then(Value::as_str);
+    Step {
+        target: text("target")
+            .or_else(|| text("ref"))
+            .unwrap_or_default()
+            .to_string(),
+        action: text("action").unwrap_or_default().to_string(),
+        item: text("item").map(str::to_string),
+    }
+}
+
+fn run_to_json(outcome: &Run) -> Value {
+    let changes: Vec<Value> = outcome
+        .changes
+        .iter()
+        .map(|change| {
+            json!({
+                "ref": change.reference,
+                "label": change.label,
+                "before": change.before,
+                "after": change.after,
+            })
+        })
+        .collect();
+    let failed = outcome
+        .failed
+        .as_ref()
+        .map(|(step, error)| json!({ "step": step, "error": error.to_string() }));
+    json!({ "ok": outcome.ok(), "changes": changes, "appeared": outcome.appeared, "failed": failed })
+}
+
+fn entry_to_json(entry: &Entry) -> Value {
+    let source = match entry.source {
+        Source::Agent => "agent",
+        Source::User => "user",
+    };
+    json!({
+        "text": describe_entry(entry),
+        "label": entry.label,
+        "before": entry.before,
+        "after": entry.after,
+        "source": source,
+    })
+}
+
+fn tool_to_json(tool: &armature_core::agent::Tool) -> Value {
+    let schema: Value = serde_json::from_str(tool.input_schema).unwrap_or(Value::Null);
+    json!({ "name": tool.name, "description": tool.description, "inputSchema": schema })
 }
 
 fn component((reference, snapshot): &(String, Snapshot)) -> Value {
