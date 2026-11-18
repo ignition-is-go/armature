@@ -35,7 +35,7 @@ fn a_refused_change_keeps_the_tab() {
     tabs.send(right(), &mut |_| false);
     assert_eq!(tabs.value(), ["two"]);
     let manual = Tabs::new(tabs::Options {
-        manual: true,
+        activation: tabs::Activation::Manual,
         ..Default::default()
     });
     assert_eq!(manual.value(), Vec::<String>::new());

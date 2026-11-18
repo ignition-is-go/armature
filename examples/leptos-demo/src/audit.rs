@@ -239,7 +239,7 @@ fn HalfStarRatingSection() -> impl IntoView {
     view! {
         <Section title="Half-star rating">
             <p id="stars-value">"Stars: " {move || stars.get().join("")}</p>
-            <Root machine=Rating::new(rating::Options { halves: true, ..Default::default() }) label="Review" on_value_change=on_stars><Stars /></Root>
+            <Root machine=Rating::new(rating::Options { step: rating::Step::Half, ..Default::default() }) label="Review" on_value_change=on_stars><Stars /></Root>
         </Section>
     }
 }

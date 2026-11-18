@@ -21,11 +21,20 @@ pub enum Part {
     Token,
 }
 
+/// How many lines a token editor takes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Lines {
+    /// One. Enter is left to the owner, to send what was written; Shift+Enter
+    /// still starts a new line.
+    #[default]
+    One,
+    /// Several: Enter starts a new line.
+    Many,
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Options {
-    /// Whether Enter starts a new line. When it does not, Enter is left to the
-    /// owner, to send what was written.
-    pub multiline: bool,
+    pub lines: Lines,
     pub read_only: bool,
     pub dir: Dir,
 }
@@ -409,7 +418,7 @@ impl TokenEditor {
             Key::Backspace => self.delete_back(by_word, gate),
             Key::Char(ch) if !by_word => self.insert_text(&ch.to_string(), gate),
             Key::Space => self.insert_text(" ", gate),
-            Key::Enter if self.opts.multiline || shift => self.insert_text("\n", gate),
+            Key::Enter if self.opts.lines == Lines::Many || shift => self.insert_text("\n", gate),
             _ => return Reaction::default(),
         }
         Reaction::handled()
@@ -725,7 +734,7 @@ mod tests {
         let mut single = TokenEditor::default();
         assert!(!key(&mut single, Key::Enter).handled);
         let mut lines = TokenEditor::new(Options {
-            multiline: true,
+            lines: Lines::Many,
             ..Default::default()
         });
         type_text(&mut lines, "a");

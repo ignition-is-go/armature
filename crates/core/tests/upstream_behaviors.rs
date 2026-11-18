@@ -287,7 +287,7 @@ fn rating_behaviors() {
     use armature_core::primitive::Role;
     // "stars fill up to the score, with a partial star for a fraction"
     let mut rating = Rating::new(rating::Options {
-        halves: true,
+        step: rating::Step::Half,
         ..Default::default()
     });
     rating.set_value(vec!["2.5".into()]);

@@ -21,15 +21,24 @@ pub enum Status {
     Upcoming,
 }
 
+/// What a list of events is.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Kind {
+    /// A plain list.
+    #[default]
+    List,
+    /// A feed that loads more as it is read. `PageDown` and `PageUp` move between
+    /// events from anywhere inside one.
+    Feed,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Options {
     pub orientation: Orientation,
     pub dir: Dir,
     /// Whether the arrows come round from the last event to the first.
     pub ends: Ends,
-    /// Whether the events are a feed that loads more as it is read. `PageDown` and
-    /// `PageUp` then move between events from anywhere inside one.
-    pub feed: bool,
+    pub kind: Kind,
 }
 
 impl Default for Options {
@@ -38,7 +47,7 @@ impl Default for Options {
             orientation: Orientation::Vertical,
             dir: Dir::Ltr,
             ends: Ends::Wrap,
-            feed: false,
+            kind: Kind::List,
         }
     }
 }
@@ -132,17 +141,17 @@ impl Primitive for EventList {
     fn semantics(&self, part: Part, item: Option<&str>) -> Semantics {
         match (part, item) {
             (Part::Root, _) => Semantics {
-                role: Some(if self.opts.feed {
+                role: Some(if self.opts.kind == Kind::Feed {
                     Role::Feed
                 } else {
                     Role::List
                 }),
                 orientation: Some(self.opts.orientation),
-                busy: self.opts.feed && self.busy,
+                busy: self.opts.kind == Kind::Feed && self.busy,
                 ..Default::default()
             },
             (Part::Event, Some(key)) => Semantics {
-                role: Some(if self.opts.feed {
+                role: Some(if self.opts.kind == Kind::Feed {
                     Role::Article
                 } else {
                     Role::ListItem
@@ -177,8 +186,8 @@ impl Primitive for EventList {
             }
             Input::Key { key, .. } => {
                 let nav = match key {
-                    Key::PageDown if self.opts.feed => Some(Nav::Next),
-                    Key::PageUp if self.opts.feed => Some(Nav::Prev),
+                    Key::PageDown if self.opts.kind == Kind::Feed => Some(Nav::Next),
+                    Key::PageUp if self.opts.kind == Kind::Feed => Some(Nav::Prev),
                     Key::Home => Some(Nav::First),
                     Key::End => Some(Nav::Last),
                     other => roving::nav_for_key(other, self.opts.orientation, self.opts.dir),
@@ -298,7 +307,7 @@ mod tests {
     #[test]
     fn a_feed_pages_between_articles_and_says_when_it_is_busy() {
         let mut feed = steps(Options {
-            feed: true,
+            kind: Kind::Feed,
             ..Default::default()
         });
         assert_eq!(feed.semantics(Part::Root, None).role, Some(Role::Feed));
@@ -331,7 +340,7 @@ mod tests {
         crate::testing::assert_conforms(
             || {
                 EventList::new(Options {
-                    feed: true,
+                    kind: Kind::Feed,
                     ..Default::default()
                 })
             },

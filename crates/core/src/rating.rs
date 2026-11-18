@@ -14,12 +14,20 @@ pub enum Part {
     Star,
 }
 
+/// The smallest part of a star a rating takes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Step {
+    #[default]
+    Whole,
+    Half,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Options {
     /// How many stars there are.
     pub max: u32,
-    /// Whether half a star can be given.
-    pub halves: bool,
+    /// The smallest part of a star that can be given.
+    pub step: Step,
     /// Whether pressing the rating already given clears it.
     pub deselectable: bool,
     pub dir: Dir,
@@ -31,7 +39,7 @@ impl Default for Options {
     fn default() -> Self {
         Self {
             max: 5,
-            halves: false,
+            step: Step::Whole,
             deselectable: true,
             dir: Dir::Ltr,
             read_only: false,
@@ -62,7 +70,10 @@ impl Rating {
     }
 
     const fn step(&self) -> f64 {
-        if self.opts.halves { 0.5 } else { 1.0 }
+        match self.opts.step {
+            Step::Whole => 1.0,
+            Step::Half => 0.5,
+        }
     }
 
     /// How much of a star to fill: 0, a half or 1. It follows the pointer's preview
@@ -112,7 +123,7 @@ impl Rating {
         } else {
             along < 0.5
         };
-        Some(if self.opts.halves && first_half {
+        Some(if self.opts.step == Step::Half && first_half {
             star - 0.5
         } else {
             star
@@ -307,7 +318,7 @@ mod tests {
     #[test]
     fn the_first_half_of_a_star_gives_half_of_it() {
         let mut rating = Rating::new(Options {
-            halves: true,
+            step: Step::Half,
             ..Default::default()
         });
         press(&mut rating, "3", 44.0);
@@ -353,7 +364,7 @@ mod tests {
         crate::testing::assert_conforms(
             || {
                 Rating::new(Options {
-                    halves: true,
+                    step: Step::Half,
                     ..Default::default()
                 })
             },

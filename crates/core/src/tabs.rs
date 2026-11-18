@@ -7,13 +7,21 @@ use crate::primitive::{
 };
 use crate::roving::{self, Ends};
 
+/// When a tab shows its panel.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Activation {
+    /// As soon as focus reaches it.
+    #[default]
+    Automatic,
+    /// When Enter or Space is pressed on it. The arrows only move focus.
+    Manual,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Options {
     pub orientation: Orientation,
     pub dir: Dir,
-    /// Whether the arrows only move focus, leaving Enter or Space to show the tab.
-    /// Otherwise a tab shows as soon as focus reaches it.
-    pub manual: bool,
+    pub activation: Activation,
     /// Whether the arrows come round from the last tab to the first.
     pub ends: Ends,
 }
@@ -23,7 +31,7 @@ impl Default for Options {
         Self {
             orientation: Orientation::Horizontal,
             dir: Dir::Ltr,
-            manual: false,
+            activation: Activation::Automatic,
             ends: Ends::Wrap,
         }
     }
@@ -168,7 +176,7 @@ impl Primitive for Tabs {
                     let focus = self.items.step(from, nav, self.opts.ends);
                     if let Some(key) = &focus {
                         self.focused = Some(key.clone());
-                        if !self.opts.manual {
+                        if self.opts.activation == Activation::Automatic {
                             self.select(key, Source::User, Reason::Keyboard, gate);
                         }
                     }
@@ -356,7 +364,7 @@ mod tests {
     #[test]
     fn with_manual_activation_the_arrows_only_move_focus() {
         let mut tabs = Tabs::new(Options {
-            manual: true,
+            activation: Activation::Manual,
             ends: Ends::Stop,
             ..Default::default()
         });

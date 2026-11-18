@@ -15,15 +15,24 @@ pub enum Part {
     Content,
 }
 
+/// What a tooltip holds.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Content {
+    /// A short description of its trigger.
+    #[default]
+    Description,
+    /// A card of richer content that the pointer can move into and use, such as a
+    /// preview of a link.
+    Card,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Options {
     /// How long the pointer rests on the trigger before the tooltip shows.
     pub open_delay_ms: u64,
     /// How long after the pointer leaves before it hides.
     pub close_delay_ms: u64,
-    /// A card of richer content that the pointer can move into and use, such as a
-    /// preview of a link, in place of a short description.
-    pub card: bool,
+    pub content: Content,
     /// A disabled tooltip ignores the pointer and focus. An agent or the owner can
     /// still show it.
     pub disabled: bool,
@@ -56,7 +65,7 @@ impl Default for Options {
         Self {
             open_delay_ms: 500,
             close_delay_ms: 0,
-            card: false,
+            content: Content::Description,
             disabled: false,
         }
     }
@@ -91,7 +100,7 @@ impl Tooltip {
         Self::new(Options {
             open_delay_ms: 600,
             close_delay_ms: 300,
-            card: true,
+            content: Content::Card,
             disabled: false,
         })
     }
@@ -217,7 +226,7 @@ impl Primitive for Tooltip {
                 ..Default::default()
             },
             Part::Content => Semantics {
-                role: Some(if self.opts.card {
+                role: Some(if self.opts.content == Content::Card {
                     Role::Dialog
                 } else {
                     Role::Tooltip

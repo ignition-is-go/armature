@@ -19,10 +19,18 @@ pub enum Part {
     Panel,
 }
 
+/// What opens a navigation menu's panel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Opens {
+    /// Only a press on its trigger.
+    OnPress,
+    /// Resting the pointer on its trigger, or a press.
+    OnHoverOrPress,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Options {
-    /// Whether resting the pointer on a trigger opens its panel. A press always does.
-    pub hover: bool,
+    pub opens: Opens,
     pub open_delay_ms: u64,
     pub close_delay_ms: u64,
     pub orientation: Orientation,
@@ -32,7 +40,7 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Self {
-            hover: true,
+            opens: Opens::OnHoverOrPress,
             open_delay_ms: 50,
             close_delay_ms: 50,
             orientation: Orientation::Horizontal,
@@ -339,7 +347,9 @@ impl Primitive for NavigationMenu {
                 item: Some(key),
                 inside,
                 now_ms,
-            } if self.opts.hover => self.on_hover(part, key, inside, now_ms, gate),
+            } if self.opts.opens == Opens::OnHoverOrPress => {
+                self.on_hover(part, key, inside, now_ms, gate)
+            }
             Input::Tick { now_ms } => {
                 if let Some(due) = self.due.clone().filter(|due| now_ms >= due.at_ms) {
                     self.set(due.open, Source::User, Reason::Press, gate);

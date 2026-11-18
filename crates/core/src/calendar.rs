@@ -27,8 +27,6 @@ pub struct Options {
     pub mode: Selecting,
     /// Days that cannot be chosen, such as weekends or days already booked.
     pub unavailable: Option<fn(Date) -> bool>,
-    /// Whether choosing the chosen day again clears it.
-    pub deselectable: bool,
     /// How many months show side by side. The month buttons page by this many.
     pub months: usize,
 }
@@ -36,8 +34,11 @@ pub struct Options {
 /// What a calendar chooses.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Selecting {
+    /// One day, and choosing it again keeps it.
     #[default]
     Single,
+    /// One day or none: choosing the chosen day again lets it go.
+    SingleOrNone,
     /// Any number of separate days. Choosing a chosen day lets it go.
     Multiple,
     /// A first and a last day. The value is both once the second is chosen.
@@ -53,7 +54,6 @@ impl Default for Options {
             max: None,
             mode: Selecting::Single,
             unavailable: None,
-            deselectable: false,
             months: 1,
         }
     }
@@ -164,9 +164,9 @@ impl Calendar {
     fn select(&mut self, date: Date, source: Source, reason: Reason, gate: Gate) -> bool {
         let chosen = self.selected.contains(&date);
         let mut next = match self.opts.mode {
-            Selecting::Single if chosen && self.opts.deselectable => Vec::new(),
+            Selecting::SingleOrNone if chosen => Vec::new(),
             Selecting::Single if chosen => return true,
-            Selecting::Single => vec![date],
+            Selecting::Single | Selecting::SingleOrNone => vec![date],
             Selecting::Multiple if chosen => self
                 .selected
                 .iter()
@@ -368,7 +368,7 @@ impl Primitive for Calendar {
         days.sort();
         days.dedup();
         match self.opts.mode {
-            Selecting::Single => days.truncate(1),
+            Selecting::Single | Selecting::SingleOrNone => days.truncate(1),
             Selecting::Range => days.truncate(2),
             Selecting::Multiple => {}
         }

@@ -37,7 +37,7 @@ is in the primitive's module and implements `Default`:
 
 ```rust
 let mut tabs = Tabs::default();
-let mut manual = Tabs::new(tabs::Options { manual: true, ..Default::default() });
+let mut manual = Tabs::new(tabs::Options { activation: tabs::Activation::Manual, ..Default::default() });
 ```
 
 Primitives with items get them one at a time, in order:
@@ -60,23 +60,23 @@ Primitives not listed take their settings through `new(...)` arguments or builde
 | Module | `Options` fields |
 | --- | --- |
 | `accordion` | `open: selection::Choosing`, `findable: bool` |
-| `calendar` | `week_start: u8`, `dir: Dir`, `min: Option<Date>`, `max: Option<Date>`, `mode: Selecting`, `unavailable: Option<fn(Date) -> bool>`, `deselectable: bool`, `months: usize` |
+| `calendar` | `week_start: u8`, `dir: Dir`, `min: Option<Date>`, `max: Option<Date>`, `mode: Selecting`, `unavailable: Option<fn(Date) -> bool>`, `months: usize` |
 | `carousel` | `ends: roving::Ends`, `autoplay_ms: Option<u64>`, `dir: Dir`, `per_page: usize`, `orientation: crate::keys::Orientation` |
 | `combobox` | `count: selection::Count`, `takes: Takes` (`Options`, `AnyText`), `auto_highlight: bool`, `open_on_focus: bool`, `load_more: bool`, `results: Results` (`Filtered`, `Requested`), `read_only: bool` |
 | `dialog` | `modality: Modality` (`Modeless`, `Modal`, `Alert`), `closes: Closes` (`Never`, `By(layers::DismissedBy)`) |
-| `event_list` | `orientation: Orientation`, `dir: Dir`, `ends: roving::Ends`, `feed: bool` |
+| `event_list` | `orientation: Orientation`, `dir: Dir`, `ends: roving::Ends`, `kind: Kind` (`List`, `Feed`) |
 | `file_input` | `count: selection::Count`, `accept: Vec<String>`, `max_size: Option<u64>` |
 | `listbox` | `mode: Mode`, `orientation: Orientation`, `dir: Dir`, `ends: roving::Ends` |
-| `navigation_menu` | `hover: bool`, `open_delay_ms: u64`, `close_delay_ms: u64`, `orientation: Orientation`, `dir: Dir` |
+| `navigation_menu` | `opens: Opens` (`OnPress`, `OnHoverOrPress`), `open_delay_ms: u64`, `close_delay_ms: u64`, `orientation: Orientation`, `dir: Dir` |
 | `panel_group` | `orientation: Orientation`, `dir: Dir`, `min: f64`, `step: f64`, `large_step: f64` |
 | `range_slider` | `range: NumberRange`, `orientation: Orientation`, `dir: Dir`, `large_step: f64`, `min_steps_between: f64` |
-| `rating` | `max: u32`, `halves: bool`, `deselectable: bool`, `dir: Dir`, `read_only: bool` |
+| `rating` | `max: u32`, `step: Step` (`Whole`, `Half`), `deselectable: bool`, `dir: Dir`, `read_only: bool` |
 | `resizable` | `orientation: Orientation`, `dir: Dir`, `min: f64`, `max: f64` |
 | `slider` | `range: NumberRange`, `orientation: Orientation`, `dir: Dir`, `large_step: f64` |
-| `tabs` | `orientation: Orientation`, `dir: Dir`, `manual: bool`, `ends: roving::Ends` |
+| `tabs` | `orientation: Orientation`, `dir: Dir`, `activation: Activation` (`Automatic`, `Manual`), `ends: roving::Ends` |
 | `timeline` | `range: Span`, `grid: f64`, `min_length: f64` |
 | `toggle_group` | `pressed: selection::Choosing`, `orientation: Orientation`, `dir: Dir` |
-| `tooltip` | `open_delay_ms: u64`, `close_delay_ms: u64`, `card: bool`, `disabled: bool` |
+| `tooltip` | `open_delay_ms: u64`, `close_delay_ms: u64`, `content: Content` (`Description`, `Card`), `disabled: bool` |
 
 `selection::Choosing` is `One`, `OneOrNone`, `AtLeastOne` or `Any`: how many may be
 open or pressed, and whether the last one can be let go. `selection::Count` is `One` or
