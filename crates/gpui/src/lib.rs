@@ -662,7 +662,6 @@ impl<P: Primitive> Machine<P> {
         };
     }
 
-    /// Runs one step of the primitive and carries out what it asks for.
     /// Tells the primitive when focus leaves the part holding it for somewhere
     /// outside the primitive.
     fn watch_blur(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -906,6 +905,7 @@ impl<P: Primitive> Machine<P> {
         .detach();
     }
 
+    /// Runs one step of the primitive and carries out what it asks for.
     fn run(
         &mut self,
         window: &mut Window,
