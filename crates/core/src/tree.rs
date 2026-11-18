@@ -71,49 +71,60 @@ impl Tree {
         });
         for child in &item.children {
             let child = self.insert(child, Some(at), level.saturating_add(1));
-            self.nodes[at].children.push(child);
+            if let Some(node) = self.nodes.get_mut(at) {
+                node.children.push(child);
+            }
         }
-        self.nodes[at].end = self.nodes.len();
+        let end = self.nodes.len();
+        if let Some(node) = self.nodes.get_mut(at) {
+            node.end = end;
+        }
         at
+    }
+
+    fn node(&self, key: &str) -> Option<&Node> {
+        self.nodes.get(*self.index.get(key)?)
+    }
+
+    /// The node at `at` and everything beneath it, in display order.
+    fn branch(&self, at: usize) -> &[Node] {
+        let end = self.nodes.get(at).map_or(at, |node| node.end);
+        self.nodes.get(at..end).unwrap_or_default()
     }
 
     #[must_use]
     pub fn parent(&self, key: &str) -> Option<&str> {
-        let parent = self.nodes[*self.index.get(key)?].parent?;
-        Some(&self.nodes[parent].key)
+        let parent = self.node(key)?.parent?;
+        Some(&self.nodes.get(parent)?.key)
     }
 
     #[must_use]
     pub fn children(&self, key: &str) -> Vec<&str> {
-        self.index
-            .get(key)
-            .map(|at| {
-                self.nodes[*at]
-                    .children
-                    .iter()
-                    .map(|c| self.nodes[*c].key.as_str())
-                    .collect()
-            })
-            .unwrap_or_default()
+        let Some(node) = self.node(key) else {
+            return Vec::new();
+        };
+        node.children
+            .iter()
+            .filter_map(|child| self.nodes.get(*child))
+            .map(|child| child.key.as_str())
+            .collect()
     }
 
     #[must_use]
     pub fn level(&self, key: &str) -> Option<usize> {
-        Some(self.nodes[*self.index.get(key)?].level)
+        Some(self.node(key)?.level)
     }
 
     /// Keys of a node and everything beneath it, in display order.
     #[must_use]
     pub fn subtree(&self, key: &str) -> Vec<&str> {
-        self.index
-            .get(key)
-            .map(|at| {
-                self.nodes[*at..self.nodes[*at].end]
-                    .iter()
-                    .map(|n| n.key.as_str())
-                    .collect()
-            })
-            .unwrap_or_default()
+        let Some(at) = self.index.get(key) else {
+            return Vec::new();
+        };
+        self.branch(*at)
+            .iter()
+            .map(|node| node.key.as_str())
+            .collect()
     }
 
     /// The rows on screen when the branches in `expanded` are open.
@@ -122,12 +133,9 @@ impl Tree {
         let roots = self.roots();
         let mut rows = Vec::new();
         let mut at = 0;
-        while at < self.nodes.len() {
-            let node = &self.nodes[at];
-            let siblings = match node.parent {
-                Some(parent) => &self.nodes[parent].children,
-                None => &roots,
-            };
+        while let Some(node) = self.nodes.get(at) {
+            let parent = node.parent.and_then(|parent| self.nodes.get(parent));
+            let siblings = parent.map_or(&roots, |parent| &parent.children);
             let open = expanded.contains(&node.key);
             rows.push(Row {
                 key: node.key.clone(),
@@ -191,8 +199,11 @@ impl Tree {
     #[must_use]
     pub fn subtree_order(&self) -> Vec<String> {
         fn walk(tree: &Tree, at: usize, keys: &mut Vec<String>) {
-            keys.push(tree.nodes[at].key.clone());
-            for child in &tree.nodes[at].children {
+            let Some(node) = tree.nodes.get(at) else {
+                return;
+            };
+            keys.push(node.key.clone());
+            for child in &node.children {
                 walk(tree, *child, keys);
             }
         }
@@ -207,25 +218,30 @@ impl Tree {
     #[must_use]
     pub fn checked_value(&self, checked: &HashSet<String>, strategy: CheckStrategy) -> Vec<String> {
         let states = self.checked_states(checked);
-        let full = |at: usize| states.get(&self.nodes[at].key) == Some(&Checked::Checked);
-        (0..self.nodes.len())
-            .filter(|at| match strategy {
-                CheckStrategy::Leaf => self.nodes[*at].children.is_empty() && full(*at),
-                CheckStrategy::Branch => full(*at),
-                CheckStrategy::Trunk => full(*at) && !self.nodes[*at].parent.is_some_and(full),
+        let full = |node: &Node| states.get(&node.key) == Some(&Checked::Checked);
+        let parent_of = |node: &Node| node.parent.and_then(|parent| self.nodes.get(parent));
+        self.nodes
+            .iter()
+            .filter(|node| match strategy {
+                CheckStrategy::Leaf => node.children.is_empty() && full(node),
+                CheckStrategy::Branch => full(node),
+                CheckStrategy::Trunk => full(node) && !parent_of(node).is_some_and(full),
             })
-            .map(|at| self.nodes[at].key.clone())
+            .map(|node| node.key.clone())
             .collect()
     }
 
     fn roots(&self) -> Vec<usize> {
-        (0..self.nodes.len())
-            .filter(|at| self.nodes[*at].parent.is_none())
+        self.nodes
+            .iter()
+            .enumerate()
+            .filter(|(_, node)| node.parent.is_none())
+            .map(|(at, _)| at)
             .collect()
     }
 
     fn leaves(&self, at: usize) -> Vec<&str> {
-        self.nodes[at..self.nodes[at].end]
+        self.branch(at)
             .iter()
             .filter(|node| node.children.is_empty())
             .map(|node| node.key.as_str())
@@ -289,10 +305,10 @@ pub fn move_node(
         position: DropPosition,
     ) -> Result<(), TreeItem> {
         if let Some(at) = items.iter().position(|item| item.key == target) {
-            match position {
-                DropPosition::Before => items.insert(at, node),
-                DropPosition::After => items.insert(at.saturating_add(1), node),
-                DropPosition::Inside => items[at].children.push(node),
+            match (position, items.get_mut(at)) {
+                (DropPosition::Inside, Some(parent)) => parent.children.push(node),
+                (DropPosition::After, _) => items.insert(at.saturating_add(1), node),
+                (DropPosition::Before | DropPosition::Inside, _) => items.insert(at, node),
             }
             return Ok(());
         }
@@ -367,7 +383,8 @@ pub fn slot_target(
         None => tree
             .roots()
             .into_iter()
-            .map(|at| tree.nodes[at].key.as_str())
+            .filter_map(|at| tree.nodes.get(at))
+            .map(|node| node.key.as_str())
             .collect(),
     };
     // A closed parent shows none of its children, so the row goes after them all.
@@ -463,17 +480,17 @@ pub fn tree_from_paths(paths: &[&str]) -> Vec<TreeItem> {
                 key.push('/');
             }
             key.push_str(segment);
-            let at = if let Some(at) = level.iter().position(|item| item.key == key) {
-                at
-            } else {
+            if !level.iter().any(|item| item.key == key) {
                 level.push(TreeItem {
                     key: key.clone(),
                     label: segment.to_string(),
                     children: Vec::new(),
                 });
-                level.len().saturating_sub(1)
+            }
+            let Some(item) = level.iter_mut().find(|item| item.key == key) else {
+                break;
             };
-            level = &mut level[at].children;
+            level = &mut item.children;
         }
     }
     roots
