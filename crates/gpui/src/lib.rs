@@ -822,28 +822,14 @@ impl<P: Primitive> Machine<P> {
     }
 }
 
-/// One part of a primitive as an unstyled `div` carrying the part's semantics, focus
-/// handle and event wiring. Style it and give it children like any other `div`.
-#[expect(
-    clippy::too_many_lines,
-    reason = "one block of wiring for each kind of input a part can take"
-)]
-pub fn part<K: PartOf>(
-    state: &Entity<Machine<K::Primitive>>,
-    part: K,
+/// The accessibility state a part reports: its role, name and what it says of itself.
+fn with_semantics<P: Primitive>(
+    mut el: Stateful<Div>,
+    machine: &Machine<P>,
+    semantics: &Semantics,
+    part: P::Part,
     item: Option<&str>,
-    cx: &App,
-) -> PartElement {
-    let machine = state.read(cx);
-    let semantics = machine.semantics(part, item);
-    let id = format!(
-        "armature-{}-{part:?}-{}",
-        state.entity_id(),
-        item.unwrap_or_default()
-    );
-    let key: PartKey<K::Primitive> = (part, item.map(str::to_string));
-    let mut el = div().id(SharedString::from(id));
-
+) -> Stateful<Div> {
     if let Some(role) = semantics.role {
         el = el.role(accessibility_role(role));
         if item.is_none() && machine.primitive.named_part() == Some(part) {
@@ -880,8 +866,16 @@ pub fn part<K: PartOf>(
             Orientation::Horizontal => gpui::Orientation::Horizontal,
         });
     }
+    el
+}
 
-    let placement = K::Primitive::popup_of(part);
+/// A popup hears of a press anywhere outside it, other than on its own anchor.
+fn with_outside_press<P: Primitive>(
+    mut el: Stateful<Div>,
+    state: &Entity<Machine<P>>,
+    placement: Option<armature_core::popup::Placement<P::Part>>,
+    item: Option<&str>,
+) -> Stateful<Div> {
     if let Some(placement) = placement {
         let state = state.clone();
         let own = item.map(str::to_string);
@@ -905,8 +899,17 @@ pub fn part<K: PartOf>(
             });
         });
     }
+    el
+}
 
-    if K::Primitive::hovers(part) {
+/// Hover, held while the pointer crosses from a part to the popup it opened.
+fn with_hover<P: Primitive>(
+    mut el: Stateful<Div>,
+    state: &Entity<Machine<P>>,
+    key: &PartKey<P>,
+) -> Stateful<Div> {
+    let part = key.0;
+    if P::hovers(part) {
         let hovered = (state.clone(), key.clone());
         el = el.on_hover(move |inside: &bool, window, cx| {
             let (state, (part, item)) = &hovered;
@@ -917,13 +920,12 @@ pub fn part<K: PartOf>(
                 // pointer may cross the gap, and cut the corner, on its way there.
                 let popup = (!*inside)
                     .then(|| {
-                        K::Primitive::parts()
+                        P::parts()
                             .iter()
                             .copied()
                             .filter(|other| other != part)
                             .find_map(|other| {
-                                K::Primitive::popup_of(other)
-                                    .filter(|_| K::Primitive::hovers(other))?;
+                                P::popup_of(other).filter(|_| P::hovers(other))?;
                                 let own = state.bounds.get(&(other, item.clone()));
                                 let bounds = own.or_else(|| state.bounds.get(&(other, None)))?;
                                 let shown =
@@ -990,7 +992,15 @@ pub fn part<K: PartOf>(
         };
         el = el.child(canvas(|_, _, _| (), follow).absolute());
     }
-    let scrolls = K::Primitive::scrolls(part);
+    el
+}
+
+/// A part the primitive scrolls is given the scroll handle to follow.
+fn with_scroll_tracking<P: Primitive>(
+    mut el: Stateful<Div>,
+    machine: &Machine<P>,
+    scrolls: bool,
+) -> Stateful<Div> {
     if scrolls {
         el = if machine.primitive.scroll_axis() == Orientation::Horizontal {
             el.overflow_x_scroll().track_scroll(&machine.scroll)
@@ -998,7 +1008,16 @@ pub fn part<K: PartOf>(
             el.overflow_y_scroll().track_scroll(&machine.scroll)
         };
     }
+    el
+}
 
+/// The wheel goes to a part that asks for it, and scrolls the page otherwise.
+fn with_wheel<P: Primitive>(
+    mut el: Stateful<Div>,
+    state: &Entity<Machine<P>>,
+    part: P::Part,
+    item: Option<&str>,
+) -> Stateful<Div> {
     {
         let (state, item) = (state.clone(), item.map(str::to_string));
         el = el.on_scroll(move |event: &gpui::ScrollEvent, window, cx| {
@@ -1025,8 +1044,17 @@ pub fn part<K: PartOf>(
             }
         });
     }
+    el
+}
 
-    if K::Primitive::context(part) {
+/// The right mouse button, on a part that calls up a context menu.
+fn with_context_menu<P: Primitive>(
+    mut el: Stateful<Div>,
+    state: &Entity<Machine<P>>,
+    part: P::Part,
+    item: Option<&str>,
+) -> Stateful<Div> {
+    if P::context(part) {
         let (state, item) = (state.clone(), item.map(str::to_string));
         el = el.on_mouse_down(
             MouseButton::Right,
@@ -1044,8 +1072,16 @@ pub fn part<K: PartOf>(
             },
         );
     }
+    el
+}
 
-    if K::Primitive::drops(part) {
+/// Files dragged over a part that takes them, and dropped on it.
+fn with_file_drops<P: Primitive>(
+    mut el: Stateful<Div>,
+    state: &Entity<Machine<P>>,
+    part: P::Part,
+) -> Stateful<Div> {
+    if P::drops(part) {
         let over = state.clone();
         el = el.on_drag_move(
             move |event: &gpui::DragMoveEvent<gpui::ExternalPaths>, window, cx| {
@@ -1073,8 +1109,16 @@ pub fn part<K: PartOf>(
             });
         });
     }
+    el
+}
 
-    let tracks_pointer = K::Primitive::tracks_pointer(part);
+/// A press that the primitive follows as a gesture, wherever the pointer goes.
+fn with_pointer_gesture<P: Primitive>(
+    mut el: Stateful<Div>,
+    state: &Entity<Machine<P>>,
+    key: &PartKey<P>,
+    tracks_pointer: bool,
+) -> Stateful<Div> {
     if tracks_pointer {
         let pressed = (state.clone(), key.clone());
         el = el.on_mouse_down(
@@ -1132,8 +1176,17 @@ pub fn part<K: PartOf>(
         };
         el = el.child(canvas(|_, _, _| (), listen).absolute());
     }
+    el
+}
 
-    let layout = match placement {
+/// Whether a part is drawn in place, hidden, or floated against its anchor.
+fn layout_of<P: Primitive>(
+    machine: &Machine<P>,
+    placement: Option<armature_core::popup::Placement<P::Part>>,
+    semantics: &Semantics,
+    item: Option<&str>,
+) -> Layout {
+    match placement {
         _ if semantics.hidden => Layout::Hidden,
         None => Layout::Inline,
         // A popup that belongs to an item sits against that item's own anchor.
@@ -1157,133 +1210,188 @@ pub fn part<K: PartOf>(
             .map_or(Layout::Hidden, |anchor| {
                 floating(placement.side, placement.align, placement.gap, anchor)
             }),
+    }
+}
+
+/// The accessibility nodes of the parts this one names, controls or is described by.
+fn links_of<P: Primitive>(machine: &Machine<P>, part: P::Part, item: Option<&str>) -> Links {
+    let relations = P::relations(part);
+    // An item's partner is the same item's other part, such as a tab's panel.
+    let node = |target: Option<P::Part>| {
+        let target = target?;
+        let own = machine.nodes.get(&(target, item.map(str::to_string)));
+        own.or_else(|| machine.nodes.get(&(target, None))).copied()
     };
-    let links = {
-        let relations = K::Primitive::relations(part);
-        // An item's partner is the same item's other part, such as a tab's panel.
-        let node = |target: Option<K>| {
-            let target = target?;
-            let own = machine.nodes.get(&(target, item.map(str::to_string)));
-            own.or_else(|| machine.nodes.get(&(target, None))).copied()
-        };
-        Links {
-            labelled_by: node(relations.labelled_by),
-            controls: node(relations.controls),
-            described_by: node(relations.described_by),
-        }
-    };
-    let record: RecordBounds = {
-        let (state, key) = (state.clone(), key.clone());
-        Box::new(move |bounds, node, window: &mut Window, cx: &mut App| {
-            let mut wake = None;
-            let mut listen = false;
-            let mut remeasure = false;
-            let (scrolled, relinked) = state.update(cx, |state, _| {
-                // A primitive that lays itself out from where its parts are drawn
-                // hears of it when one of them moves.
-                remeasure = state.bounds.insert(key.clone(), bounds) != Some(bounds)
-                    && state.primitive.measures();
-                let relinked =
-                    node.is_some_and(|node| state.nodes.insert(key.clone(), node) != Some(node));
-                listen = state.hotkey_watch.is_none() && !state.primitive.hotkeys().is_empty();
-                // A value set from outside may have left a timer to start.
-                if !state.waking
-                    && let Some(delay) = state.primitive.wake_after()
-                {
-                    state.waking = true;
-                    wake = Some(state.now_ms().saturating_add(delay));
-                }
-                // Scrolling is read off the handle each frame.
-                let across = state.primitive.scroll_axis() == Orientation::Horizontal;
-                let (offset, max, length) = if across {
-                    (
-                        state.scroll.offset().x,
-                        state.scroll.max_offset().x,
-                        bounds.size.width,
-                    )
-                } else {
-                    (
-                        state.scroll.offset().y,
-                        state.scroll.max_offset().y,
-                        bounds.size.height,
-                    )
-                };
-                let viewport = f64::from(f32::from(length));
-                let now = (
-                    f64::from(-f32::from(offset)),
-                    viewport,
-                    viewport + f64::from(f32::from(max)),
-                );
-                ((scrolls && now != state.scrolled).then_some(now), relinked)
+    Links {
+        labelled_by: node(relations.labelled_by),
+        controls: node(relations.controls),
+        described_by: node(relations.described_by),
+    }
+}
+
+/// Sends the primitive a tick at `at_ms`, once the frame being drawn is done.
+fn tick_at<P: Primitive>(state: &Entity<Machine<P>>, at_ms: u64, window: &Window, cx: &mut App) {
+    let state = state.clone();
+    window.defer(cx, move |window, cx| {
+        state.update(cx, |_, cx| {
+            cx.spawn_in(window, async move |this, cx| {
+                let wait = this
+                    .read_with(cx, |state, _| at_ms.saturating_sub(state.now_ms()))
+                    .unwrap_or(0);
+                cx.background_executor()
+                    .timer(Duration::from_millis(wait))
+                    .await;
+                let _ = this.update_in(cx, |state, window, cx| {
+                    state.waking = false;
+                    state.woke_at_ms = state.woke_at_ms.max(at_ms);
+                    let now_ms = state.now_ms();
+                    state.dispatch(Input::Tick { now_ms }, window, cx);
+                });
+            })
+            .detach();
+        });
+    });
+}
+
+/// Lets a primitive that lays itself out from its parts measure them, once the
+/// frame being drawn is done.
+fn remeasure_after_frame<P: Primitive>(state: &Entity<Machine<P>>, window: &Window, cx: &mut App) {
+    let state = state.clone();
+    window.defer(cx, move |window, cx| {
+        state.update(cx, |state, cx| {
+            let mut changed = false;
+            state.run(window, cx, |machine, measure, _| {
+                changed = machine.measured(measure);
+                Reaction::default()
             });
-            if listen {
-                let state = state.clone();
-                window.defer(cx, move |_, cx| {
-                    state.update(cx, Machine::watch_hotkey);
+            if changed {
+                cx.notify();
+            }
+        });
+    });
+}
+
+/// What happens once a part has been laid out: its place is remembered, and anything
+/// the primitive is waiting on is started.
+fn record_bounds<P: Primitive>(
+    state: &Entity<Machine<P>>,
+    key: &PartKey<P>,
+    scrolls: bool,
+) -> RecordBounds {
+    let (state, key) = (state.clone(), key.clone());
+    Box::new(move |bounds, node, window: &mut Window, cx: &mut App| {
+        let mut wake = None;
+        let mut listen = false;
+        let mut remeasure = false;
+        let (scrolled, relinked) = state.update(cx, |state, _| {
+            // A primitive that lays itself out from where its parts are drawn
+            // hears of it when one of them moves.
+            remeasure = state.bounds.insert(key.clone(), bounds) != Some(bounds)
+                && state.primitive.measures();
+            let relinked =
+                node.is_some_and(|node| state.nodes.insert(key.clone(), node) != Some(node));
+            listen = state.hotkey_watch.is_none() && !state.primitive.hotkeys().is_empty();
+            // A value set from outside may have left a timer to start.
+            if !state.waking
+                && let Some(delay) = state.primitive.wake_after()
+            {
+                state.waking = true;
+                wake = Some(state.now_ms().saturating_add(delay));
+            }
+            // Scrolling is read off the handle each frame.
+            let across = state.primitive.scroll_axis() == Orientation::Horizontal;
+            let (offset, max, length) = if across {
+                (
+                    state.scroll.offset().x,
+                    state.scroll.max_offset().x,
+                    bounds.size.width,
+                )
+            } else {
+                (
+                    state.scroll.offset().y,
+                    state.scroll.max_offset().y,
+                    bounds.size.height,
+                )
+            };
+            let viewport = f64::from(f32::from(length));
+            let now = (
+                f64::from(-f32::from(offset)),
+                viewport,
+                viewport + f64::from(f32::from(max)),
+            );
+            ((scrolls && now != state.scrolled).then_some(now), relinked)
+        });
+        if listen {
+            let state = state.clone();
+            window.defer(cx, move |_, cx| {
+                state.update(cx, Machine::watch_hotkey);
+            });
+        }
+        if let Some(at_ms) = wake {
+            tick_at(&state, at_ms, window, cx);
+        }
+        if remeasure {
+            remeasure_after_frame(&state, window, cx);
+        }
+        // Parts that refer to this one pick up its node on the next frame.
+        if relinked {
+            let state = state.clone();
+            window.defer(cx, move |_, cx| state.update(cx, |_, cx| cx.notify()));
+        }
+        // The primitive hears of a change once this frame is done, since a frame
+        // being drawn cannot ask for another.
+        if let Some(now) = scrolled {
+            let (state, part) = (state.clone(), key.0);
+            window.defer(cx, move |window, cx| {
+                state.update(cx, |state, cx| {
+                    state.scrolled = now;
+                    let input = Input::Scrolled {
+                        part,
+                        offset: now.0,
+                        viewport: now.1,
+                        content: now.2,
+                        now_ms: state.now_ms(),
+                    };
+                    state.run(window, cx, |machine, _, gate| machine.send(input, gate));
                 });
-            }
-            if let Some(at_ms) = wake {
-                let state = state.clone();
-                window.defer(cx, move |window, cx| {
-                    state.update(cx, |_, cx| {
-                        cx.spawn_in(window, async move |this, cx| {
-                            let wait = this
-                                .read_with(cx, |state, _| at_ms.saturating_sub(state.now_ms()))
-                                .unwrap_or(0);
-                            cx.background_executor()
-                                .timer(Duration::from_millis(wait))
-                                .await;
-                            let _ = this.update_in(cx, |state, window, cx| {
-                                state.waking = false;
-                                state.woke_at_ms = state.woke_at_ms.max(at_ms);
-                                let now_ms = state.now_ms();
-                                state.dispatch(Input::Tick { now_ms }, window, cx);
-                            });
-                        })
-                        .detach();
-                    });
-                });
-            }
-            if remeasure {
-                let state = state.clone();
-                window.defer(cx, move |window, cx| {
-                    state.update(cx, |state, cx| {
-                        let mut changed = false;
-                        state.run(window, cx, |machine, measure, _| {
-                            changed = machine.measured(measure);
-                            Reaction::default()
-                        });
-                        if changed {
-                            cx.notify();
-                        }
-                    });
-                });
-            }
-            // Parts that refer to this one pick up its node on the next frame.
-            if relinked {
-                let state = state.clone();
-                window.defer(cx, move |_, cx| state.update(cx, |_, cx| cx.notify()));
-            }
-            // The primitive hears of a change once this frame is done, since a frame
-            // being drawn cannot ask for another.
-            if let Some(now) = scrolled {
-                let (state, part) = (state.clone(), key.0);
-                window.defer(cx, move |window, cx| {
-                    state.update(cx, |state, cx| {
-                        state.scrolled = now;
-                        let input = Input::Scrolled {
-                            part,
-                            offset: now.0,
-                            viewport: now.1,
-                            content: now.2,
-                            now_ms: state.now_ms(),
-                        };
-                        state.run(window, cx, |machine, _, gate| machine.send(input, gate));
-                    });
-                });
-            }
-        })
-    };
+            });
+        }
+    })
+}
+
+/// One part of a primitive as an unstyled `div` carrying the part's semantics, focus
+/// handle and event wiring. Style it and give it children like any other `div`.
+pub fn part<K: PartOf>(
+    state: &Entity<Machine<K::Primitive>>,
+    part: K,
+    item: Option<&str>,
+    cx: &App,
+) -> PartElement {
+    let machine = state.read(cx);
+    let semantics = machine.semantics(part, item);
+    let id = format!(
+        "armature-{}-{part:?}-{}",
+        state.entity_id(),
+        item.unwrap_or_default()
+    );
+    let key: PartKey<K::Primitive> = (part, item.map(str::to_string));
+    let placement = K::Primitive::popup_of(part);
+    let scrolls = K::Primitive::scrolls(part);
+    let tracks_pointer = K::Primitive::tracks_pointer(part);
+
+    let mut el = div().id(SharedString::from(id));
+    el = with_semantics(el, machine, &semantics, part, item);
+    el = with_outside_press(el, state, placement, item);
+    el = with_hover(el, state, &key);
+    el = with_scroll_tracking(el, machine, scrolls);
+    el = with_wheel(el, state, part, item);
+    el = with_context_menu(el, state, part, item);
+    el = with_file_drops(el, state, part);
+    el = with_pointer_gesture(el, state, &key, tracks_pointer);
+
+    let layout = layout_of(machine, placement, &semantics, item);
+    let links = links_of(machine, part, item);
+    let record = record_bounds(state, &key, scrolls);
 
     let handle = machine
         .handles
