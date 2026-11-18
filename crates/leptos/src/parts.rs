@@ -1,5 +1,6 @@
 use armature_core::convert::Cast;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -7,6 +8,7 @@ use armature_core::agent::{Access, ActError, Target};
 use armature_core::change::{Source, ValueChange};
 use armature_core::geometry::Point;
 use armature_core::keys::{Key, Modifiers, Orientation};
+use armature_core::layers::{Layer, LayerStack, trapped_focus};
 use armature_core::popup::{self, Placement, Rect, Side, Size};
 use armature_core::presence::Presence;
 use armature_core::primitive::{
@@ -25,15 +27,24 @@ use crate::agent;
 /// Called with each proposed change. Returning `false` cancels it.
 pub type ChangeGate = Callback<ValueChange, bool>;
 
+/// Where an element is drawn, in the window.
+fn box_of(element: &web_sys::Element) -> Rect {
+    let rect = element.get_bounding_client_rect();
+    Rect::new(rect.x(), rect.y(), rect.width(), rect.height())
+}
+
 /// The listeners that follow a pointer on its way from a part to its popup.
-type Held = Rc<std::cell::RefCell<Option<(WindowListenerHandle, IntervalHandle)>>>;
+type Held = Rc<RefCell<Option<(WindowListenerHandle, IntervalHandle)>>>;
 
 thread_local! {
-        static WATCHING_MODALITY: Cell<bool> = const { Cell::new(false) };
+    /// Whether the page is already noting keyboard or pointer use, which every
+    /// component shares.
+    static WATCHING_MODALITY: Cell<bool> = const { Cell::new(false) };
     /// Where focus was before a component's hotkey took it, by component.
-    static RETURN_TO: std::cell::RefCell<std::collections::HashMap<u32, HtmlElement>> = std::cell::RefCell::new(std::collections::HashMap::default());
+    static RETURN_TO: RefCell<HashMap<u32, HtmlElement>> = RefCell::new(HashMap::new());
     /// The popups and dialogs open on the page, in the order they opened.
-    static LAYERS: std::cell::RefCell<armature_core::layers::LayerStack> = std::cell::RefCell::new(armature_core::layers::LayerStack::default());
+    static LAYERS: RefCell<LayerStack> = RefCell::new(LayerStack::default());
+    /// The number the next component is known by.
     static NEXT_INSTANCE: Cell<u32> = const { Cell::new(1) };
 }
 
@@ -89,13 +100,7 @@ impl<P: Primitive + Send + Sync> Context<P> {
         };
         let measure = move |part: P::Part, item: Option<&str>| {
             let element = self.element_of(part, item)?;
-            let rect = element.get_bounding_client_rect();
-            Some(Rect {
-                x: rect.x(),
-                y: rect.y(),
-                width: rect.width(),
-                height: rect.height(),
-            })
+            Some(box_of(&element))
         };
         self.run(|machine, gate| machine.pointer(pointer, &measure, gate))
     }
@@ -400,7 +405,7 @@ fn trap_tab(container: &HtmlElement, backwards: bool) {
             .as_ref()
             .is_some_and(|active| active.is_same_node(Some(stop)))
     });
-    let next = armature_core::layers::trapped_focus(current, stops.len(), backwards);
+    let next = trapped_focus(current, stops.len(), backwards);
     if let Some(stop) = next.and_then(|next| stops.get(next)) {
         let _ = stop.focus();
     }
@@ -719,8 +724,7 @@ fn report_measured_layout<P: Primitive + Send + Sync>(ctx: Context<P>) {
     if machine.with_untracked(armature_core::primitive::Primitive::measures) {
         let report = move || {
             let measure = move |part: P::Part, item: Option<&str>| {
-                let rect = ctx.element_of(part, item)?.get_bounding_client_rect();
-                Some(Rect::new(rect.x(), rect.y(), rect.width(), rect.height()))
+                ctx.element_of(part, item).map(|found| box_of(&found))
             };
             let changed = machine
                 .try_update_untracked(|m| m.measured(&measure))
@@ -782,8 +786,8 @@ fn join_layers<P: Primitive + Send + Sync>(ctx: Context<P>) {
             });
             if was != Some(state) {
                 LAYERS.with_borrow_mut(|layers| match state {
-                    Some(true) => layers.open(armature_core::layers::Layer::dialog(&id)),
-                    Some(false) => layers.open(armature_core::layers::Layer::popup(&id)),
+                    Some(true) => layers.open(Layer::dialog(&id)),
+                    Some(false) => layers.open(Layer::popup(&id)),
                     None => drop(layers.close(&id)),
                 });
             }
@@ -1525,8 +1529,7 @@ fn open_popup_of<P: Primitive + Send + Sync>(
             let found = ctx
                 .element_of(other, item)
                 .or_else(|| ctx.element_of(other, None))?;
-            let rect = found.get_bounding_client_rect();
-            (rect.width() > 0.0).then(|| Rect::new(rect.x(), rect.y(), rect.width(), rect.height()))
+            Some(box_of(&found)).filter(|rect| rect.width > 0.0)
         })
 }
 
@@ -1543,7 +1546,7 @@ fn hold_while_crossing(
     } else {
         Axis::X
     };
-    let area = Rc::new(std::cell::RefCell::new(SafeArea::start(
+    let area = Rc::new(RefCell::new(SafeArea::start(
         from,
         popup,
         axis,
@@ -1552,10 +1555,7 @@ fn hold_while_crossing(
     let last = Rc::new(Cell::new(from));
     // The shape spanning this part and its popup: a pointer inside it is
     // still on its way across.
-    let trigger = element.get_untracked().map(|own| {
-        let rect = own.get_bounding_client_rect();
-        Rect::new(rect.x(), rect.y(), rect.width(), rect.height())
-    });
+    let trigger = element.get_untracked().map(|own| box_of(&own));
     let bridged =
         move |at: Point| trigger.is_some_and(|trigger| popup::bridges(trigger, popup, 4.0, at));
     let held: Held = Rc::default();
