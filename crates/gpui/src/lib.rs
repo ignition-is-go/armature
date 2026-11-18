@@ -1093,32 +1093,29 @@ fn with_wheel<P: Primitive>(
     part: P::Part,
     item: Option<&str>,
 ) -> Stateful<Div> {
-    {
-        let (state, item) = (state.clone(), item.map(str::to_string));
-        el = el.on_scroll(move |event: &gpui::ScrollEvent, window, cx| {
-            let lines = match event.delta {
-                gpui::ScrollDelta::Lines(lines) => f64::from(lines.y),
-                gpui::ScrollDelta::Pixels(pixels) => number(pixels.y) / 20.0,
-            };
-            let taken = state.update(cx, |state, cx| {
-                // The wheel goes to a part that asks for it now, and scrolls otherwise.
-                if !state.primitive.wheels(part) {
-                    return false;
-                }
-                let input = Input::Wheel {
-                    part,
-                    item: item.clone(),
-                    delta: lines,
-                    mods: modifiers(event.modifiers),
-                };
-                // What is under it scrolls as usual unless the primitive made use of it.
-                state.dispatch(input, window, cx)
-            });
-            if taken {
-                cx.stop_propagation();
+    let (state, item) = (state.clone(), item.map(str::to_string));
+    el = el.on_scroll(move |event: &gpui::ScrollEvent, window, cx| {
+        let lines = match event.delta {
+            gpui::ScrollDelta::Lines(lines) => f64::from(lines.y),
+            gpui::ScrollDelta::Pixels(pixels) => number(pixels.y) / 20.0,
+        };
+        let taken = state.update(cx, |state, cx| {
+            if !state.primitive.wheels(part) {
+                return false;
             }
+            let input = Input::Wheel {
+                part,
+                item: item.clone(),
+                delta: lines,
+                mods: modifiers(event.modifiers),
+            };
+            // What is under it scrolls as usual unless the primitive made use of it.
+            state.dispatch(input, window, cx)
         });
-    }
+        if taken {
+            cx.stop_propagation();
+        }
+    });
     el
 }
 
@@ -1482,7 +1479,7 @@ pub fn part<K: PartOf>(
     // A part the primitive keeps text for is edited as a text field. One that
     // edits its own content, key by key, is not.
     let takes_text = matches!(semantics.role, Some(Role::TextBox | Role::SpinButton))
-        && state.read(cx).text(key.0, key.1.as_deref()).is_some();
+        && machine.text(key.0, key.1.as_deref()).is_some();
     let (part, item) = key;
 
     let inner = el
