@@ -5,7 +5,7 @@ use crate::keys::Key;
 use crate::primitive::{
     Focusable, Input, Item, PartOf, Primitive, Reaction, Relations, Role, Semantics,
 };
-use crate::roving::Nav;
+use crate::roving::{Ends, Nav};
 use crate::text_match::fuzzy_score;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -225,7 +225,7 @@ impl Primitive for Command {
                 } else {
                     Nav::Prev
                 };
-                let next = crate::roving::step(&enabled, at, nav, true).unwrap_or(0);
+                let next = crate::roving::step(&enabled, at, nav, Ends::Wrap).unwrap_or(0);
                 self.highlighted = shown.get(next).cloned();
                 Reaction::handled()
             }

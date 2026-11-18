@@ -2,6 +2,7 @@ use crate::agent::{ActError, Snapshot, SnapshotItem};
 use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::keys::{Key, Modifiers};
 use crate::primitive::{Focusable, Input, Item, PartOf, Primitive, Reaction, Role, Semantics};
+use crate::roving::Ends;
 use crate::roving::{self, Nav};
 use crate::selection::{self, Mode};
 use crate::transfer::{transfer, transfer_message};
@@ -321,7 +322,7 @@ impl Primitive for TransferList {
                 };
                 let list = self.side(side);
                 let at = list.iter().position(|k| *k == focused);
-                let target = roving::step(&vec![true; list.len()], at, nav, false)
+                let target = roving::step(&vec![true; list.len()], at, nav, Ends::Stop)
                     .and_then(|index| list.get(index).cloned());
                 if let Some(key) = &target {
                     self.focused = Some(key.clone());

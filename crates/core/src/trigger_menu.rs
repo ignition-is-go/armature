@@ -6,7 +6,7 @@ use crate::popup::{Align, Placement, Side};
 use crate::primitive::{
     Focusable, Input, Item, PartOf, Primitive, Reaction, Relations, Role, Semantics,
 };
-use crate::roving::{self, Nav};
+use crate::roving::{self, Ends, Nav};
 use crate::trigger_match::{TriggerRule, find_trigger_match};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -309,7 +309,7 @@ impl Primitive for TriggerMenu {
                 } else {
                     Nav::Prev
                 };
-                if let Some(next) = roving::step(&enabled, at, nav, true) {
+                if let Some(next) = roving::step(&enabled, at, nav, Ends::Wrap) {
                     self.active = results.get(next).cloned();
                 }
                 Reaction::handled()

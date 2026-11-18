@@ -6,6 +6,7 @@ use crate::popup::{Align, Placement, Side};
 use crate::primitive::{
     Focusable, Input, Item, PartOf, Primitive, Reaction, Relations, Role, Semantics,
 };
+use crate::roving::Ends;
 use crate::roving::{self, Nav};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -170,8 +171,13 @@ impl Menubar {
 
     fn neighbour(&self, forward: bool) -> usize {
         let nav = if forward { Nav::Next } else { Nav::Prev };
-        roving::step(&vec![true; self.menus.len()], Some(self.focused), nav, true)
-            .unwrap_or(self.focused)
+        roving::step(
+            &vec![true; self.menus.len()],
+            Some(self.focused),
+            nav,
+            Ends::Wrap,
+        )
+        .unwrap_or(self.focused)
     }
 }
 

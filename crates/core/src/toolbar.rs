@@ -3,7 +3,7 @@ use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::items::Items;
 use crate::keys::{Dir, Key, Orientation};
 use crate::primitive::{Focusable, Input, Item, PartOf, Primitive, Reaction, Role, Semantics};
-use crate::roving;
+use crate::roving::{self, Ends};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Part {
@@ -146,7 +146,7 @@ impl Primitive for Toolbar {
                     return Reaction::default();
                 };
                 let from = self.tab_stop().map(str::to_string);
-                let target = self.items.step(from.as_deref(), nav, true);
+                let target = self.items.step(from.as_deref(), nav, Ends::Wrap);
                 if let Some(key) = &target {
                     self.focused = Some(key.clone());
                 }

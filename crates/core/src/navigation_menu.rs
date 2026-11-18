@@ -6,6 +6,7 @@ use crate::primitive::{
     Effect, Focusable, Input, Item, PartOf, Primitive, Reaction, Relations, Role, Semantics,
 };
 use crate::roving;
+use crate::roving::Ends;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Part {
@@ -192,7 +193,7 @@ impl NavigationMenu {
         let at = self
             .tab_stop()
             .and_then(|key| self.entries.iter().position(|entry| entry.key == key));
-        let Some(next) = roving::step(&vec![true; self.entries.len()], at, nav, true) else {
+        let Some(next) = roving::step(&vec![true; self.entries.len()], at, nav, Ends::Wrap) else {
             return Reaction::default();
         };
         let key = self

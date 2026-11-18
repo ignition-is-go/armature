@@ -5,7 +5,7 @@ use crate::keys::{Dir, Key, Orientation};
 use crate::primitive::{
     Focusable, Input, Item, PartOf, Primitive, Reaction, Relations, Role, Semantics,
 };
-use crate::roving;
+use crate::roving::{self, Ends};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Options {
@@ -164,7 +164,7 @@ impl Primitive for Tabs {
             Input::Key { key, .. } => {
                 if let Some(nav) = roving::nav_for_key(key, self.opts.orientation, self.opts.dir) {
                     let from = self.focused.as_deref().or_else(|| self.current());
-                    let focus = self.items.step(from, nav, self.opts.wrap);
+                    let focus = self.items.step(from, nav, Ends::wrapping(self.opts.wrap));
                     if let Some(key) = &focus {
                         self.focused = Some(key.clone());
                         if !self.opts.manual {

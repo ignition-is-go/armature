@@ -44,9 +44,27 @@ pub const fn nav_for_key(key: Key, orientation: Orientation, dir: Dir) -> Option
     })
 }
 
+/// What a step past the last item, or back past the first, does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Ends {
+    /// Goes round to the other end.
+    Wrap,
+    /// Stays where it is.
+    Stop,
+}
+
+impl Ends {
+    /// `Wrap` when a setting says to wrap, and `Stop` otherwise.
+    #[must_use]
+    pub const fn wrapping(wrap: bool) -> Self {
+        if wrap { Self::Wrap } else { Self::Stop }
+    }
+}
+
 /// Index to move to, skipping disabled items. `None` means there is nowhere to go.
 #[must_use]
-pub fn step(enabled: &[bool], current: Option<usize>, nav: Nav, wrap: bool) -> Option<usize> {
+pub fn step(enabled: &[bool], current: Option<usize>, nav: Nav, ends: Ends) -> Option<usize> {
+    let wrap = ends == Ends::Wrap;
     let n = enabled.len();
     let first = || enabled.iter().position(|e| *e);
     let last = || enabled.iter().rposition(|e| *e);
@@ -82,23 +100,23 @@ mod tests {
     #[test]
     fn skips_disabled_items() {
         let enabled = [true, false, true];
-        assert_eq!(step(&enabled, Some(0), Nav::Next, false), Some(2));
-        assert_eq!(step(&enabled, Some(2), Nav::Prev, false), Some(0));
+        assert_eq!(step(&enabled, Some(0), Nav::Next, Ends::Stop), Some(2));
+        assert_eq!(step(&enabled, Some(2), Nav::Prev, Ends::Stop), Some(0));
     }
 
     #[test]
     fn stops_at_the_end_unless_wrapping() {
         let enabled = [true, true, false];
-        assert_eq!(step(&enabled, Some(1), Nav::Next, false), None);
-        assert_eq!(step(&enabled, Some(1), Nav::Next, true), Some(0));
-        assert_eq!(step(&enabled, Some(0), Nav::Prev, true), Some(1));
+        assert_eq!(step(&enabled, Some(1), Nav::Next, Ends::Stop), None);
+        assert_eq!(step(&enabled, Some(1), Nav::Next, Ends::Wrap), Some(0));
+        assert_eq!(step(&enabled, Some(0), Nav::Prev, Ends::Wrap), Some(1));
     }
 
     #[test]
     fn enters_from_nothing_at_the_matching_edge() {
         let enabled = [false, true, true];
-        assert_eq!(step(&enabled, None, Nav::Next, false), Some(1));
-        assert_eq!(step(&enabled, None, Nav::Prev, false), Some(2));
+        assert_eq!(step(&enabled, None, Nav::Next, Ends::Stop), Some(1));
+        assert_eq!(step(&enabled, None, Nav::Prev, Ends::Stop), Some(2));
     }
 
     #[test]

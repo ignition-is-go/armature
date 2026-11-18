@@ -10,7 +10,7 @@ use crate::primitive::{
     Role, Semantics,
 };
 use crate::reorder::{Reorder, ReorderSession, ReorderStep, move_item, reorder_message};
-use crate::roving;
+use crate::roving::{self, Ends};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Part {
@@ -167,7 +167,7 @@ impl Sortable {
                 else {
                     return Reaction::default();
                 };
-                let target = self.items.step(self.focused.as_deref(), nav, false);
+                let target = self.items.step(self.focused.as_deref(), nav, Ends::Stop);
                 if let Some(key) = &target {
                     self.focused = Some(key.clone());
                 }

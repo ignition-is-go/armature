@@ -3,7 +3,7 @@ use crate::change::Gate;
 use crate::items::Items;
 use crate::keys::{Dir, Key, Orientation};
 use crate::primitive::{Focusable, Input, Item, PartOf, Primitive, Reaction, Role, Semantics};
-use crate::roving::{self, Nav};
+use crate::roving::{self, Ends, Nav};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Part {
@@ -188,7 +188,7 @@ impl Primitive for EventList {
                 };
                 // A feed has an end to reach, so paging through it never comes round.
                 let wrap = self.opts.wrap && !matches!(key, Key::PageDown | Key::PageUp);
-                let target = self.events.step(self.tab_stop(), nav, wrap);
+                let target = self.events.step(self.tab_stop(), nav, Ends::wrapping(wrap));
                 if let Some(key) = &target {
                     self.focused = Some(key.clone());
                 }

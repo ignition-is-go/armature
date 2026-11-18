@@ -6,7 +6,7 @@ use crate::popup::{Align, Placement, Side};
 use crate::primitive::{
     Focusable, Input, Item, PartOf, Primitive, Reaction, Relations, Role, Semantics,
 };
-use crate::roving::{self, Nav};
+use crate::roving::{self, Ends, Nav};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Part {
@@ -262,7 +262,7 @@ impl Combobox {
             .active
             .as_deref()
             .and_then(|key| results.iter().position(|result| result == key));
-        if let Some(next) = roving::step(&enabled, at, nav, true) {
+        if let Some(next) = roving::step(&enabled, at, nav, Ends::Wrap) {
             self.active = results.get(next).cloned();
             self.at_end = next.saturating_add(1) == results.len();
         }

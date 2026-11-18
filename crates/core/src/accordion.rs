@@ -5,7 +5,7 @@ use crate::keys::{Dir, Key, Orientation};
 use crate::primitive::{
     Focusable, Input, Item, PartOf, Primitive, Reaction, Relations, Role, Semantics,
 };
-use crate::roving;
+use crate::roving::{self, Ends};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Part {
@@ -194,7 +194,7 @@ impl Primitive for Accordion {
             Input::Key { key, .. } => {
                 let nav = roving::nav_for_key(key, Orientation::Vertical, Dir::Ltr);
                 let target =
-                    nav.and_then(|nav| self.items.step(self.focused.as_deref(), nav, true));
+                    nav.and_then(|nav| self.items.step(self.focused.as_deref(), nav, Ends::Wrap));
                 if let Some(key) = &target {
                     self.focused = Some(key.clone());
                 }

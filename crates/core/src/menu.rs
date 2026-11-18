@@ -7,7 +7,7 @@ use crate::popup::{Align, Placement, Side};
 use crate::primitive::{
     Focusable, Input, Item, PartOf, Primitive, Reaction, Relations, Role, Semantics,
 };
-use crate::roving::{self, Nav};
+use crate::roving::{self, Ends, Nav};
 use crate::typeahead::Typeahead;
 
 /// What an entry in a menu does when chosen.
@@ -341,7 +341,7 @@ impl Menu {
             .as_deref()
             .and_then(|key| shown.iter().position(|entry| entry.key == key));
         let go = |nav| {
-            roving::step(&enabled, at, nav, true)
+            roving::step(&enabled, at, nav, Ends::Wrap)
                 .and_then(|index| shown.get(index))
                 .map(|entry| entry.key.clone())
         };

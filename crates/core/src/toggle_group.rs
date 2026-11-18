@@ -3,7 +3,7 @@ use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::items::Items;
 use crate::keys::{Dir, Key, Orientation};
 use crate::primitive::{Focusable, Input, Item, PartOf, Primitive, Reaction, Role, Semantics};
-use crate::roving;
+use crate::roving::{self, Ends};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Part {
@@ -192,7 +192,7 @@ impl Primitive for ToggleGroup {
                 else {
                     return Reaction::default();
                 };
-                let target = self.items.step(self.tab_stop(), nav, true);
+                let target = self.items.step(self.tab_stop(), nav, Ends::Wrap);
                 if let Some(key) = &target {
                     self.focused = Some(key.clone());
                 }

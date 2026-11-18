@@ -1,5 +1,5 @@
 use crate::primitive::Item;
-use crate::roving::{self, Nav};
+use crate::roving::{self, Ends, Nav};
 
 /// The ordered items of a collection primitive.
 #[derive(Clone, Debug, Default)]
@@ -53,9 +53,9 @@ impl Items {
     }
 
     #[must_use]
-    pub fn step(&self, from: Option<&str>, nav: Nav, wrap: bool) -> Option<String> {
+    pub fn step(&self, from: Option<&str>, nav: Nav, ends: Ends) -> Option<String> {
         let current = from.and_then(|key| self.index_of(key));
-        roving::step(&self.enabled(), current, nav, wrap).map(|i| self.key_at(i))
+        roving::step(&self.enabled(), current, nav, ends).map(|i| self.key_at(i))
     }
 
     pub fn upsert(&mut self, item: Item) {
@@ -69,8 +69,8 @@ impl Items {
     pub fn remove(&mut self, key: &str) -> Option<String> {
         let index = self.index_of(key)?;
         let enabled = self.enabled();
-        let neighbour = roving::step(&enabled, Some(index), Nav::Next, false)
-            .or_else(|| roving::step(&enabled, Some(index), Nav::Prev, false))
+        let neighbour = roving::step(&enabled, Some(index), Nav::Next, Ends::Stop)
+            .or_else(|| roving::step(&enabled, Some(index), Nav::Prev, Ends::Stop))
             .map(|i| self.key_at(i));
         self.0.remove(index);
         neighbour
