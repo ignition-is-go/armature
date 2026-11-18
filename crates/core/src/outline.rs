@@ -454,72 +454,77 @@ impl Outline {
         ))
     }
 
-    fn on_key(&mut self, key: Key, gate: Gate) -> Reaction<Part> {
-        let all = |_: &str| true;
-        let Some(moving) = self.moving.as_mut() else {
-            let Some(focused) = self.focused.clone() else {
-                return Reaction::default();
-            };
-            let at = self.rows.iter().position(|row| row.key == focused);
-            let to = |index: Option<usize>| {
-                index
-                    .and_then(|index| self.rows.get(index))
-                    .map_or_else(Reaction::handled, |row| {
-                        Reaction::item(Part::Row, true, Some(row.key.clone()))
-                    })
-            };
-            return match key {
-                Key::Space | Key::Enter => {
-                    self.moving = OutlineMove::grab(&self.rows, &focused, self.opts.max_depth);
-                    Reaction::handled().alerting(format!(
-                        "{} picked up. Arrows move it, Space drops it, Escape puts it back.",
-                        self.label(&focused)
-                    ))
-                }
-                Key::ArrowDown => to(at.map(|at| at.saturating_add(1))),
-                Key::ArrowUp => to(at.and_then(|at| at.checked_sub(1))),
-                Key::Home => to(Some(0)),
-                Key::End => to(self.rows.len().checked_sub(1)),
-                _ => Reaction::default(),
-            };
+    /// A key with no row picked up: moving focus between rows, or picking one up.
+    fn on_key_at_rest(&mut self, key: Key) -> Reaction<Part> {
+        let Some(focused) = self.focused.clone() else {
+            return Reaction::default();
         };
+        let at = self.rows.iter().position(|row| row.key == focused);
+        let focus_row = |index: Option<usize>| {
+            index
+                .and_then(|index| self.rows.get(index))
+                .map_or_else(Reaction::handled, |row| {
+                    Reaction::item(Part::Row, true, Some(row.key.clone()))
+                })
+        };
+        match key {
+            Key::Space | Key::Enter => {
+                self.moving = OutlineMove::grab(&self.rows, &focused, self.opts.max_depth);
+                Reaction::handled().alerting(format!(
+                    "{} picked up. Arrows move it, Space drops it, Escape puts it back.",
+                    self.label(&focused)
+                ))
+            }
+            Key::ArrowDown => focus_row(at.map(|at| at.saturating_add(1))),
+            Key::ArrowUp => focus_row(at.and_then(|at| at.checked_sub(1))),
+            Key::Home => focus_row(Some(0)),
+            Key::End => focus_row(self.rows.len().checked_sub(1)),
+            _ => Reaction::default(),
+        }
+    }
+
+    /// A key with a row picked up: moving it, dropping it, or putting it back.
+    fn on_key_while_moving(
+        &mut self,
+        mut moving: OutlineMove,
+        key: Key,
+        gate: Gate,
+    ) -> Reaction<Part> {
+        let every_row = |_: &str| true;
         let (inward, outward) = if self.opts.dir == Dir::Rtl {
             (Key::ArrowLeft, Key::ArrowRight)
         } else {
             (Key::ArrowRight, Key::ArrowLeft)
         };
         match key {
-            Key::ArrowUp => drop(moving.step(false, &all)),
-            Key::ArrowDown => drop(moving.step(true, &all)),
-            Key::Home => drop(moving.to_end(false, &all)),
-            Key::End => drop(moving.to_end(true, &all)),
-            key if key == inward => drop(moving.indent(true, &all)),
-            key if key == outward => drop(moving.indent(false, &all)),
-            Key::Escape => {
-                self.moving = None;
-                return Reaction::handled().alerting("Move cancelled");
-            }
+            Key::ArrowUp => drop(moving.step(false, &every_row)),
+            Key::ArrowDown => drop(moving.step(true, &every_row)),
+            Key::Home => drop(moving.to_end(false, &every_row)),
+            Key::End => drop(moving.to_end(true, &every_row)),
+            key if key == inward => drop(moving.indent(true, &every_row)),
+            key if key == outward => drop(moving.indent(false, &every_row)),
+            Key::Escape => return Reaction::handled().alerting("Move cancelled"),
             // Leaving puts the row back and lets focus move on.
-            Key::Tab => {
-                self.moving = None;
-                return Reaction::default();
-            }
+            Key::Tab => return Reaction::default(),
             Key::Space | Key::Enter => {
-                let landed = self
-                    .moving
-                    .take()
-                    .and_then(|moving| moving.dropped(&self.rows));
-                return landed
-                    .and_then(|landed| self.commit(landed, Source::User, Reason::Keyboard, gate))
-                    .map_or_else(Reaction::handled, |message| {
-                        Reaction::handled().alerting(message)
-                    });
+                let landed = moving.dropped(&self.rows);
+                let message = landed
+                    .and_then(|landed| self.commit(landed, Source::User, Reason::Keyboard, gate));
+                return announced(message);
             }
             // Every other key is swallowed while a row is up.
             _ => {}
         }
+        self.moving = Some(moving);
         Reaction::item(Part::Row, true, self.focused.clone())
     }
+}
+
+/// A handled input, with what a screen reader should hear about it, if anything.
+fn announced(message: Option<String>) -> Reaction<Part> {
+    message.map_or_else(Reaction::handled, |message| {
+        Reaction::handled().alerting(message)
+    })
 }
 
 impl PartOf for Part {
@@ -580,7 +585,10 @@ impl Primitive for Outline {
 
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
         match input {
-            Input::Key { key, mods, .. } if !mods.ctrl && !mods.alt => self.on_key(key, gate),
+            Input::Key { key, mods, .. } if !mods.ctrl && !mods.alt => match self.moving.take() {
+                Some(moving) => self.on_key_while_moving(moving, key, gate),
+                None => self.on_key_at_rest(key),
+            },
             Input::Focus {
                 item: Some(key), ..
             } => {
@@ -650,11 +658,9 @@ impl Primitive for Outline {
                     .take()
                     .filter(|_| matches!(ended, Some(DragEvent::End { .. })))
                     .and_then(|moving| moving.dropped(&self.rows));
-                landed
-                    .and_then(|landed| self.commit(landed, Source::User, Reason::Drag, gate))
-                    .map_or_else(Reaction::handled, |message| {
-                        Reaction::handled().alerting(message)
-                    })
+                announced(
+                    landed.and_then(|landed| self.commit(landed, Source::User, Reason::Drag, gate)),
+                )
             }
             PointerPhase::Cancel => {
                 self.pressed = None;
