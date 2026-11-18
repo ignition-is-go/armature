@@ -173,6 +173,15 @@ impl FileInput {
         Reaction::handled().announcing(message)
     }
 
+    /// The files held, less the one with this name.
+    fn without(&self, name: &str) -> Vec<FileInfo> {
+        self.files
+            .iter()
+            .filter(|file| file.name != name)
+            .cloned()
+            .collect()
+    }
+
     fn browse(&self) -> Reaction<Part> {
         Reaction::handled().with(Effect::PickFiles {
             multiple: self.opts.multiple,
@@ -278,12 +287,7 @@ impl Primitive for FileInput {
                 item: Some(name),
                 ..
             } => {
-                let rest = self
-                    .files
-                    .iter()
-                    .filter(|file| file.name != name)
-                    .cloned()
-                    .collect();
+                let rest = self.without(&name);
                 self.commit(rest, Source::User, Reason::Press, gate);
                 Reaction::focusing(Part::Dropzone)
             }
@@ -333,7 +337,7 @@ impl Primitive for FileInput {
 
     fn act(&mut self, action: &str, item: Option<&str>, gate: Gate) -> Result<(), ActError> {
         let rest = match action {
-            // An agent cannot choose files from the person's disk. It can only ask.
+            // Choosing files from the person's disk is the person's to do, not an agent's.
             "browse" => return Err(ActError::Refused),
             "clear" => Vec::new(),
             "remove" => {
@@ -341,11 +345,7 @@ impl Primitive for FileInput {
                 if !self.files.iter().any(|file| file.name == name) {
                     return Err(ActError::UnknownItem(name.to_string()));
                 }
-                self.files
-                    .iter()
-                    .filter(|file| file.name != name)
-                    .cloned()
-                    .collect()
+                self.without(&name)
             }
             other => {
                 return Err(ActError::UnknownAction {
