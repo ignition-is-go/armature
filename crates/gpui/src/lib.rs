@@ -124,6 +124,15 @@ pub struct Announcement {
     pub assertive: bool,
 }
 
+/// The pointer on its way from a part to the popup that part opened.
+struct Crossing<P: Primitive> {
+    /// Where the pointer may go without having left.
+    area: SafeArea,
+    popup: Rect,
+    /// The part it left, which hears of it only if it never arrives.
+    left: PartKey<P>,
+}
+
 /// Where a scrolling part is scrolled to, and the lengths of its view and content.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 struct Scrolled {
@@ -162,7 +171,7 @@ pub struct Machine<P: Primitive> {
     dragged_over: bool,
     /// The pointer's path from a part towards this primitive's open popup, the
     /// popup's box, and the part whose hover-leave is being held back meanwhile.
-    crossing: Option<(SafeArea, Rect, PartKey<P>)>,
+    crossing: Option<Crossing<P>>,
     /// Whether the keyboard, and not a pointer, was the last thing used on this
     /// primitive.
     by_keyboard: bool,
@@ -377,7 +386,10 @@ impl<P: Primitive> Machine<P> {
     /// Ends the wait while the pointer crossed to the popup. Unless it arrived, the
     /// primitive now hears that the pointer left.
     fn end_crossing(&mut self, arrived: bool, window: &mut Window, cx: &mut Context<Self>) {
-        let Some((_, _, (part, item))) = self.crossing.take() else {
+        let Some(Crossing {
+            left: (part, item), ..
+        }) = self.crossing.take()
+        else {
             return;
         };
         if !arrived {
@@ -712,6 +724,158 @@ impl<P: Primitive> Machine<P> {
         self.blur_watch.insert(key, watch);
     }
 
+    /// The popup this primitive has open that the pointer may be leaving `part` for.
+    fn open_popup_beside(&self, part: P::Part, item: Option<&String>) -> Option<Rect> {
+        let others = P::parts().iter().copied().filter(|other| *other != part);
+        others.into_iter().find_map(|other| {
+            P::popup_of(other).filter(|_| P::hovers(other))?;
+            let own = self.bounds.get(&(other, item.cloned()));
+            let bounds = own.or_else(|| self.bounds.get(&(other, None)))?;
+            let shown = !self
+                .primitive
+                .semantics(other, item.map(String::as_str))
+                .hidden;
+            shown.then(|| core_rect(*bounds))
+        })
+    }
+
+    /// The pointer came to rest on a part or left it. Leaving for a popup this
+    /// primitive has open is not leaving yet: the pointer may cross the gap, and
+    /// cut the corner, on its way there.
+    fn hovered(
+        &mut self,
+        part: P::Part,
+        item: Option<String>,
+        inside: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.crossing = None;
+        let popup = if inside {
+            None
+        } else {
+            self.open_popup_beside(part, item.as_ref())
+        };
+        let Some(popup) = popup else {
+            let input = Input::Hover {
+                part,
+                item,
+                inside,
+                now_ms: self.now_ms(),
+            };
+            self.dispatch(input, window, cx);
+            return;
+        };
+        let from = core_point(window.mouse_position());
+        let axis = if from.y < popup.y || from.y > popup.bottom() {
+            Axis::Y
+        } else {
+            Axis::X
+        };
+        self.crossing = Some(Crossing {
+            area: SafeArea::start(from, popup, axis, self.now_ms()),
+            popup,
+            left: (part, item),
+        });
+        // A pointer that stops short of the popup has left after all.
+        cx.spawn_in(window, async move |this, cx| {
+            cx.background_executor()
+                .timer(Duration::from_millis(400))
+                .await;
+            let _ = this.update_in(cx, |state, window, cx| {
+                state.end_crossing(false, window, cx);
+            });
+        })
+        .detach();
+    }
+
+    /// The pointer moved while crossing towards a popup: it has arrived, has
+    /// wandered off, or is still on its way.
+    fn crossing_moved(&mut self, at: CorePoint, window: &mut Window, cx: &mut Context<Self>) {
+        let now_ms = self.now_ms();
+        let Some(crossing) = self.crossing.as_mut() else {
+            return;
+        };
+        if crossing.popup.contains(at) {
+            self.end_crossing(true, window, cx);
+        } else if !crossing.area.contains(at, now_ms) {
+            self.end_crossing(false, window, cx);
+        }
+    }
+
+    /// Does what the primitive asked the platform to do.
+    fn carry_out(&mut self, effect: &Effect, window: &mut Window, cx: &mut Context<Self>) {
+        match effect {
+            Effect::Announce { message, assertive } => {
+                let announcement = Announcement {
+                    message: message.clone(),
+                    assertive: *assertive,
+                };
+                self.announcements.push(announcement.clone());
+                cx.emit(announcement);
+            }
+            Effect::Wake { at_ms } => self.wake_at(*at_ms, window, cx),
+            Effect::CapturePointer => {}
+            Effect::RestoreFocus => {
+                if let Some(back) = self.return_to.take() {
+                    back.focus(window, cx);
+                }
+            }
+            Effect::ScrollTo { offset } => {
+                let along = px(-((*offset).cast::<f32>()));
+                let across = self.primitive.scroll_axis() == Orientation::Horizontal;
+                self.scroll.set_offset(if across {
+                    point(along, px(0.))
+                } else {
+                    point(px(0.), along)
+                });
+            }
+            Effect::Copy { text } => {
+                cx.write_to_clipboard(ClipboardItem::new_string(text.clone()));
+            }
+            Effect::PickFiles { multiple, .. } => Self::pick_files(*multiple, window, cx),
+        }
+    }
+
+    /// Sends the primitive a tick once the clock reaches `at_ms`.
+    fn wake_at(&self, at_ms: u64, window: &Window, cx: &Context<Self>) {
+        let wait = Duration::from_millis(at_ms.saturating_sub(self.now_ms()));
+        cx.spawn_in(window, async move |this, cx| {
+            cx.background_executor().timer(wait).await;
+            let _ = this.update_in(cx, |state, window, cx| {
+                state.woke_at_ms = state.woke_at_ms.max(at_ms);
+                let now_ms = state.now_ms();
+                state.dispatch(Input::Tick { now_ms }, window, cx);
+            });
+        })
+        .detach();
+    }
+
+    /// Asks the person for files and hands the primitive what they chose. The
+    /// platform's picker has no filter for types here, so the primitive turns away
+    /// what it does not take when the files come back.
+    fn pick_files(multiple: bool, window: &Window, cx: &Context<Self>) {
+        let chosen = cx.prompt_for_paths(gpui::PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple,
+            prompt: None,
+        });
+        cx.spawn_in(window, async move |this, cx| {
+            let Ok(Ok(Some(paths))) = chosen.await else {
+                return;
+            };
+            let _ = this.update_in(cx, |state, window, cx| {
+                let input = Input::Files {
+                    files: described(&paths),
+                    dropped: false,
+                };
+                state.dispatch(input, window, cx);
+            });
+        })
+        .detach();
+    }
+
     fn run(
         &mut self,
         window: &mut Window,
@@ -757,73 +921,7 @@ impl<P: Primitive> Machine<P> {
             handle.focus(window, cx);
         }
         for effect in &reaction.effects {
-            match effect {
-                Effect::Announce { message, assertive } => {
-                    let announcement = Announcement {
-                        message: message.clone(),
-                        assertive: *assertive,
-                    };
-                    self.announcements.push(announcement.clone());
-                    cx.emit(announcement);
-                }
-                Effect::Wake { at_ms } => {
-                    let at_ms = *at_ms;
-                    let wait = Duration::from_millis(at_ms.saturating_sub(self.now_ms()));
-                    cx.spawn_in(window, async move |this, cx| {
-                        cx.background_executor().timer(wait).await;
-                        let _ = this.update_in(cx, |state, window, cx| {
-                            state.woke_at_ms = state.woke_at_ms.max(at_ms);
-                            let now_ms = state.now_ms();
-                            state.dispatch(Input::Tick { now_ms }, window, cx);
-                        });
-                    })
-                    .detach();
-                }
-                Effect::CapturePointer => {}
-                Effect::RestoreFocus => {
-                    if let Some(back) = self.return_to.take() {
-                        back.focus(window, cx);
-                    }
-                }
-                Effect::ScrollTo { offset } => {
-                    let along = px(-((*offset).cast::<f32>()));
-                    let across = self.primitive.scroll_axis() == Orientation::Horizontal;
-                    self.scroll.set_offset(if across {
-                        point(along, px(0.))
-                    } else {
-                        point(px(0.), along)
-                    });
-                }
-                Effect::Copy { text } => {
-                    cx.write_to_clipboard(ClipboardItem::new_string(text.clone()));
-                }
-                // The platform's picker has no filter for types here, so the primitive
-                // turns away what it does not take when the files come back.
-                Effect::PickFiles { multiple, .. } => {
-                    let chosen = cx.prompt_for_paths(gpui::PathPromptOptions {
-                        files: true,
-                        directories: false,
-                        multiple: *multiple,
-                        prompt: None,
-                    });
-                    cx.spawn_in(window, async move |this, cx| {
-                        if let Ok(Ok(Some(paths))) = chosen.await {
-                            let _ = this.update_in(cx, |state, window, cx| {
-                                let files = described(&paths);
-                                state.dispatch(
-                                    Input::Files {
-                                        files,
-                                        dropped: false,
-                                    },
-                                    window,
-                                    cx,
-                                );
-                            });
-                        }
-                    })
-                    .detach();
-                }
-            }
+            self.carry_out(effect, window, cx);
         }
         cx.notify();
         reaction
@@ -922,57 +1020,7 @@ fn with_hover<P: Primitive>(
         el = el.on_hover(move |inside: &bool, window, cx| {
             let (state, (part, item)) = &hovered;
             state.update(cx, |state, cx| {
-                let now_ms = state.now_ms();
-                state.crossing = None;
-                // Leaving for a popup this primitive has open is not leaving yet: the
-                // pointer may cross the gap, and cut the corner, on its way there.
-                let popup = (!*inside)
-                    .then(|| {
-                        P::parts()
-                            .iter()
-                            .copied()
-                            .filter(|other| other != part)
-                            .find_map(|other| {
-                                P::popup_of(other).filter(|_| P::hovers(other))?;
-                                let own = state.bounds.get(&(other, item.clone()));
-                                let bounds = own.or_else(|| state.bounds.get(&(other, None)))?;
-                                let shown =
-                                    !state.primitive.semantics(other, item.as_deref()).hidden;
-                                shown.then(|| core_rect(*bounds))
-                            })
-                    })
-                    .flatten();
-                if let Some(popup) = popup {
-                    let from = core_point(window.mouse_position());
-                    let axis = if from.y < popup.y || from.y > popup.bottom() {
-                        Axis::Y
-                    } else {
-                        Axis::X
-                    };
-                    state.crossing = Some((
-                        SafeArea::start(from, popup, axis, now_ms),
-                        popup,
-                        (*part, item.clone()),
-                    ));
-                    // A pointer that stops short of the popup has left after all.
-                    cx.spawn_in(window, async move |this, cx| {
-                        cx.background_executor()
-                            .timer(Duration::from_millis(400))
-                            .await;
-                        let _ = this.update_in(cx, |state, window, cx| {
-                            state.end_crossing(false, window, cx);
-                        });
-                    })
-                    .detach();
-                    return;
-                }
-                let input = Input::Hover {
-                    part: *part,
-                    item: item.clone(),
-                    inside: *inside,
-                    now_ms,
-                };
-                state.dispatch(input, window, cx);
+                state.hovered(*part, item.clone(), *inside, window, cx);
             });
         });
         // While the pointer crosses towards the popup, its path is followed.
@@ -984,17 +1032,7 @@ fn with_hover<P: Primitive>(
                     return;
                 }
                 crossing.update(cx, |state, cx| {
-                    let now_ms = state.now_ms();
-                    let at = core_point(event.position);
-                    let verdict = state
-                        .crossing
-                        .as_mut()
-                        .map(|(area, popup, _)| (popup.contains(at), area.contains(at, now_ms)));
-                    match verdict {
-                        Some((true, _)) => state.end_crossing(true, window, cx),
-                        Some((false, false)) => state.end_crossing(false, window, cx),
-                        _ => {}
-                    }
+                    state.crossing_moved(core_point(event.position), window, cx);
                 });
             });
         };
