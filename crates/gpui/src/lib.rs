@@ -197,7 +197,7 @@ impl<P: Primitive> EventEmitter<Announcement> for Machine<P> {}
 
 impl<P: Primitive> Machine<P> {
     pub fn new(
-        mut machine: P,
+        mut primitive: P,
         label: impl Into<SharedString>,
         items: impl IntoIterator<Item = Item>,
         cx: &mut Context<Self>,
@@ -214,55 +214,16 @@ impl<P: Primitive> Machine<P> {
             for part in &item_parts {
                 handles.insert((*part, Some(item.key.clone())), cx.focus_handle());
             }
-            machine.upsert_item(item);
+            primitive.upsert_item(item);
         }
 
-        let this = cx.weak_entity();
-        let registration = agent::registry(cx).register(Target {
-            snapshot: Rc::new({
-                let this = this.clone();
-                move |cx: &App| {
-                    let state = this.upgrade()?;
-                    let state = state.read(cx);
-                    Some(state.primitive.snapshot(&state.label))
-                }
-            }),
-            act: Rc::new({
-                let this = this.clone();
-                move |cx: &mut App, action, item| {
-                    let state = this.upgrade().ok_or(ActError::Refused)?;
-                    state.update(cx, |state, cx| {
-                        let before = state.primitive.value();
-                        let mut gate = state.gate.take();
-                        let result = state.primitive.act(action, item, &mut |change| {
-                            gate.as_mut().is_none_or(|gate| gate(change, cx))
-                        });
-                        state.gate = gate;
-                        state.remember(before, Source::Agent, cx);
-                        // An agent action cannot ask for a scroll, so the part is
-                        // brought to wherever the primitive now wants it.
-                        if let Some(offset) = state.primitive.wanted_scroll() {
-                            state
-                                .scroll
-                                .set_offset(point(px(0.), px(-(offset.cast::<f32>()))));
-                        }
-                        cx.notify();
-                        result.map(|()| state.primitive.value())
-                    })
-                }
-            }),
-            set: Rc::new(move |cx: &mut App, value| {
-                if let Some(state) = this.upgrade() {
-                    state.update(cx, |state, cx| state.set_value(value, cx));
-                }
-            }),
-            access: Access::default(),
-        });
+        let target = Self::agent_target(cx.weak_entity());
+        let registration = agent::registry(cx).register(target);
         cx.on_release(move |_, cx| agent::registry(cx).unregister(registration))
             .detach();
 
         Self {
-            primitive: machine,
+            primitive,
             label: label.into(),
             handles,
             bounds: HashMap::new(),
@@ -805,6 +766,62 @@ impl<P: Primitive> Machine<P> {
         }
     }
 
+    /// How an agent reaches this component: to see it, act on it, and put a value back.
+    fn agent_target(this: gpui::WeakEntity<Self>) -> Target<App> {
+        let (seen, acted) = (this.clone(), this.clone());
+        Target {
+            snapshot: Rc::new(move |cx: &App| {
+                let state = seen.upgrade()?;
+                let state = state.read(cx);
+                Some(state.primitive.snapshot(&state.label))
+            }),
+            act: Rc::new(move |cx: &mut App, action, item| {
+                let state = acted.upgrade().ok_or(ActError::Refused)?;
+                state.update(cx, |state, cx| state.act_for_agent(action, item, cx))
+            }),
+            set: Rc::new(move |cx: &mut App, value| {
+                if let Some(state) = this.upgrade() {
+                    state.update(cx, |state, cx| state.set_value(value, cx));
+                }
+            }),
+            access: Access::default(),
+        }
+    }
+
+    /// Runs one agent action and returns the value afterwards.
+    fn act_for_agent(
+        &mut self,
+        action: &str,
+        item: Option<&str>,
+        cx: &mut Context<Self>,
+    ) -> Result<Vec<String>, ActError> {
+        let before = self.primitive.value();
+        let mut gate = self.gate.take();
+        let result = self.primitive.act(action, item, &mut |change| {
+            gate.as_mut().is_none_or(|gate| gate(change, cx))
+        });
+        self.gate = gate;
+        self.remember(before, Source::Agent, cx);
+        // An agent action cannot ask for a scroll, so the part is brought to
+        // wherever the primitive now wants it.
+        if let Some(offset) = self.primitive.wanted_scroll() {
+            self.scroll_to(offset);
+        }
+        cx.notify();
+        result.map(|()| self.primitive.value())
+    }
+
+    /// Scrolls the primitive's scrolling part to `offset`, along the way it scrolls.
+    fn scroll_to(&self, offset: f64) {
+        let along = px(-(offset.cast::<f32>()));
+        let across = self.primitive.scroll_axis() == Orientation::Horizontal;
+        self.scroll.set_offset(if across {
+            point(along, px(0.))
+        } else {
+            point(px(0.), along)
+        });
+    }
+
     /// Does what the primitive asked the platform to do.
     fn carry_out(&mut self, effect: &Effect, window: &mut Window, cx: &mut Context<Self>) {
         match effect {
@@ -823,15 +840,7 @@ impl<P: Primitive> Machine<P> {
                     back.focus(window, cx);
                 }
             }
-            Effect::ScrollTo { offset } => {
-                let along = px(-((*offset).cast::<f32>()));
-                let across = self.primitive.scroll_axis() == Orientation::Horizontal;
-                self.scroll.set_offset(if across {
-                    point(along, px(0.))
-                } else {
-                    point(px(0.), along)
-                });
-            }
+            Effect::ScrollTo { offset } => self.scroll_to(f64::from(*offset)),
             Effect::Copy { text } => {
                 cx.write_to_clipboard(ClipboardItem::new_string(text.clone()));
             }
