@@ -320,9 +320,15 @@ impl<P: Primitive + Send + Sync> Context<P> {
             width: 0.0,
             height: 0.0,
         };
-        let (arrow, clamped) = popup::arrow_along(anchor, placed_box, no_arrow_size, false, 12.0);
-        let _ = style.set_property("--armature-arrow-x", &format!("{arrow}px"));
-        let _ = if clamped {
+        let arrow = popup::arrow_along(
+            anchor,
+            placed_box,
+            no_arrow_size,
+            Orientation::Horizontal,
+            12.0,
+        );
+        let _ = style.set_property("--armature-arrow-x", &format!("{}px", arrow.offset));
+        let _ = if arrow.clamped {
             popup.set_attribute("data-arrow-clamped", "")
         } else {
             popup.remove_attribute("data-arrow-clamped")

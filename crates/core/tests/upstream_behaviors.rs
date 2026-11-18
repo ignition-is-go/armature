@@ -1295,10 +1295,13 @@ fn popover_behaviors() {
             Rect::new(100.0, 0.0, 60.0, 30.0),
             Rect::new(50.0, 40.0, 200.0, 100.0),
             arrow,
-            false,
+            Orientation::Horizontal,
             6.0
         ),
-        (74.0, false)
+        ArrowSpot {
+            offset: 74.0,
+            clamped: false
+        }
     );
     // "stops short of the corners and says so"
     assert_eq!(
@@ -1306,10 +1309,13 @@ fn popover_behaviors() {
             Rect::new(0.0, 0.0, 10.0, 30.0),
             Rect::new(40.0, 40.0, 200.0, 100.0),
             arrow,
-            false,
+            Orientation::Horizontal,
             6.0
         ),
-        (6.0, true)
+        ArrowSpot {
+            offset: 6.0,
+            clamped: true
+        }
     );
     // "runs along the vertical edge for side placements"
     let tall = Size {
@@ -1321,10 +1327,10 @@ fn popover_behaviors() {
             Rect::new(0.0, 100.0, 30.0, 40.0),
             Rect::new(40.0, 60.0, 200.0, 100.0),
             tall,
-            true,
+            Orientation::Vertical,
             6.0
         )
-        .0,
+        .offset,
         54.0
     );
     // hover bridge

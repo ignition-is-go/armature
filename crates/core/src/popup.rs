@@ -24,7 +24,7 @@ pub struct Placement<Part> {
 
 use crate::geometry::Point;
 pub use crate::geometry::{Rect, Size};
-use crate::keys::Dir;
+use crate::keys::{Dir, Orientation};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Placed {
@@ -90,20 +90,30 @@ pub fn arrow_offset(anchor: Rect, placed: Placed, popup: Size, inset: f64) -> f6
     )
 }
 
-/// Where a popup's arrow starts along the edge facing the anchor, so that it
-/// points at the middle of the anchor, and whether it had to stop short of a
-/// corner to stay `padding` clear of it.
+/// Where a popup's arrow goes along the edge that faces the anchor.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ArrowSpot {
+    /// How far along the edge the arrow starts.
+    pub offset: f64,
+    /// Whether it stopped short of a corner, and so no longer points at the middle
+    /// of the anchor.
+    pub clamped: bool,
+}
+
+/// Where a popup's arrow goes so that it points at the middle of the anchor,
+/// staying `padding` clear of the corners.
 ///
-/// Along the width for a popup above or below, and along the height for one beside.
+/// `along` is the edge's direction: horizontal for a popup above or below, and
+/// vertical for one beside.
 #[must_use]
 pub fn arrow_along(
     anchor: Rect,
     popup: Rect,
     arrow: Size,
-    beside: bool,
+    along: Orientation,
     padding: f64,
-) -> (f64, bool) {
-    let (middle, start, length, size) = if beside {
+) -> ArrowSpot {
+    let (middle, start, length, size) = if along == Orientation::Vertical {
         (
             anchor.y + anchor.height / 2.0,
             popup.y,
@@ -120,7 +130,10 @@ pub fn arrow_along(
     };
     let wanted = middle - start - size / 2.0;
     let offset = wanted.clamp(padding, (length - size - padding).max(padding));
-    (offset, (offset - wanted).abs() > f64::EPSILON)
+    ArrowSpot {
+        offset,
+        clamped: (offset - wanted).abs() > f64::EPSILON,
+    }
 }
 
 /// Whether a point lies on the way between a trigger and its popup:
