@@ -40,7 +40,7 @@ const ACTIONS: &[&str] = &["set", "clear", "submit", "reveal", "conceal"];
 #[derive(Clone, Debug, Default)]
 #[expect(
     clippy::struct_excessive_bools,
-    reason = "each flag is an independent setting"
+    reason = "two independent settings, required and disabled, and two one-way pieces of state"
 )]
 pub struct TextField {
     kind: Kind,

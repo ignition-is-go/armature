@@ -868,7 +868,7 @@ fn SheetSection() -> impl IntoView {
             <p id="visible-value">
                 {move || format!("Visible: {}x{}", visible.get().width.round(), visible.get().height.round())}
             </p>
-            <Root machine=Sheet::new(vec![120.0, 300.0], true) label="Details" on_value_change=on_rest>
+            <Root machine=Sheet::new(vec![120.0, 300.0]) label="Details" on_value_change=on_rest>
                 <SheetParts />
             </Root>
         </Section>

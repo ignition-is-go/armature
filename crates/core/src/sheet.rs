@@ -64,26 +64,23 @@ struct Scrolling {
 /// dismisses it. The value is the index of the height it rests at, or empty when
 /// closed.
 #[derive(Clone, Debug)]
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "each flag is an independent setting"
-)]
 pub struct Sheet {
     /// The heights it can rest at, lowest first.
     detents: Vec<f64>,
+    /// Whether dragging it well below the lowest height, or Escape, closes it.
     dismissible: bool,
     /// The detent it rests at, when open.
     at: Option<usize>,
     grabbed: Option<Grab>,
     height: f64,
     speed: VelocityTracker,
-    /// Whether the trigger holds focus, so Enter and Space can press it.
-    on_trigger: bool,
+    /// The part that holds focus. On the trigger, Enter and Space press it.
+    focused: Option<Part>,
     /// The edge of the screen it slides in from.
     side: Edge,
-    /// Whether the content inside is scrolled to its start, so that scrolling
-    /// further moves the sheet in place of the content.
-    content_at_start: bool,
+    /// How far the content inside is scrolled. At its start, scrolling further
+    /// moves the sheet in place of the content.
+    content_offset: f64,
     /// Whether the wheel has moved the sheet and it has yet to settle.
     wheeled: bool,
     scrolled: Option<Scrolling>,
@@ -91,7 +88,7 @@ pub struct Sheet {
 
 impl Default for Sheet {
     fn default() -> Self {
-        Self::new(vec![200.0, 480.0], true)
+        Self::new(vec![200.0, 480.0])
     }
 }
 
@@ -101,21 +98,36 @@ impl Sheet {
         self.detents.get(at).copied().unwrap_or_default()
     }
 
-    pub fn new(mut detents: Vec<f64>, dismissible: bool) -> Self {
+    /// A sheet that rests at `detents`, and that dragging well below the lowest
+    /// or Escape closes.
+    pub fn new(mut detents: Vec<f64>) -> Self {
         detents.sort_by(f64::total_cmp);
         Self {
             detents,
-            dismissible,
+            dismissible: true,
             at: None,
             grabbed: None,
             height: 0.0,
             speed: VelocityTracker::default(),
-            on_trigger: false,
+            focused: None,
             side: Edge::Bottom,
-            content_at_start: true,
+            content_offset: 0.0,
             wheeled: false,
             scrolled: None,
         }
+    }
+
+    /// Keeps it open whatever the person does: dragging below the lowest height
+    /// and Escape leave it where it is.
+    #[must_use]
+    pub const fn pinned(mut self) -> Self {
+        self.dismissible = false;
+        self
+    }
+
+    /// Whether the content inside is scrolled to its start.
+    fn content_at_start(&self) -> bool {
+        self.content_offset <= 0.0
     }
 
     /// Slides in from another edge, as a navigation drawer does from the side. Its
@@ -302,12 +314,12 @@ impl Primitive for Sheet {
     /// moves. The owner reports the content's scroll with
     /// `set("content_offset", offset)`.
     fn wheels(&self, part: Part) -> bool {
-        part == Part::Content && self.is_open() && self.content_at_start
+        part == Part::Content && self.is_open() && self.content_at_start()
     }
 
     fn set(&mut self, name: &str, value: &str) -> bool {
         match (name, read_number(value)) {
-            ("content_offset", Some(offset)) => self.content_at_start = offset <= 0.0,
+            ("content_offset", Some(offset)) => self.content_offset = offset,
             _ => return false,
         }
         true
@@ -377,7 +389,7 @@ impl Primitive for Sheet {
         let last = self.detents.len().saturating_sub(1);
         match (input, self.at) {
             (Input::Focus { part, .. }, _) => {
-                self.on_trigger = part == Part::Trigger;
+                self.focused = Some(part);
                 Reaction::default()
             }
             (
@@ -387,7 +399,7 @@ impl Primitive for Sheet {
                     ..
                 },
                 Some(_),
-            ) if self.content_at_start => {
+            ) if self.content_at_start() => {
                 let tallest = self.detents.last().copied().unwrap_or(0.0);
                 let now = self.height();
                 // At its tallest, scrolling on belongs to the content.
@@ -415,7 +427,7 @@ impl Primitive for Sheet {
                     ..
                 },
                 _,
-            ) if self.on_trigger => self.send(
+            ) if self.focused == Some(Part::Trigger) => self.send(
                 Input::Press {
                     part: Part::Trigger,
                     item: None,
@@ -650,7 +662,7 @@ mod tests {
         let mut sheet = opened();
         drag(&mut sheet, -150.0);
         assert!(!sheet.is_open());
-        let mut pinned = Sheet::new(vec![200.0, 480.0], false);
+        let mut pinned = Sheet::new(vec![200.0, 480.0]).pinned();
         pinned.set_value(vec!["0".into()]);
         drag(&mut pinned, -150.0);
         assert_eq!(
@@ -740,7 +752,7 @@ mod tests {
 
     #[test]
     fn a_drawer_from_the_left_is_dragged_and_keyed_sideways() {
-        let mut drawer = Sheet::new(vec![240.0, 400.0], true).from_edge(Edge::Left);
+        let mut drawer = Sheet::new(vec![240.0, 400.0]).from_edge(Edge::Left);
         drawer.act("open", None, &mut |_| true).unwrap();
         let at = |x: f64, phase, now_ms| Pointer {
             phase,
