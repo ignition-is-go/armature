@@ -421,6 +421,15 @@ fn link_at(text: &[char], at: usize) -> Option<(Token, usize)> {
     ))
 }
 
+/// Where the next `[@` at or after `from` starts.
+fn next_link_start(chars: &[char], from: usize) -> Option<usize> {
+    let found = chars
+        .get(from..)?
+        .windows(2)
+        .position(|pair| pair == ['[', '@'])?;
+    Some(from.saturating_add(found))
+}
+
 /// Reads a value written by `to_text`. Anything that is not a well-formed link
 /// stays text.
 #[must_use]
@@ -429,31 +438,15 @@ pub fn from_text(text: &str) -> Vec<Segment> {
     let mut value: Vec<Segment> = Vec::new();
     let mut plain = String::new();
     let mut index = 0;
-    while index < chars.len() {
-        let Some(bracket) = (index..chars.len().saturating_sub(1)).find(|at| {
-            chars.get(*at).copied().unwrap_or_default() == '['
-                && chars
-                    .get((*at).saturating_add(1))
-                    .copied()
-                    .unwrap_or_default()
-                    == '@'
-        }) else {
-            break;
-        };
-        let slashes = chars
-            .get(index..bracket)
-            .unwrap_or_default()
-            .iter()
-            .rev()
-            .take_while(|ch| **ch == '\\')
-            .count();
-        plain.extend(
-            chars
-                .get(index..bracket.saturating_sub(slashes))
-                .unwrap_or_default(),
-        );
+    while let Some(bracket) = next_link_start(&chars, index) {
+        // Backslashes before the bracket stand for themselves in pairs. An odd
+        // one out escapes the bracket, which is then text.
+        let before = chars.get(index..bracket).unwrap_or_default();
+        let slashes = before.iter().rev().take_while(|ch| **ch == '\\').count();
+        plain.extend(before.iter().take(before.len().saturating_sub(slashes)));
         plain.push_str(&"\\".repeat(slashes / 2));
-        let link = if slashes % 2 == 1 {
+        let escaped = slashes % 2 == 1;
+        let link = if escaped {
             None
         } else {
             link_at(&chars, bracket)
@@ -467,7 +460,7 @@ pub fn from_text(text: &str) -> Vec<Segment> {
             index = bracket.saturating_add(2);
         }
     }
-    plain.extend(chars.get(index.min(chars.len())..).unwrap_or_default());
+    plain.extend(chars.get(index..).unwrap_or_default());
     value.push(Segment::Text(plain));
     normalize(value)
 }
