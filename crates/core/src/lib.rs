@@ -7,6 +7,7 @@ pub mod button;
 pub mod calendar;
 pub mod canvas;
 pub mod carousel;
+pub mod carousel_layout;
 pub mod change;
 pub mod checkbox;
 pub mod collapsible;

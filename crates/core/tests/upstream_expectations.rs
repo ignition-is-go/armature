@@ -1899,3 +1899,255 @@ fn panel_layouts() {
     assert_eq!(toggle_target(&[panel(), can], 0), Some(1));
     assert_eq!(toggle_target(&[panel(), panel()], 0), None);
 }
+
+// carousel.test.ts: loop, pages, slides in view, stepping
+#[test]
+fn carousel_layouts() {
+    use armature_core::carousel_layout::*;
+    let row = |count: usize, size: f64, gap: f64| -> Vec<SlideBox> {
+        (0..count)
+            .map(|index| SlideBox {
+                start: index as f64 * (size + gap),
+                size,
+            })
+            .collect()
+    };
+    let positions = |pages: &[Page]| pages.iter().map(|page| page.position).collect::<Vec<_>>();
+    let view = LoopView {
+        snapport: 300.0,
+        padding_start: 0.0,
+        max_scroll: 1200.0,
+        align: Align::Start,
+        per_page: PerPage::Count(1),
+    };
+    // "reads the track from any rotation, and refuses a layout that isn't one"
+    let track = measure_track(&row(5, 300.0, 10.0), 0).unwrap();
+    assert_eq!(
+        track,
+        Track {
+            sizes: vec![300.0; 5],
+            gap: 10.0,
+            start: 0.0
+        }
+    );
+    let rotated = place_slides(&track, 3);
+    assert_eq!(
+        rotated.iter().map(|slide| slide.start).collect::<Vec<_>>(),
+        [620.0, 930.0, 1240.0, 0.0, 310.0]
+    );
+    assert_eq!(measure_track(&rotated, 3), Some(track));
+    assert_eq!(measure_track(&row(5, 300.0, 10.0), 3), None);
+    assert_eq!(measure_track(&row(1, 300.0, 0.0), 0), None);
+    // "pages keep their slides' own order wherever the track starts"
+    let track = measure_track(&row(5, 300.0, 0.0), 0).unwrap();
+    let pages = loop_pages(&track, &view, 3);
+    assert_eq!(
+        pages.iter().map(|page| page.leader).collect::<Vec<_>>(),
+        [0, 1, 2, 3, 4]
+    );
+    assert_eq!(positions(&pages), [600.0, 900.0, 1200.0, 0.0, 300.0]);
+    // "at rest, the current page moves mid-track with the same slides in view"
+    assert_eq!(
+        loop_rotation(&track, &view, 0.0, 0, None, false),
+        Some((3, 600.0))
+    );
+    assert_eq!(
+        loop_rotation(&track, &view, 600.0, 3, None, false),
+        Some((3, 0.0))
+    );
+    // "a step past the end rotates only when the next page doesn't lie ahead"
+    assert_eq!(
+        loop_rotation(&track, &view, 1200.0, 0, Some((0, true)), true),
+        Some((2, -600.0))
+    );
+    assert_eq!(
+        loop_rotation(&track, &view, 600.0, 0, Some((3, true)), true),
+        Some((0, 0.0))
+    );
+    // "loops seamlessly only with a page's step of room to either side"
+    assert!(can_loop(
+        &measure_track(&row(3, 300.0, 0.0), 0).unwrap(),
+        &LoopView {
+            max_scroll: 600.0,
+            ..view
+        }
+    ));
+    assert!(!can_loop(
+        &measure_track(&row(2, 300.0, 0.0), 0).unwrap(),
+        &LoopView {
+            max_scroll: 300.0,
+            ..view
+        }
+    ));
+    assert!(can_loop(
+        &measure_track(&row(5, 100.0, 0.0), 0).unwrap(),
+        &LoopView {
+            max_scroll: 200.0,
+            ..view
+        }
+    ));
+    // "a track too short to rotate gives no rotation"
+    let short = measure_track(&row(2, 100.0, 0.0), 0).unwrap();
+    assert_eq!(
+        loop_rotation(
+            &short,
+            &LoopView {
+                max_scroll: 0.0,
+                ..view
+            },
+            0.0,
+            0,
+            Some((1, false)),
+            false
+        ),
+        None
+    );
+    // pages
+    let pages_of =
+        |slides: &[SlideBox], viewport: f64, before: f64, after: f64, align, per_page| {
+            let last = slides[slides.len() - 1];
+            let geometry = Geometry {
+                slides,
+                snapport: viewport - before - after,
+                padding_start: before,
+                max_scroll: (last.start + last.size - viewport).max(0.0),
+            };
+            carousel_pages(&geometry, align, per_page)
+        };
+    // "one slide to a viewport makes one page per slide"
+    let pages = pages_of(
+        &row(5, 300.0, 0.0),
+        300.0,
+        0.0,
+        0.0,
+        Align::Start,
+        PerPage::Count(1),
+    );
+    assert_eq!(positions(&pages), [0.0, 300.0, 600.0, 900.0, 1200.0]);
+    assert_eq!(
+        pages
+            .iter()
+            .map(|page| page.slides.clone())
+            .collect::<Vec<_>>(),
+        [[0], [1], [2], [3], [4]]
+    );
+    // "pages that can't reach the start merge, like the last slides of a full row"
+    let pages = pages_of(
+        &row(5, 100.0, 0.0),
+        300.0,
+        0.0,
+        0.0,
+        Align::Start,
+        PerPage::Count(1),
+    );
+    assert_eq!(positions(&pages), [0.0, 100.0, 200.0]);
+    assert_eq!(pages[2].slides, [2, 3, 4]);
+    // "groups page together and line up at their first slide"
+    let pages = pages_of(
+        &row(6, 100.0, 0.0),
+        300.0,
+        0.0,
+        0.0,
+        Align::Start,
+        PerPage::Count(3),
+    );
+    assert_eq!(positions(&pages), [0.0, 300.0]);
+    assert_eq!(
+        pages.iter().map(|page| page.leader).collect::<Vec<_>>(),
+        [0, 3]
+    );
+    // "auto fits as many slides as the snapport shows"
+    assert_eq!(
+        group_slides(&row(7, 100.0, 10.0), 320.0, PerPage::Auto),
+        [vec![0, 1, 2], vec![3, 4, 5], vec![6]]
+    );
+    let wide = [
+        SlideBox {
+            start: 0.0,
+            size: 500.0,
+        },
+        SlideBox {
+            start: 500.0,
+            size: 100.0,
+        },
+    ];
+    assert_eq!(group_slides(&wide, 320.0, PerPage::Auto), [[0], [1]]);
+    // "centered pages sit in the middle, with a margin that lines up the browser's snap"
+    let pages = pages_of(
+        &row(5, 200.0, 0.0),
+        300.0,
+        0.0,
+        0.0,
+        Align::Center,
+        PerPage::Count(1),
+    );
+    assert_eq!((pages[0].position, pages[0].margin), (0.0, 50.0));
+    assert_eq!((pages[1].position, pages[1].margin), (150.0, 50.0));
+    assert_eq!(positions(&pages), [0.0, 150.0, 350.0, 550.0, 700.0]);
+    // "end alignment lines a page up with the viewport's end"
+    assert_eq!(
+        positions(&pages_of(
+            &row(4, 100.0, 0.0),
+            250.0,
+            0.0,
+            0.0,
+            Align::End,
+            PerPage::Count(1)
+        )),
+        [0.0, 50.0, 150.0]
+    );
+    // "scroll padding moves where pages line up"
+    assert_eq!(
+        positions(&pages_of(
+            &row(4, 200.0, 0.0),
+            300.0,
+            20.0,
+            20.0,
+            Align::Start,
+            PerPage::Count(1)
+        )),
+        [0.0, 180.0, 380.0, 500.0]
+    );
+    // "the nearest page wins, and none without pages"
+    let at = [0.0, 300.0, 600.0];
+    assert_eq!(
+        (
+            nearest_page(&at, 140.0),
+            nearest_page(&at, 160.0),
+            nearest_page(&at, 900.0),
+            nearest_page(&[], 10.0)
+        ),
+        (Some(0), Some(1), Some(2), None)
+    );
+    // "a slide counts once at least half of it shows"
+    let slide = SlideBox {
+        start: 300.0,
+        size: 300.0,
+    };
+    assert_eq!(
+        [0.0, 140.0, 150.0, 300.0].map(|scroll| is_slide_in_view(slide, scroll, 300.0)),
+        [false, false, true, true]
+    );
+    // "a slide larger than the viewport counts once it fills half of it"
+    let large = SlideBox {
+        start: 0.0,
+        size: 1000.0,
+    };
+    assert_eq!(
+        [500.0, 850.0, 860.0].map(|scroll| is_slide_in_view(large, scroll, 300.0)),
+        [true, true, false]
+    );
+    // "stops at the ends, or wraps with loop"
+    assert_eq!(
+        (step_page(3, 1, 3, false), step_page(1, -1, 3, false)),
+        (3, 1)
+    );
+    assert_eq!(
+        (step_page(3, 1, 3, true), step_page(1, -1, 3, true)),
+        (1, 3)
+    );
+    assert_eq!(
+        (step_page(2, 1, 3, false), step_page(1, 1, 1, true)),
+        (3, 1)
+    );
+}
