@@ -74,6 +74,25 @@ struct Layers(LayerStack);
 
 impl gpui::Global for Layers {}
 
+/// The names GPUI gives the keys that are not characters.
+const KEY_NAMES: [(Key, &str); 15] = [
+    (Key::ArrowUp, "up"),
+    (Key::ArrowDown, "down"),
+    (Key::ArrowLeft, "left"),
+    (Key::ArrowRight, "right"),
+    (Key::Home, "home"),
+    (Key::End, "end"),
+    (Key::PageUp, "pageup"),
+    (Key::PageDown, "pagedown"),
+    (Key::Enter, "enter"),
+    (Key::Space, "space"),
+    (Key::Escape, "escape"),
+    (Key::Tab, "tab"),
+    (Key::Backspace, "backspace"),
+    (Key::F2, "f2"),
+    (Key::F6, "f6"),
+];
+
 /// The text GPUI's key bindings use for a shortcut, so one written once as
 /// `mod+shift+k` can be bound with `KeyBinding::new`. `mod` becomes Cmd on macOS and
 /// Ctrl elsewhere.
@@ -81,25 +100,14 @@ impl gpui::Global for Layers {}
 pub fn binding_for(shortcut: &Shortcut) -> String {
     let lowered;
     let key = match shortcut.key {
-        Key::ArrowUp => "up",
-        Key::ArrowDown => "down",
-        Key::ArrowLeft => "left",
-        Key::ArrowRight => "right",
-        Key::Home => "home",
-        Key::End => "end",
-        Key::PageUp => "pageup",
-        Key::PageDown => "pagedown",
-        Key::Enter => "enter",
-        Key::Space => "space",
-        Key::Escape => "escape",
-        Key::Tab => "tab",
-        Key::Backspace => "backspace",
-        Key::F2 => "f2",
-        Key::F6 => "f6",
         Key::Char(ch) => {
             lowered = ch.to_lowercase().to_string();
             lowered.as_str()
         }
+        named => KEY_NAMES
+            .iter()
+            .find(|(key, _)| *key == named)
+            .map_or("", |(_, name)| *name),
     };
     let mods = [
         (
@@ -1626,31 +1634,16 @@ impl IntoElement for PartElement {
 }
 
 fn key_from_keystroke(keystroke: &gpui::Keystroke) -> Option<Key> {
-    Some(match keystroke.key.as_str() {
-        "up" => Key::ArrowUp,
-        "down" => Key::ArrowDown,
-        "left" => Key::ArrowLeft,
-        "right" => Key::ArrowRight,
-        "home" => Key::Home,
-        "end" => Key::End,
-        "pageup" => Key::PageUp,
-        "pagedown" => Key::PageDown,
-        "enter" => Key::Enter,
-        "space" => Key::Space,
-        "escape" => Key::Escape,
-        "tab" => Key::Tab,
-        "backspace" => Key::Backspace,
-        "f2" => Key::F2,
-        "f6" => Key::F6,
-        key => {
-            let typed = keystroke.key_char.as_deref().unwrap_or(key);
-            let mut chars = typed.chars();
-            match (chars.next(), chars.next()) {
-                (Some(c), None) => Key::Char(c),
-                _ => return None,
-            }
-        }
-    })
+    let name = keystroke.key.as_str();
+    if let Some((key, _)) = KEY_NAMES.iter().find(|(_, named)| *named == name) {
+        return Some(*key);
+    }
+    let typed = keystroke.key_char.as_deref().unwrap_or(name);
+    let mut chars = typed.chars();
+    match (chars.next(), chars.next()) {
+        (Some(ch), None) => Some(Key::Char(ch)),
+        _ => None,
+    }
 }
 
 const fn modifiers(modifiers: gpui::Modifiers) -> Modifiers {
