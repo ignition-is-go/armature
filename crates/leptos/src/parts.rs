@@ -12,8 +12,8 @@ use armature_core::layers::{Layer, LayerStack, trapped_focus};
 use armature_core::popup::{self, Placement, Rect, Side, Size};
 use armature_core::presence::Presence;
 use armature_core::primitive::{
-    Effect as Ask, FocusTarget, Focusable, Input, Item, PartOf, Pointer, PointerPhase, Primitive,
-    Reaction, Role, Semantics,
+    Effect as Ask, FocusTarget, Focusable, Input, Item, Outcome, PartOf, Pointer, PointerPhase,
+    Primitive, Reaction, Role, Semantics,
 };
 use armature_core::safe_area::{Axis, SafeArea};
 use leptos::prelude::*;
@@ -1483,9 +1483,9 @@ fn listen_for_loads<P: Primitive + Send + Sync>(
     element: &web_sys::Element,
 ) {
     // Those events do not bubble, so they are caught on the way down.
-    for (name, ok) in [("load", true), ("error", false)] {
+    for (name, outcome) in [("load", Outcome::Loaded), ("error", Outcome::Failed)] {
         let heard = Closure::<dyn Fn()>::new(move || {
-            ctx.dispatch(Input::Loaded { part, ok });
+            ctx.dispatch(Input::Loaded { part, outcome });
         });
         let _ = element.add_event_listener_with_callback_and_bool(
             name,

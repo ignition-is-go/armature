@@ -15,8 +15,8 @@ use armature_core::keys::{Direction, Key, Modifiers, Orientation};
 use armature_core::layers::{Layer, LayerStack};
 use armature_core::popup::{Align, Side};
 use armature_core::primitive::{
-    Effect, FileInfo, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive,
-    Reaction, Role, Semantics,
+    Effect, FileInfo, Focusable, Input, Item, Measure, Outcome, PartOf, Pointer, PointerPhase,
+    Primitive, Reaction, Role, Semantics,
 };
 use armature_core::safe_area::{Axis, SafeArea};
 use armature_core::shortcut::Shortcut;
@@ -427,8 +427,14 @@ impl<P: Primitive> Machine<P> {
 
     /// Tells the primitive that a picture inside a part loaded or failed. GPUI's `img`
     /// does not report this to its parent, so the view passes it on.
-    pub fn loaded(&mut self, part: P::Part, ok: bool, window: &mut Window, cx: &mut Context<Self>) {
-        self.dispatch(Input::Loaded { part, ok }, window, cx);
+    pub fn loaded(
+        &mut self,
+        part: P::Part,
+        outcome: Outcome,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.dispatch(Input::Loaded { part, outcome }, window, cx);
     }
 
     /// The accessibility node a part was last drawn as.

@@ -1,6 +1,6 @@
 use crate::agent::{ActError, Snapshot};
 use crate::change::Gate;
-use crate::primitive::{Input, Item, PartOf, Primitive, Reaction, Role, Semantics};
+use crate::primitive::{Input, Item, Outcome, PartOf, Primitive, Reaction, Role, Semantics};
 
 /// Where an avatar's picture is.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -118,11 +118,10 @@ impl Primitive for Avatar {
 
     fn send(&mut self, input: Input<Part>, _: Gate) -> Reaction<Part> {
         match input {
-            Input::Loaded { ok, .. } => {
-                self.status = if ok {
-                    ImageStatus::Loaded
-                } else {
-                    ImageStatus::Error
+            Input::Loaded { outcome, .. } => {
+                self.status = match outcome {
+                    Outcome::Loaded => ImageStatus::Loaded,
+                    Outcome::Failed => ImageStatus::Error,
                 }
             }
             Input::Tick { now_ms } if self.waiting() => match self.wait {
@@ -179,7 +178,7 @@ mod tests {
         avatar.send(
             Input::Loaded {
                 part: Part::Image,
-                ok: true,
+                outcome: Outcome::Loaded,
             },
             &mut |_| true,
         );
@@ -188,7 +187,7 @@ mod tests {
         avatar.send(
             Input::Loaded {
                 part: Part::Image,
-                ok: false,
+                outcome: Outcome::Failed,
             },
             &mut |_| true,
         );

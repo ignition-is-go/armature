@@ -1,10 +1,11 @@
 use crate::agent::{ActError, Snapshot, SnapshotItem};
+use crate::async_options::Status;
 use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::items::Items;
 use crate::keys::Key;
 use crate::popup::{Align, Placement, Side};
 use crate::primitive::{
-    Focusable, Input, Item, PartOf, Primitive, Reaction, Relations, Role, Semantics,
+    Focusable, Input, Item, Outcome, PartOf, Primitive, Reaction, Relations, Role, Semantics,
 };
 use crate::roving::{self, Ends, Nav};
 
@@ -23,15 +24,6 @@ pub enum Part {
     Empty,
     /// Shown in the list while results are loading, or when loading failed.
     Status,
-}
-
-/// Where results that come from elsewhere are.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Loading {
-    #[default]
-    Idle,
-    Loading,
-    Error,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -77,7 +69,7 @@ pub struct Combobox {
     selected: Vec<String>,
     active: Option<String>,
     on_clear: bool,
-    loading: Loading,
+    loading: Status,
     /// Whether the highlight has just reached the last option.
     at_end: bool,
     requests: crate::async_options::Requests,
@@ -89,7 +81,7 @@ impl Combobox {
     /// Whether results are loading or failed. The owner says so with
     /// `set("status", "loading")`, `"error"` or `"idle"`.
     #[must_use]
-    pub const fn loading(&self) -> Loading {
+    pub const fn loading(&self) -> Status {
         self.loading
     }
 
@@ -293,7 +285,7 @@ impl Combobox {
             .find(|key| self.items.is_enabled(key))
             .map(std::string::ToString::to_string);
         let message = match results.len() {
-            _ if self.loading == Loading::Loading => "Loading".to_string(),
+            _ if self.loading == Status::Loading => "Loading".to_string(),
             0 => "No results".to_string(),
             1 => "1 result".to_string(),
             count => format!("{count} results"),
@@ -310,10 +302,10 @@ impl Combobox {
     /// an answer to an earlier one can be told apart.
     fn ask_for_results(&mut self, gate: Gate) {
         let Some(request) = self.requests.begin(&self.text) else {
-            self.loading = Loading::Idle;
+            self.loading = Status::Idle;
             return;
         };
-        self.loading = Loading::Loading;
+        self.loading = Status::Loading;
         gate(&ValueChange {
             value: vec![format!("load:{request}:{}", self.text)],
             source: Source::User,
@@ -338,7 +330,7 @@ impl Combobox {
                 // The end of what is loaded is where more is asked for.
                 if self.opts.load_more
                     && std::mem::take(&mut self.at_end)
-                    && self.loading != Loading::Loading
+                    && self.loading != Status::Loading
                 {
                     gate(&ValueChange {
                         value: vec![format!("more:{}", self.text)],
@@ -449,22 +441,23 @@ impl Primitive for Combobox {
     }
 
     fn set(&mut self, name: &str, value: &str) -> bool {
-        if let ("loaded" | "failed", Ok(request)) = (name, value.parse::<u64>()) {
-            let newest = self.requests.finish(request, name == "loaded") || name == "failed";
-            self.loading = match self.requests.status() {
-                crate::async_options::Status::Idle => Loading::Idle,
-                crate::async_options::Status::Loading => Loading::Loading,
-                crate::async_options::Status::Error => Loading::Error,
-            };
+        let outcome = match name {
+            "loaded" => Some(Outcome::Loaded),
+            "failed" => Some(Outcome::Failed),
+            _ => None,
+        };
+        if let (Some(outcome), Ok(request)) = (outcome, value.parse::<u64>()) {
+            let newest = self.requests.finish(request, outcome) || outcome == Outcome::Failed;
+            self.loading = self.requests.status();
             return newest;
         }
         if name != "status" {
             return false;
         }
         self.loading = match value {
-            "loading" => Loading::Loading,
-            "error" => Loading::Error,
-            _ => Loading::Idle,
+            "loading" => Status::Loading,
+            "error" => Status::Error,
+            _ => Status::Idle,
         };
         true
     }
@@ -537,18 +530,18 @@ impl Primitive for Combobox {
                 }
             }
             (Part::Status, _) => Semantics {
-                role: Some(if self.loading == Loading::Error {
+                role: Some(if self.loading == Status::Error {
                     Role::Alert
                 } else {
                     Role::Status
                 }),
-                hidden: !self.open || self.loading == Loading::Idle,
+                hidden: !self.open || self.loading == Status::Idle,
                 ..Default::default()
             },
             // Nothing is said to be missing while results may still arrive.
             (Part::Empty, _) => Semantics {
                 role: Some(Role::Status),
-                hidden: !self.open || !nothing || self.loading != Loading::Idle,
+                hidden: !self.open || !nothing || self.loading != Status::Idle,
                 ..Default::default()
             },
         }
@@ -980,11 +973,11 @@ mod tests {
             !combobox.set("loaded", "1"),
             "the answer to the first search is stale"
         );
-        assert_eq!(combobox.loading(), Loading::Loading);
+        assert_eq!(combobox.loading(), Status::Loading);
         assert!(combobox.set("loaded", "2"));
-        assert_eq!(combobox.loading(), Loading::Idle);
+        assert_eq!(combobox.loading(), Status::Idle);
         search(&mut combobox, "apx");
         combobox.set("failed", "3");
-        assert_eq!(combobox.loading(), Loading::Error);
+        assert_eq!(combobox.loading(), Status::Error);
     }
 }

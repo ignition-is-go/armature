@@ -2,6 +2,8 @@
 //! arrive out of order, so each request is numbered and only the newest one's
 //! answer is taken.
 
+use crate::primitive::Outcome;
+
 /// Where the newest request stands.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Status {
@@ -49,12 +51,20 @@ impl Requests {
 
     /// Takes an answer. Returns whether it is the newest request's, and so whether
     /// its options should be shown. An older answer is dropped.
-    pub const fn finish(&mut self, request: u64, ok: bool) -> bool {
+    pub const fn finish(&mut self, request: u64, outcome: Outcome) -> bool {
         if request != self.newest {
             return false;
         }
-        self.status = if ok { Status::Idle } else { Status::Error };
-        ok
+        match outcome {
+            Outcome::Loaded => {
+                self.status = Status::Idle;
+                true
+            }
+            Outcome::Failed => {
+                self.status = Status::Error;
+                false
+            }
+        }
     }
 }
 
@@ -69,11 +79,11 @@ mod tests {
         let second = requests.begin("lis").unwrap();
         assert_eq!(requests.status(), Status::Loading);
         assert!(
-            !requests.finish(first, true),
+            !requests.finish(first, Outcome::Loaded),
             "the slow answer to the old query is dropped"
         );
         assert_eq!(requests.status(), Status::Loading);
-        assert!(requests.finish(second, true));
+        assert!(requests.finish(second, Outcome::Loaded));
         assert_eq!(requests.status(), Status::Idle);
     }
 
@@ -81,7 +91,7 @@ mod tests {
     fn a_failure_shows_as_an_error_and_an_empty_query_asks_nothing() {
         let mut requests = Requests::default();
         let request = requests.begin("x").unwrap();
-        assert!(!requests.finish(request, false));
+        assert!(!requests.finish(request, Outcome::Failed));
         assert_eq!(requests.status().name(), "error");
         assert_eq!(requests.begin("  "), None);
         assert_eq!(requests.status(), Status::Idle);

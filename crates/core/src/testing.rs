@@ -8,7 +8,7 @@ use crate::change::{Source, ValueChange};
 use crate::geometry::Point;
 use crate::keys::{Key, Modifiers};
 use crate::primitive::{
-    Focusable, Input, Item, Pointer, PointerPhase, Primitive, Reaction, Role, Semantics,
+    Focusable, Input, Item, Outcome, Pointer, PointerPhase, Primitive, Reaction, Role, Semantics,
 };
 
 /// One rule a primitive broke.
@@ -115,7 +115,10 @@ fn inputs<P: Primitive>(items: &[Item]) -> Vec<Input<P::Part>> {
             item: item.clone(),
             value: "12".into(),
         });
-        all.push(Input::Loaded { part, ok: true });
+        all.push(Input::Loaded {
+            part,
+            outcome: Outcome::Loaded,
+        });
         all.push(Input::Wheel {
             part,
             item: item.clone(),

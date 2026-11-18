@@ -19,6 +19,13 @@ pub struct Item {
     pub disabled: bool,
 }
 
+/// How something slow ended: a picture loading, or a request being answered.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Outcome {
+    Loaded,
+    Failed,
+}
+
 /// What the adapter reports to the primitive.
 #[derive(Clone, Debug)]
 pub enum Input<Part> {
@@ -39,7 +46,7 @@ pub enum Input<Part> {
     /// The platform's find-in-page matched text inside a hidden part.
     Found { part: Part, item: Option<String> },
     /// A picture or other media inside a part finished loading, or failed to.
-    Loaded { part: Part, ok: bool },
+    Loaded { part: Part, outcome: Outcome },
     /// Files were chosen in the picker asked for with `Effect::PickFiles`, or dropped
     /// on a part that takes drops.
     Files { files: Vec<FileInfo>, dropped: bool },
@@ -179,9 +186,9 @@ impl<Part> Input<Part> {
                 part: to(part)?,
                 item,
             },
-            Self::Loaded { part, ok } => Input::Loaded {
+            Self::Loaded { part, outcome } => Input::Loaded {
                 part: to(part)?,
-                ok,
+                outcome,
             },
             Self::PressOutside => Input::PressOutside,
             Self::Hotkey { shortcut } => Input::Hotkey { shortcut },
