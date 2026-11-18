@@ -2478,22 +2478,29 @@ fn saved_panel_layouts() {
     );
 }
 
+/// A 200px view onto 1000px of content, scrolled to the top.
+const LIST: armature_core::scroll_model::AxisMetrics = armature_core::scroll_model::AxisMetrics {
+    position: 0.0,
+    client: 200.0,
+    scroll: 1000.0,
+};
+
+/// The same list scrolled to `position`.
+const fn scrolled_to(position: f64) -> armature_core::scroll_model::AxisMetrics {
+    armature_core::scroll_model::AxisMetrics { position, ..LIST }
+}
+
 // scroll-area.test.ts: geometry, edges, scrollbar visibility, sticking to the end
 #[test]
 fn scroll_area_model() {
     use armature_core::scroll_model::*;
-    let list = AxisMetrics {
-        position: 0.0,
-        client: 200.0,
-        scroll: 1000.0,
-    };
-    let at = |position| AxisMetrics { position, ..list };
+    let list = LIST;
     // thumb
     assert_eq!(thumb_geometry(list, 200.0), (40.0, 0.0));
     assert_eq!(
         (
-            thumb_geometry(at(400.0), 200.0).1,
-            thumb_geometry(at(800.0), 200.0).1
+            thumb_geometry(scrolled_to(400.0), 200.0).1,
+            thumb_geometry(scrolled_to(800.0), 200.0).1
         ),
         (80.0, 160.0)
     );
@@ -2508,8 +2515,8 @@ fn scroll_area_model() {
     );
     assert_eq!(
         (
-            thumb_geometry(at(-50.0), 200.0).1,
-            thumb_geometry(at(900.0), 200.0).1
+            thumb_geometry(scrolled_to(-50.0), 200.0).1,
+            thumb_geometry(scrolled_to(900.0), 200.0).1
         ),
         (0.0, 160.0)
     );
@@ -2530,11 +2537,7 @@ fn scroll_area_model() {
 #[test]
 fn scroll_area_model_dragging_and_pressing_the_track() {
     use armature_core::scroll_model::*;
-    let list = AxisMetrics {
-        position: 0.0,
-        client: 200.0,
-        scroll: 1000.0,
-    };
+    let list = LIST;
     // dragging and pressing the track
     assert_eq!(dragged_position(0.0, 80.0, list, 200.0), 400.0);
     assert_eq!(dragged_position(400.0, -1000.0, list, 200.0), 0.0);
@@ -2573,18 +2576,13 @@ fn scroll_area_model_dragging_and_pressing_the_track() {
 #[test]
 fn scroll_area_model_edges() {
     use armature_core::scroll_model::*;
-    let list = AxisMetrics {
-        position: 0.0,
-        client: 200.0,
-        scroll: 1000.0,
-    };
-    let at = |position| AxisMetrics { position, ..list };
+    let list = LIST;
     // edges
-    assert!(edges_of(at(0.6)).at_start);
-    assert!(edges_of(at(799.4)).at_end);
-    assert!(!edges_of(at(798.0)).at_end);
+    assert!(edges_of(scrolled_to(0.6)).at_start);
+    assert!(edges_of(scrolled_to(799.4)).at_end);
+    assert!(!edges_of(scrolled_to(798.0)).at_end);
     assert_eq!(
-        edges_of(at(200.0)),
+        edges_of(scrolled_to(200.0)),
         Edges {
             before: 200.0,
             after: 600.0,
