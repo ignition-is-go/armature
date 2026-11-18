@@ -345,7 +345,7 @@ impl Primitive for FileInput {
                 if !self.files.iter().any(|file| file.name == name) {
                     return Err(ActError::UnknownItem(name.to_string()));
                 }
-                self.without(&name)
+                self.without(name)
             }
             other => {
                 return Err(ActError::UnknownAction {
