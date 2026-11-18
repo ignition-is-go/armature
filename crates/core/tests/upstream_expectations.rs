@@ -78,12 +78,9 @@ fn pagination_range() {
         for page in 1..=count {
             let pages: Vec<usize> = page_range(page, count, 1, 1)
                 .iter()
-                .filter_map(|item| {
-                    if let PageItem::Page(page) = item {
-                        Some(*page)
-                    } else {
-                        None
-                    }
+                .filter_map(|item| match item {
+                    PageItem::Page(page) => Some(*page),
+                    PageItem::EllipsisStart | PageItem::EllipsisEnd => None,
                 })
                 .collect();
             assert!(pages.contains(&page));
