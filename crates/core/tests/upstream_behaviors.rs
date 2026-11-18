@@ -219,22 +219,8 @@ fn slider_behaviors() {
         },
         &[20.0, 60.0],
     );
-    rtl.send(
-        Input::Key {
-            key: Key::ArrowLeft,
-            mods: Modifiers::default(),
-            now_ms: 0,
-        },
-        &mut |_| true,
-    );
-    rtl.send(
-        Input::Key {
-            key: Key::ArrowUp,
-            mods: Modifiers::default(),
-            now_ms: 0,
-        },
-        &mut |_| true,
-    );
+    key(&mut rtl, Key::ArrowLeft);
+    key(&mut rtl, Key::ArrowUp);
     assert_eq!(rtl.value(), ["22", "60"]);
 }
 
@@ -443,14 +429,7 @@ fn otp_input_behaviors() {
     );
     assert_eq!(refused.value(), [""]);
     // "other keys are left to the browser"
-    let tab = refused.send(
-        Input::Key {
-            key: Key::Tab,
-            mods: Modifiers::default(),
-            now_ms: 0,
-        },
-        &mut |_| true,
-    );
+    let tab = armature_core::testing::press_key(&mut refused, Key::Tab);
     assert!(!tab.handled);
 }
 
@@ -875,14 +854,7 @@ fn dialog_behaviors_a_dialog_is_modal_by_default_and() {
         ..open
     });
     press(&mut fixed, dialog::Part::Trigger);
-    fixed.send(
-        Input::Key {
-            key: Key::Escape,
-            mods: Modifiers::default(),
-            now_ms: 0,
-        },
-        &mut |_| true,
-    );
+    key(&mut fixed, Key::Escape);
     assert!(fixed.is_open());
     assert_eq!(fixed.attempts(), 1);
     // "canceling the close keeps it open"
