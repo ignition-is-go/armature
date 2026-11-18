@@ -264,7 +264,6 @@ impl Primitive for Waterfall {
     }
 
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
-        let rows = self.rows();
         match input {
             Input::Focus {
                 part: Part::Row,
@@ -282,6 +281,12 @@ impl Primitive for Waterfall {
                 self.move_to(Some(key))
             }
             Input::Key { key, mods, .. } if !mods.ctrl && !mods.alt => {
+                let rows = self.rows();
+                let key_at = |index: Option<usize>| {
+                    index
+                        .and_then(|index| rows.get(index))
+                        .map(|row| row.key.clone())
+                };
                 let Some(current) = self.current(&rows) else {
                     return Reaction::default();
                 };
@@ -295,24 +300,17 @@ impl Primitive for Waterfall {
                     (Key::ArrowRight, Key::ArrowLeft)
                 };
                 match key {
-                    Key::ArrowDown => {
-                        self.move_to(rows.get(at.saturating_add(1)).map(|row| row.key.clone()))
-                    }
-                    Key::ArrowUp => {
-                        let above = at.checked_sub(1).and_then(|above| rows.get(above));
-                        self.move_to(above.map(|row| row.key.clone()))
-                    }
-                    Key::Home => self.move_to(rows.first().map(|row| row.key.clone())),
-                    Key::End => self.move_to(rows.last().map(|row| row.key.clone())),
+                    Key::ArrowDown => self.move_to(key_at(at.checked_add(1))),
+                    Key::ArrowUp => self.move_to(key_at(at.checked_sub(1))),
+                    Key::Home => self.move_to(key_at(Some(0))),
+                    Key::End => self.move_to(key_at(rows.len().checked_sub(1))),
                     // Opening a closed row, then stepping into it. Closing an open
                     // one, then stepping out to its parent.
                     k if k == open && row.has_children && !row.expanded => {
                         self.expanded.insert(current);
                         Reaction::handled()
                     }
-                    k if k == open && row.has_children => {
-                        self.move_to(rows.get(at.saturating_add(1)).map(|row| row.key.clone()))
-                    }
+                    k if k == open && row.has_children => self.move_to(key_at(at.checked_add(1))),
                     k if k == close && row.expanded => {
                         self.expanded.remove(&current);
                         Reaction::handled()
