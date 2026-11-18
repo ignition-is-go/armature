@@ -54,14 +54,14 @@ pub enum Refusal {
 }
 
 impl Options {
-    const fn is_modal(&self) -> bool {
+    const fn is_modal(self) -> bool {
         self.modal || self.alert
     }
 
     /// Whether a way of closing is refused, and whether that counts as a try.
     /// Close buttons, triggers and the controller always close.
     #[must_use]
-    pub fn refusal(&self, dismiss: Dismiss) -> Option<Refusal> {
+    pub const fn refusal(&self, dismiss: Dismiss) -> Option<Refusal> {
         match dismiss {
             Dismiss::ClosePress | Dismiss::TriggerPress | Dismiss::Controller => None,
             Dismiss::OutsidePress

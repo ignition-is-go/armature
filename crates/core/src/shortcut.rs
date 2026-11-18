@@ -126,7 +126,7 @@ impl Shortcut {
         self.joined(main, &key_label(self.key))
     }
 
-    fn joined(&self, main: &str, key: &str) -> String {
+    fn joined(self, main: &str, key: &str) -> String {
         let held = [
             (self.mods.ctrl, main),
             (self.mods.alt, "Alt"),

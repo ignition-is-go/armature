@@ -242,7 +242,7 @@ pub fn handle_bounds(
 ) -> (f64, f64) {
     let reach = |delta: f64| {
         resize_at(layout, panels, handle, delta, 1.0, locked)
-            .map_or(size_at(layout, handle), |next| size_at(&next, handle))
+            .map_or_else(|| size_at(layout, handle), |next| size_at(&next, handle))
     };
     (
         reach(home_delta(layout, panels, handle)),

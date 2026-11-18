@@ -41,7 +41,7 @@ impl Default for ColorPicker {
     }
 }
 
-fn pad() -> Area {
+const fn pad() -> Area {
     Area {
         x: NumberRange::new(0.0, 100.0, 1.0),
         y: NumberRange::new(0.0, 100.0, 1.0),

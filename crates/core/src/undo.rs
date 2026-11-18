@@ -36,12 +36,12 @@ impl<T> UndoStack<T> {
     }
 
     #[must_use]
-    pub fn can_undo(&self) -> bool {
+    pub const fn can_undo(&self) -> bool {
         !self.past.is_empty()
     }
 
     #[must_use]
-    pub fn can_redo(&self) -> bool {
+    pub const fn can_redo(&self) -> bool {
         !self.future.is_empty()
     }
 

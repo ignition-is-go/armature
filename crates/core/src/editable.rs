@@ -31,7 +31,7 @@ impl Editable {
     }
 
     #[must_use]
-    pub fn is_editing(&self) -> bool {
+    pub const fn is_editing(&self) -> bool {
         self.edit.is_editing()
     }
 

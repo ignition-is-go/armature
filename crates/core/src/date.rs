@@ -122,7 +122,7 @@ impl Date {
 
     /// The last day of this date's month.
     #[must_use]
-    pub fn end_of_month(self) -> Self {
+    pub const fn end_of_month(self) -> Self {
         Self {
             day: days_in_month(self.year, self.month),
             ..self

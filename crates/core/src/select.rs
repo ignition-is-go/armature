@@ -71,7 +71,7 @@ impl Select {
     }
 
     /// Closes the popup and returns focus to the trigger.
-    fn dismiss(&mut self) -> Reaction<Part> {
+    const fn dismiss(&mut self) -> Reaction<Part> {
         self.open = false;
         Reaction::focusing(Part::Trigger)
     }

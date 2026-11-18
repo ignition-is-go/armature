@@ -38,7 +38,7 @@ impl Default for HoldButton {
 
 impl HoldButton {
     #[must_use]
-    pub fn new(delay_ms: u64) -> Self {
+    pub const fn new(delay_ms: u64) -> Self {
         Self {
             hold: Hold::new(delay_ms),
             delay_ms,

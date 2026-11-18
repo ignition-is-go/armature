@@ -142,7 +142,7 @@ impl ImageCropper {
         ]
     }
 
-    fn bounds(&self) -> Rect {
+    const fn bounds(&self) -> Rect {
         Rect::new(0.0, 0.0, self.image.width, self.image.height)
     }
 

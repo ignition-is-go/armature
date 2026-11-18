@@ -39,7 +39,7 @@ impl Default for DataGrid {
 
 impl DataGrid {
     #[must_use]
-    pub fn new(cells: Vec<Vec<String>>, dir: Dir) -> Self {
+    pub const fn new(cells: Vec<Vec<String>>, dir: Dir) -> Self {
         Self {
             cells,
             dir,

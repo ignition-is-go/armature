@@ -71,7 +71,7 @@ fn to_input(part: Part) -> Option<date_input::Part> {
 impl DatePicker {
     /// `showing` is the month the calendar opens on while no date is chosen.
     #[must_use]
-    pub fn new(opts: calendar::Options, showing: Date) -> Self {
+    pub const fn new(opts: calendar::Options, showing: Date) -> Self {
         Self {
             input: DateInput::new(false),
             calendar: Calendar::new(opts, showing),

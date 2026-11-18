@@ -53,7 +53,7 @@ impl Sortable {
 
     /// The move in progress, for showing where the item would land.
     #[must_use]
-    pub fn moving(&self) -> Option<Reorder> {
+    pub const fn moving(&self) -> Option<Reorder> {
         self.session.current()
     }
 

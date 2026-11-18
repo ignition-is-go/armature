@@ -140,7 +140,7 @@ impl Carousel {
         // Slides drawn on top of one another are not a track that can be read.
         if slides.windows(2).any(|pair| {
             (pair.get(1).copied().unwrap_or_default().start
-                - pair.get(0).copied().unwrap_or_default().start)
+                - pair.first().copied().unwrap_or_default().start)
                 .abs()
                 < 1.0
         }) {

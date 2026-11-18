@@ -69,7 +69,7 @@ impl Resizable {
         self.percent
     }
 
-    fn range(&self) -> NumberRange {
+    const fn range(&self) -> NumberRange {
         NumberRange::new(self.opts.min, self.opts.max, 1.0)
     }
 

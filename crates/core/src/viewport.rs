@@ -32,7 +32,7 @@ impl Viewport {
     }
 
     #[must_use]
-    pub fn to_screen(&self, canvas: Point) -> Point {
+    pub const fn to_screen(&self, canvas: Point) -> Point {
         Point::new(
             canvas.x.mul_add(self.zoom, self.pan.x),
             canvas.y.mul_add(self.zoom, self.pan.y),
