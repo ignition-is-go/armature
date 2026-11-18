@@ -311,6 +311,17 @@ pub struct Heading {
     pub direction: Direction,
 }
 
+/// What a looping carousel's rotation is for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Aim {
+    /// Nothing: the current page moves toward the middle of the track.
+    Rest,
+    /// A page, which the rotation puts ahead with room either side.
+    Page(Heading),
+    /// A page, rotating only when it does not already lie ahead.
+    PageIfBehind(Heading),
+}
+
 /// A change to which slide the track starts at, and how far the scroll position
 /// shifts with it so that the same slides stay in view.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -333,17 +344,15 @@ fn anchor_slide(boxes: &[SlideBox], view_start: f64, first: usize) -> usize {
 /// The rotation a looping carousel should take.
 ///
 /// At rest it moves the current page toward the middle of the track, so there is room
-/// to scroll either way. Heading for a page, it makes sure that page lies ahead; with
-/// `lazy` it leaves the track alone when it already does. `None` when the track is too
-/// short to rotate.
+/// to scroll either way. Heading for a page, it makes sure that page lies ahead. `None`
+/// when the track is too short to rotate.
 #[must_use]
-pub fn loop_rotation(
-    track: &Track,
-    view: &LoopView,
-    at: LoopAt,
-    to: Option<Heading>,
-    lazy: bool,
-) -> Option<Rotation> {
+pub fn loop_rotation(track: &Track, view: &LoopView, at: LoopAt, aim: Aim) -> Option<Rotation> {
+    let (to, lazy) = match aim {
+        Aim::Rest => (None, false),
+        Aim::Page(heading) => (Some(heading), false),
+        Aim::PageIfBehind(heading) => (Some(heading), true),
+    };
     let groups = loop_groups(track, view);
     let now = place_slides(track, at.first);
     let anchor = anchor_slide(&now, at.position + view.padding_start, at.first);

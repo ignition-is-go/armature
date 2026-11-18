@@ -623,28 +623,28 @@ fn listbox_ranges() {
     assert_eq!(keys_between(&order, "c", "c"), ["c"]);
     assert!(keys_between(&order, "x", "b").is_empty() && keys_between(&order, "b", "x").is_empty());
     assert_eq!(
-        range_selection(&order, "b", &keys(&["a", "f"]), "d", false, |_| true),
+        range_selection(&order, "b", &[], "d", |_| true),
         ["b", "c", "d"]
     );
     assert_eq!(
-        range_selection(&order, "c", &keys(&["f", "a"]), "e", true, |_| true),
+        range_selection(&order, "c", &keys(&["f", "a"]), "e", |_| true),
         ["f", "a", "c", "d", "e"]
     );
     assert_eq!(
-        range_selection(&order, "b", &keys(&["f"]), "e", true, |_| true),
+        range_selection(&order, "b", &keys(&["f"]), "e", |_| true),
         ["f", "b", "c", "d", "e"]
     );
     assert_eq!(
-        range_selection(&order, "b", &keys(&["f"]), "c", true, |_| true),
+        range_selection(&order, "b", &keys(&["f"]), "c", |_| true),
         ["f", "b", "c"],
         "a range can shrink"
     );
     assert_eq!(
-        range_selection(&order, "a", &[], "d", false, |key| key != "c"),
+        range_selection(&order, "a", &[], "d", |key| key != "c"),
         ["a", "b", "d"]
     );
     assert_eq!(
-        range_selection(&order, "a", &[], "c", false, |key| key != "a"),
+        range_selection(&order, "a", &[], "c", |key| key != "a"),
         ["b", "c"]
     );
     assert_eq!(toggled_keys(&keys(&["a", "c"]), "b"), ["a", "c", "b"]);
@@ -2203,11 +2203,11 @@ fn carousel_layouts_pages_keep_their_slides_own_order_wherever() {
     assert_eq!(positions(&pages), [600.0, 900.0, 1200.0, 0.0, 300.0]);
     // "at rest, the current page moves mid-track with the same slides in view"
     assert_eq!(
-        loop_rotation(&track, &view, at(0.0, 0), None, false),
+        loop_rotation(&track, &view, at(0.0, 0), Aim::Rest),
         Some(rotated(3, 600.0))
     );
     assert_eq!(
-        loop_rotation(&track, &view, at(600.0, 3), None, false),
+        loop_rotation(&track, &view, at(600.0, 3), Aim::Rest),
         Some(rotated(3, 0.0))
     );
 }
@@ -2218,18 +2218,18 @@ fn carousel_layouts_a_step_past_the_end_rotates_only() {
     let view = one_slide_view();
     let track = measure_track(&slide_row(5, 300.0, 0.0), 0).unwrap();
     let forward_to = |page| {
-        Some(Heading {
+        Aim::PageIfBehind(Heading {
             page,
             direction: Direction::Forward,
         })
     };
     // "a step past the end rotates only when the next page doesn't lie ahead"
     assert_eq!(
-        loop_rotation(&track, &view, at(1200.0, 0), forward_to(0), true),
+        loop_rotation(&track, &view, at(1200.0, 0), forward_to(0)),
         Some(rotated(2, -600.0))
     );
     assert_eq!(
-        loop_rotation(&track, &view, at(600.0, 0), forward_to(3), true),
+        loop_rotation(&track, &view, at(600.0, 0), forward_to(3)),
         Some(rotated(0, 0.0))
     );
     // "loops seamlessly only with a page's step of room to either side"
@@ -2270,11 +2270,10 @@ fn carousel_layouts_a_track_too_short_to_rotate_gives() {
                 ..view
             },
             at(0.0, 0),
-            Some(Heading {
+            Aim::Page(Heading {
                 page: 1,
                 direction: Direction::Backward
             }),
-            false
         ),
         None
     );

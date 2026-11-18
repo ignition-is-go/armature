@@ -179,7 +179,8 @@ pub fn keys_between(order: &[&str], from: &str, to: &str) -> Vec<String> {
 
 /// The selection after extending from an anchor to `to`.
 ///
-/// `base` is what was selected when the anchor was set: an additive range keeps it,
+/// `base` is what stays selected besides the range: what was selected when the anchor
+/// was set, for a range added to it, or nothing for one that replaces it. It comes
 /// first and in its own order, and extending again replaces only the range, so a range
 /// can shrink. Keys that cannot be chosen are skipped.
 pub fn range_selection(
@@ -187,16 +188,12 @@ pub fn range_selection(
     anchor: &str,
     base: &[String],
     to: &str,
-    additive: bool,
     selectable: impl Fn(&str) -> bool,
 ) -> Vec<String> {
     let range: Vec<String> = keys_between(order, anchor, to)
         .into_iter()
         .filter(|key| selectable(key))
         .collect();
-    if !additive {
-        return range;
-    }
     let mut next = base.to_vec();
     next.extend(range.into_iter().filter(|key| !base.contains(key)));
     next
