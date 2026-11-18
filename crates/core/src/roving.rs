@@ -125,3 +125,68 @@ mod tests {
         assert!(!is_platform_arrow(&key(Key::Home, ctrl)));
     }
 }
+
+/// One item of a group that shares a single tab stop.
+#[derive(Clone, Copy, Debug)]
+pub struct Stop<'a> {
+    pub key: &'a str,
+    pub disabled: bool,
+    /// Whether it can take focus at all. A disabled item often still can, so it
+    /// can be read.
+    pub focusable: bool,
+    /// Whether it is the one to start on, such as the selected tab.
+    pub preferred: bool,
+}
+
+/// Which item of a group Tab lands on. The one focus was last on keeps it while it
+/// can still take focus. Otherwise it is the first preferred item that is enabled,
+/// then the first enabled one, then any that can take focus, so a group whose
+/// items are all disabled can still be reached.
+pub fn roving_stop<'a>(items: &[Stop<'a>], remembered: Option<&str>) -> Option<&'a str> {
+    let remembered =
+        remembered.and_then(|key| items.iter().find(|item| item.key == key && item.focusable));
+    remembered
+        .or_else(|| {
+            items
+                .iter()
+                .find(|item| item.preferred && !item.disabled && item.focusable)
+        })
+        .or_else(|| items.iter().find(|item| !item.disabled && item.focusable))
+        .or_else(|| items.iter().find(|item| item.focusable))
+        .map(|item| item.key)
+}
+
+/// Where the caret is in a text field that sits in a group moved through with
+/// arrows, such as a toolbar's search box.
+#[derive(Clone, Copy, Debug)]
+pub struct FieldCaret {
+    /// The selection's ends, or `None` for a field with no caret, such as a
+    /// checkbox.
+    pub selection: Option<(usize, usize)>,
+    pub length: usize,
+    pub rtl: bool,
+    /// Whether Up and Down mean something to the field, as they do in a number
+    /// field or a text area.
+    pub uses_up_down: bool,
+}
+
+/// Whether a key pressed in such a field is the field's own, or moves on to the
+/// next item of the group. Left and Right leave only from the end they point at,
+/// with nothing selected. Home and End always stay.
+pub fn field_keeps_key(key: Key, field: FieldCaret) -> bool {
+    let Some((start, end)) = field.selection else {
+        return false;
+    };
+    let (toward_start, toward_end) = if field.rtl {
+        (Key::ArrowRight, Key::ArrowLeft)
+    } else {
+        (Key::ArrowLeft, Key::ArrowRight)
+    };
+    match key {
+        Key::Home | Key::End => true,
+        Key::ArrowUp | Key::ArrowDown => field.uses_up_down,
+        key if key == toward_end => !(start == end && end == field.length),
+        key if key == toward_start => !(start == end && start == 0),
+        _ => true,
+    }
+}

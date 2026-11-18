@@ -1309,3 +1309,154 @@ fn fuzzy_scores() {
     assert_eq!(fuzzy_score("rac", "Calendar"), None);
     assert!(fuzzy_score("ECL", "Éclair").unwrap() > 900);
 }
+
+// roving.test.ts
+#[test]
+fn roving_tab_stops() {
+    use armature_core::keys::Key;
+    use armature_core::roving::{FieldCaret, Stop, field_keeps_key, roving_stop};
+    let item = |key| Stop {
+        key,
+        disabled: false,
+        focusable: true,
+        preferred: false,
+    };
+    // "a remembered item keeps it while it can take focus"
+    assert_eq!(roving_stop(&[item("a"), item("b")], Some("b")), Some("b"));
+    assert_eq!(
+        roving_stop(
+            &[
+                item("a"),
+                Stop {
+                    focusable: false,
+                    ..item("b")
+                }
+            ],
+            Some("b")
+        ),
+        Some("a")
+    );
+    assert_eq!(roving_stop(&[item("a")], Some("gone")), Some("a"));
+    // "otherwise the first preferred enabled item, then the first enabled one"
+    assert_eq!(
+        roving_stop(
+            &[
+                item("a"),
+                Stop {
+                    preferred: true,
+                    ..item("b")
+                }
+            ],
+            None
+        ),
+        Some("b")
+    );
+    assert_eq!(
+        roving_stop(
+            &[
+                item("a"),
+                Stop {
+                    preferred: true,
+                    disabled: true,
+                    ..item("b")
+                }
+            ],
+            None
+        ),
+        Some("a")
+    );
+    assert_eq!(
+        roving_stop(
+            &[
+                Stop {
+                    disabled: true,
+                    ..item("a")
+                },
+                item("b")
+            ],
+            None
+        ),
+        Some("b")
+    );
+    // "a group where every item is disabled keeps a focusable one, unless none can take focus"
+    assert_eq!(
+        roving_stop(
+            &[
+                Stop {
+                    disabled: true,
+                    ..item("a")
+                },
+                Stop {
+                    disabled: true,
+                    ..item("b")
+                }
+            ],
+            None
+        ),
+        Some("a")
+    );
+    assert_eq!(
+        roving_stop(
+            &[Stop {
+                disabled: true,
+                focusable: false,
+                ..item("a")
+            }],
+            None
+        ),
+        None
+    );
+    // "Left and Right leave only from the end they point at, with nothing selected"
+    let field = |start, end, rtl| FieldCaret {
+        selection: Some((start, end)),
+        length: 5,
+        rtl,
+        uses_up_down: false,
+    };
+    assert!(!field_keeps_key(Key::ArrowRight, field(5, 5, false)));
+    assert!(field_keeps_key(Key::ArrowRight, field(2, 2, false)));
+    assert!(!field_keeps_key(Key::ArrowLeft, field(0, 0, false)));
+    assert!(field_keeps_key(Key::ArrowLeft, field(0, 3, false)));
+    // "right to left, the arrows swap"
+    assert!(!field_keeps_key(Key::ArrowLeft, field(5, 5, true)));
+    assert!(!field_keeps_key(Key::ArrowRight, field(0, 0, true)));
+    assert!(field_keeps_key(Key::ArrowRight, field(5, 5, true)));
+    // "Home and End stay with the field, and Up and Down only with fields that use them"
+    assert!(field_keeps_key(Key::Home, field(0, 0, false)));
+    assert!(field_keeps_key(Key::End, field(5, 5, false)));
+    assert!(!field_keeps_key(Key::ArrowUp, field(0, 0, false)));
+    assert!(field_keeps_key(
+        Key::ArrowUp,
+        FieldCaret {
+            uses_up_down: true,
+            ..field(0, 0, false)
+        }
+    ));
+    // "fields without a caret never keep arrows"
+    assert!(!field_keeps_key(
+        Key::ArrowRight,
+        FieldCaret {
+            selection: None,
+            length: 0,
+            rtl: false,
+            uses_up_down: false
+        }
+    ));
+}
+
+// locale.test.ts, "locale tags"
+#[test]
+fn locale_tags() {
+    use armature_core::locale::to_locale;
+    // "keeps a tag Intl accepts, canonicalized"
+    assert_eq!(to_locale("en-US").as_deref(), Some("en-US"));
+    assert_eq!(to_locale("de").as_deref(), Some("de"));
+    assert_eq!(to_locale("EN-us").as_deref(), Some("en-US"));
+    // "reads POSIX tags, with their encoding and modifier dropped"
+    assert_eq!(to_locale("en_US").as_deref(), Some("en-US"));
+    assert_eq!(to_locale("en-US@posix").as_deref(), Some("en-US"));
+    assert_eq!(to_locale("de_DE.UTF-8@euro").as_deref(), Some("de-DE"));
+    // "gives undefined for a tag Intl rejects, or none"
+    assert_eq!(to_locale("not a locale!"), None);
+    assert_eq!(to_locale(""), None);
+}

@@ -3,10 +3,18 @@
 
 use crate::keys::Dir;
 
-/// A tag such as `en_US` or `PT-br` in standard form: `en-US`, `pt-BR`. `None` if it
-/// does not start with a language.
+/// A tag such as `en_US`, `PT-br` or `de_DE.UTF-8@euro` in standard form: `en-US`,
+/// `pt-BR`, `de-DE`. `None` if it is not a language tag.
 pub fn to_locale(tag: &str) -> Option<String> {
-    let mut parts = tag.trim().split(['-', '_']).filter(|part| !part.is_empty());
+    // A POSIX tag carries an encoding and a modifier, as in `de_DE.UTF-8@euro`.
+    let tag = tag.trim().split(['.', '@']).next().unwrap_or_default();
+    if !tag
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+    {
+        return None;
+    }
+    let mut parts = tag.split(['-', '_']).filter(|part| !part.is_empty());
     let language = parts.next().filter(|language| {
         (2..=3).contains(&language.len()) && language.chars().all(|c| c.is_ascii_alphabetic())
     })?;
