@@ -96,18 +96,11 @@ pub fn install() {
         &api,
         "query",
         Closure::<dyn Fn(String) -> JsValue>::new(|text: String| {
-            let found = query(&text).into_iter().map(|found| {
-                let js = Object::new();
-                set(&js, "ref", &found.reference.into());
-                set(
-                    &js,
-                    "item",
-                    &found.item.map_or(JsValue::NULL, JsValue::from),
-                );
-                set(&js, "label", &found.label.into());
-                JsValue::from(js)
-            });
-            found.collect::<Array>().into()
+            query(&text)
+                .into_iter()
+                .map(found_to_js)
+                .collect::<Array>()
+                .into()
         }),
     );
     expose(
@@ -115,18 +108,7 @@ pub fn install() {
         "act",
         Closure::<dyn Fn(String, String, Option<String>) -> JsValue>::new(
             |reference: String, action: String, item: Option<String>| {
-                let result = Object::new();
-                match act(&reference, &action, item.as_deref()) {
-                    Ok(value) => {
-                        set(&result, "ok", &true.into());
-                        set(&result, "value", &strings(&value));
-                    }
-                    Err(error) => {
-                        set(&result, "ok", &false.into());
-                        set(&result, "error", &error.to_string().into());
-                    }
-                }
-                result.into()
+                acted_to_js(act(&reference, &action, item.as_deref()))
             },
         ),
     );
@@ -139,29 +121,7 @@ pub fn install() {
         &api,
         "history",
         Closure::<dyn Fn() -> JsValue>::new(|| {
-            let entries = history().into_iter().map(|entry| {
-                let js = Object::new();
-                set(
-                    &js,
-                    "text",
-                    &armature_core::agent::describe_entry(&entry).into(),
-                );
-                set(&js, "label", &entry.label.into());
-                set(&js, "before", &strings(&entry.before));
-                set(&js, "after", &strings(&entry.after));
-                set(
-                    &js,
-                    "source",
-                    &if entry.source == Source::Agent {
-                        "agent"
-                    } else {
-                        "user"
-                    }
-                    .into(),
-                );
-                JsValue::from(js)
-            });
-            entries.collect::<Array>().into()
+            history().iter().map(entry_to_js).collect::<Array>().into()
         }),
     );
     expose(
@@ -293,6 +253,47 @@ fn run_from_js(steps: JsValue) -> JsValue {
         set(&result, "failed", &failed);
     }
     result.into()
+}
+
+fn found_to_js(found: Found) -> JsValue {
+    let js = Object::new();
+    set(&js, "ref", &found.reference.into());
+    set(
+        &js,
+        "item",
+        &found.item.map_or(JsValue::NULL, JsValue::from),
+    );
+    set(&js, "label", &found.label.into());
+    js.into()
+}
+
+/// The outcome of one action: `{ ok, value }` or `{ ok, error }`.
+fn acted_to_js(acted: Result<Vec<String>, Error>) -> JsValue {
+    let result = Object::new();
+    set(&result, "ok", &acted.is_ok().into());
+    match acted {
+        Ok(value) => set(&result, "value", &strings(&value)),
+        Err(error) => set(&result, "error", &error.to_string().into()),
+    }
+    result.into()
+}
+
+fn entry_to_js(entry: &Entry) -> JsValue {
+    let source = match entry.source {
+        Source::Agent => "agent",
+        Source::User => "user",
+    };
+    let js = Object::new();
+    set(
+        &js,
+        "text",
+        &armature_core::agent::describe_entry(entry).into(),
+    );
+    set(&js, "label", &entry.label.as_str().into());
+    set(&js, "before", &strings(&entry.before));
+    set(&js, "after", &strings(&entry.after));
+    set(&js, "source", &source.into());
+    js.into()
 }
 
 fn tool_to_js(tool: &armature_core::agent::Tool) -> Object {
