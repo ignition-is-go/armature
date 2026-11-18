@@ -129,7 +129,7 @@ impl Primitive for Toolbar {
             } if self.items.is_enabled(&key) => {
                 self.focused = Some(key.clone());
                 Self::press(&key, Source::User, Reason::Press, gate);
-                Reaction::item(Part::Button, true, Some(key))
+                Reaction::to_item(Part::Button, Some(key))
             }
             Input::Key {
                 key: Key::Enter | Key::Space,
@@ -150,7 +150,7 @@ impl Primitive for Toolbar {
                 if let Some(key) = &target {
                     self.focused = Some(key.clone());
                 }
-                Reaction::item(Part::Button, true, target)
+                Reaction::to_item(Part::Button, target)
             }
             _ => Reaction::default(),
         }

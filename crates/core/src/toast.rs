@@ -442,7 +442,7 @@ impl Primitive for Toaster {
                     Reaction::handled().with(Effect::RestoreFocus)
                 }
                 // The newest notification is the one most likely wanted.
-                (None, Some(toast)) => Reaction::item(Part::Close, true, Some(toast.id.clone())),
+                (None, Some(toast)) => Reaction::to_item(Part::Close, Some(toast.id.clone())),
                 (None, None) => Reaction::default(),
             },
             Input::Press {

@@ -205,7 +205,7 @@ impl Menubar {
         match key {
             key if key == forward || key == back => {
                 self.focused = self.neighbour(key == forward);
-                Reaction::item(Part::Trigger, true, Some(self.key_at(self.focused)))
+                Reaction::to_item(Part::Trigger, Some(self.key_at(self.focused)))
             }
             _ if self.menus.is_empty() => Reaction::default(),
             Key::Enter | Key::Space | Key::ArrowDown => {

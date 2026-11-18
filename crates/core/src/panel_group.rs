@@ -390,7 +390,7 @@ impl Primitive for PanelGroup {
                     began: along,
                 });
                 self.focused = at;
-                Reaction::item(Part::Handle, true, pointer.item).with(Effect::CapturePointer)
+                Reaction::to_item(Part::Handle, pointer.item).with(Effect::CapturePointer)
             }
             PointerPhase::Move => {
                 let Some(HandleDrag {

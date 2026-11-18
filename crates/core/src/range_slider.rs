@@ -285,7 +285,7 @@ impl Primitive for RangeSlider {
                 if pointer.part == Part::Track {
                     self.set(at, value, Source::User, Reason::Drag, gate);
                 }
-                Reaction::item(Part::Thumb, true, Some(at.to_string())).with(Effect::CapturePointer)
+                Reaction::to_item(Part::Thumb, Some(at.to_string())).with(Effect::CapturePointer)
             }
             PointerPhase::Move => {
                 let (Some(at), Some(value)) = (self.dragging, self.value_at(&pointer, measure))

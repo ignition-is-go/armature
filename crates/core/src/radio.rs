@@ -178,13 +178,13 @@ impl Primitive for Radio {
                 if let Some(key) = &target {
                     self.select(key, Source::User, Reason::Keyboard, gate);
                 }
-                Reaction::item(Part::Option, true, target)
+                Reaction::to_item(Part::Option, target)
             }
             Input::Press {
                 item: Some(key), ..
             } if self.items.is_enabled(&key) => {
                 self.select(&key, Source::User, Reason::Press, gate);
-                Reaction::item(Part::Option, true, Some(key))
+                Reaction::to_item(Part::Option, Some(key))
             }
             _ => Reaction::default(),
         }

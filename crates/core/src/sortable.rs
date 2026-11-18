@@ -171,7 +171,7 @@ impl Sortable {
                 if let Some(key) = &target {
                     self.focused = Some(key.clone());
                 }
-                Reaction::item(Part::Item, true, target)
+                Reaction::to_item(Part::Item, target)
             }
         }
     }
@@ -282,7 +282,7 @@ impl Primitive for Sortable {
                 self.drag.down(pointer.at);
                 self.pressed.clone_from(&pointer.item);
                 self.focused.clone_from(&pointer.item);
-                Reaction::item(Part::Item, true, pointer.item).with(Effect::CapturePointer)
+                Reaction::to_item(Part::Item, pointer.item).with(Effect::CapturePointer)
             }
             PointerPhase::Move => {
                 let Some(event) = self.drag.moved(pointer.at) else {

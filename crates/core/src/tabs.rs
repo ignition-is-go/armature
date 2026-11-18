@@ -171,12 +171,12 @@ impl Primitive for Tabs {
                             self.select(key, Source::User, Reason::Keyboard, gate);
                         }
                     }
-                    return Reaction::item(Part::Tab, true, focus);
+                    return Reaction::to_item(Part::Tab, focus);
                 }
                 match (key, self.focused.clone()) {
                     (Key::Enter | Key::Space, Some(key)) => {
                         self.select(&key, Source::User, Reason::Keyboard, gate);
-                        Reaction::item(Part::Tab, true, None)
+                        Reaction::to_item(Part::Tab, None)
                     }
                     _ => Reaction::default(),
                 }
@@ -197,7 +197,7 @@ impl Primitive for Tabs {
                 }
                 self.focused = Some(item.clone());
                 self.select(&item, Source::User, Reason::Press, gate);
-                Reaction::item(Part::Tab, true, Some(item))
+                Reaction::to_item(Part::Tab, Some(item))
             }
             _ => Reaction::default(),
         }

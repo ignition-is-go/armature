@@ -67,7 +67,7 @@ impl Select {
                 item: Some(item),
             });
         }
-        Reaction::item(Part::Option, true, target)
+        Reaction::to_item(Part::Option, target)
     }
 
     /// Closes the popup and returns focus to the trigger.
@@ -110,11 +110,11 @@ impl Select {
             }
             _ => {
                 let moved = self.list.send(Input::Key { key, mods, now_ms }, gate);
-                Reaction::item(
-                    Part::Option,
-                    moved.handled,
-                    moved.focus_item().map(str::to_string),
-                )
+                // The list's own answer, with its focus named as one of the select's options.
+                Reaction {
+                    handled: moved.handled,
+                    ..Reaction::to_item(Part::Option, moved.focus_item().map(str::to_string))
+                }
             }
         }
     }

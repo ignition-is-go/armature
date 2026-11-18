@@ -185,7 +185,7 @@ impl Primitive for SwipeRow {
             } if !self.revealed => {
                 self.revealed = true;
                 let first = self.actions.first_enabled().map(str::to_string);
-                Reaction::item(Part::Action, true, first)
+                Reaction::to_item(Part::Action, first)
             }
             Input::Key {
                 key: Key::Escape | Key::ArrowRight,

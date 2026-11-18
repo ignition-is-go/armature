@@ -192,7 +192,7 @@ impl Waterfall {
         if let Some(key) = &key {
             self.focused = Some(key.clone());
         }
-        Reaction::item(Part::Row, true, key)
+        Reaction::to_item(Part::Row, key)
     }
 }
 

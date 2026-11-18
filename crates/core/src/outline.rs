@@ -464,7 +464,7 @@ impl Outline {
             index
                 .and_then(|index| self.rows.get(index))
                 .map_or_else(Reaction::handled, |row| {
-                    Reaction::item(Part::Row, true, Some(row.key.clone()))
+                    Reaction::to_item(Part::Row, Some(row.key.clone()))
                 })
         };
         match key {
@@ -516,7 +516,7 @@ impl Outline {
             _ => {}
         }
         self.moving = Some(moving);
-        Reaction::item(Part::Row, true, self.focused.clone())
+        Reaction::to_item(Part::Row, self.focused.clone())
     }
 }
 
@@ -613,7 +613,7 @@ impl Primitive for Outline {
                     .clone()
                     .and_then(|key| Some((key.clone(), self.depth_of(&key)?)));
                 self.focused.clone_from(&pointer.item);
-                Reaction::item(Part::Row, true, pointer.item).with(Effect::CapturePointer)
+                Reaction::to_item(Part::Row, pointer.item).with(Effect::CapturePointer)
             }
             PointerPhase::Move => {
                 let (Some(event), Some((key, depth))) =

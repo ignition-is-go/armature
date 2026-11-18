@@ -116,7 +116,7 @@ impl DataGrid {
             CellRange::new(cell)
         };
         if self.select(range, Source::User, reason, gate) {
-            Reaction::item(Part::Cell, true, Some(key_of(cell)))
+            Reaction::to_item(Part::Cell, Some(key_of(cell)))
         } else {
             Reaction::handled()
         }

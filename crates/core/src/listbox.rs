@@ -72,7 +72,7 @@ impl Listbox {
             if let Some(key) = &focus {
                 self.highlighted = Some(key.clone());
             }
-            return Reaction::item(Part::Option, true, focus);
+            return Reaction::to_item(Part::Option, focus);
         }
         if let Some(nav) = roving::nav_for_key(key, self.opts.orientation, self.opts.dir) {
             let focus = self
@@ -89,7 +89,7 @@ impl Listbox {
                     self.select(key, range, Reason::Keyboard, gate);
                 }
             }
-            return Reaction::item(Part::Option, true, focus);
+            return Reaction::to_item(Part::Option, focus);
         }
         match key {
             Key::Enter | Key::Space => {
@@ -97,7 +97,7 @@ impl Listbox {
                     return Reaction::default();
                 };
                 self.select(&key, mods, Reason::Keyboard, gate);
-                Reaction::item(Part::Option, true, None)
+                Reaction::to_item(Part::Option, None)
             }
             Key::Char('a' | 'A') if mods.ctrl && self.opts.mode == Mode::Multiple => {
                 let order = self.items.enabled_keys();
@@ -120,7 +120,7 @@ impl Listbox {
                 if let Some(key) = &focus {
                     self.highlighted = Some(key.clone());
                 }
-                Reaction::item(Part::Option, focus.is_some(), focus)
+                Reaction::to_item_if_any(Part::Option, focus)
             }
             _ => Reaction::default(),
         }
@@ -289,7 +289,7 @@ impl Primitive for Listbox {
                 }
                 self.highlighted = Some(item.clone());
                 self.select(&item, mods, Reason::Press, gate);
-                Reaction::item(Part::Option, true, Some(item))
+                Reaction::to_item(Part::Option, Some(item))
             }
             _ => Reaction::default(),
         }

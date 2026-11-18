@@ -206,7 +206,7 @@ impl Calendar {
             return Reaction::handled();
         }
         self.focused = date;
-        Reaction::item(Part::Day, true, Some(date.format()))
+        Reaction::to_item(Part::Day, Some(date.format()))
     }
 }
 

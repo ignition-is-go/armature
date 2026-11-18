@@ -160,7 +160,7 @@ impl Primitive for Accordion {
                 ..
             } if self.items.is_enabled(&key) => {
                 self.set(&key, !self.is_open(&key), Source::User, Reason::Press, gate);
-                Reaction::item(Part::Trigger, true, Some(key))
+                Reaction::to_item(Part::Trigger, Some(key))
             }
             Input::Found {
                 part: Part::Panel,
@@ -198,7 +198,7 @@ impl Primitive for Accordion {
                 if let Some(key) = &target {
                     self.focused = Some(key.clone());
                 }
-                Reaction::item(Part::Trigger, target.is_some(), target)
+                Reaction::to_item_if_any(Part::Trigger, target)
             }
             _ => Reaction::default(),
         }

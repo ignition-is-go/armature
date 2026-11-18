@@ -206,7 +206,7 @@ impl Menu {
         self.open = true;
         self.path.clear();
         self.active = self.edge(last);
-        Reaction::item(Part::Item, true, self.active.clone())
+        Reaction::to_item(Part::Item, self.active.clone())
     }
 
     fn edge(&self, last: bool) -> Option<String> {
@@ -249,7 +249,7 @@ impl Menu {
             Kind::Submenu => {
                 self.path.push(entry.key);
                 self.active = self.edge(false);
-                Ok(Reaction::item(Part::Item, true, self.active.clone()))
+                Ok(Reaction::to_item(Part::Item, self.active.clone()))
             }
             Kind::Checkbox | Kind::Radio(_) => self.switch(&entry, source, reason, gate),
         }
@@ -297,7 +297,7 @@ impl Menu {
     /// Leaves the submenu on show, landing on the entry that opened it.
     fn back(&mut self) -> Reaction<Part> {
         self.active = self.path.pop();
-        Reaction::item(Part::Item, true, self.active.clone())
+        Reaction::to_item(Part::Item, self.active.clone())
     }
 }
 
@@ -393,7 +393,7 @@ impl Menu {
         if let Some(key) = &target {
             self.active = Some(key.clone());
         }
-        Reaction::item(Part::Item, true, target)
+        Reaction::to_item(Part::Item, target)
     }
 }
 

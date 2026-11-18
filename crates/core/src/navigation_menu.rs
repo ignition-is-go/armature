@@ -201,7 +201,7 @@ impl NavigationMenu {
             .map(|entry| entry.key.clone())
             .unwrap_or_default();
         self.focused = Some(key.clone());
-        Reaction::item(self.part_of(&key), true, Some(key))
+        Reaction::to_item(self.part_of(&key), Some(key))
     }
 }
 
@@ -350,7 +350,7 @@ impl Primitive for NavigationMenu {
             } if self.open.is_some() => {
                 let trigger = self.open.clone();
                 self.set(None, Source::User, Reason::Keyboard, gate);
-                Reaction::item(Part::Trigger, true, trigger)
+                Reaction::to_item(Part::Trigger, trigger)
             }
             Input::Key {
                 key: Key::Enter | Key::Space,

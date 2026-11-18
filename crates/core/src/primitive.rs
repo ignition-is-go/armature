@@ -60,7 +60,7 @@ pub enum Input<Part> {
     ContextMenu {
         part: Part,
         item: Option<String>,
-        at: crate::geometry::Point,
+        at: Point,
     },
     /// A press landed outside every part of this primitive.
     PressOutside,
@@ -282,15 +282,24 @@ impl<Part> Reaction<Part> {
         }
     }
 
-    /// A reaction that may move focus to an item of `part`.
-    pub fn item(part: Part, handled: bool, focus: Option<String>) -> Self {
+    /// A handled input that moves focus to an item of `part`, if one is given.
+    pub fn to_item(part: Part, item: Option<String>) -> Self {
         Self {
-            handled,
-            focus: focus.map(|item| FocusTarget {
+            handled: true,
+            focus: item.map(|item| FocusTarget {
                 part,
                 item: Some(item),
             }),
             effects: Vec::new(),
+        }
+    }
+
+    /// Moves focus to an item of `part` and counts as handled only if one is given,
+    /// so a key that finds nothing is left to the platform.
+    pub fn to_item_if_any(part: Part, item: Option<String>) -> Self {
+        Self {
+            handled: item.is_some(),
+            ..Self::to_item(part, item)
         }
     }
 
@@ -503,8 +512,8 @@ pub trait Primitive: Clone + 'static {
     }
 
     /// Which way the scrolling part scrolls.
-    fn scroll_axis(&self) -> crate::keys::Orientation {
-        crate::keys::Orientation::Vertical
+    fn scroll_axis(&self) -> Orientation {
+        Orientation::Vertical
     }
 
     /// Keys that reach the primitive from anywhere, as `Input::Hotkey`.
@@ -518,7 +527,7 @@ pub trait Primitive: Clone + 'static {
     }
 
     /// A point to place the popup at in place of its anchor, as for a context menu.
-    fn popup_point(&self) -> Option<crate::geometry::Point> {
+    fn popup_point(&self) -> Option<Point> {
         None
     }
 

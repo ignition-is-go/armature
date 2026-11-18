@@ -356,7 +356,7 @@ impl Primitive for Timeline {
                 | Gesture::Stretch { key }) = gesture;
                 if self.settle(before, Source::User, Reason::Drag, gate) {
                     self.focused = Some(key.clone());
-                    Reaction::item(Part::Span, true, Some(key))
+                    Reaction::to_item(Part::Span, Some(key))
                 } else {
                     Reaction::handled()
                 }

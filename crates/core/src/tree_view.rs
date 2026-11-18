@@ -307,7 +307,7 @@ impl TreeView {
         if self.relocate(&current, slot, depth, Source::User, gate) {
             let label = self.label(&current);
             self.focused = Some(current.clone());
-            return Reaction::item(Part::Node, true, Some(current))
+            return Reaction::to_item(Part::Node, Some(current))
                 .alerting(format!("{label} moved to level {depth}."));
         }
         Reaction::handled()
@@ -317,7 +317,7 @@ impl TreeView {
         if let Some(key) = &target {
             self.focused = Some(key.clone());
         }
-        Reaction::item(Part::Node, true, target)
+        Reaction::to_item(Part::Node, target)
     }
 
     /// Typing letters moves focus to the next row whose label starts with them.

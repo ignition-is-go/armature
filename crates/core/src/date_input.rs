@@ -325,7 +325,7 @@ impl DateInput {
     fn move_to(&mut self, segment: Segment) -> Reaction<Part> {
         self.focused = segment;
         self.typed.clear();
-        Reaction::item(Part::Segment, true, Some(segment.name().to_string()))
+        Reaction::to_item(Part::Segment, Some(segment.name().to_string()))
     }
 }
 

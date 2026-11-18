@@ -173,7 +173,7 @@ impl Primitive for ToggleGroup {
             } => {
                 self.toggle(&key, Source::User, Reason::Press, gate);
                 self.focused = Some(key.clone());
-                Reaction::item(Part::Toggle, true, Some(key))
+                Reaction::to_item(Part::Toggle, Some(key))
             }
             Input::Key {
                 key: Key::Enter | Key::Space,
@@ -196,7 +196,7 @@ impl Primitive for ToggleGroup {
                 if let Some(key) = &target {
                     self.focused = Some(key.clone());
                 }
-                Reaction::item(Part::Toggle, true, target)
+                Reaction::to_item(Part::Toggle, target)
             }
             _ => Reaction::default(),
         }

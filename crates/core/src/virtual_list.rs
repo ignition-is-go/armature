@@ -110,7 +110,7 @@ impl VirtualList {
         } else {
             None
         };
-        let reaction = Reaction::item(Part::Row, true, Some(self.focused.to_string()));
+        let reaction = Reaction::to_item(Part::Row, Some(self.focused.to_string()));
         match target {
             Some(offset) => {
                 self.offset = offset;
@@ -245,7 +245,7 @@ impl Primitive for VirtualList {
                 Some(index) => {
                     self.focused = index;
                     self.select(index, Source::User, Reason::Press, gate);
-                    Reaction::item(Part::Row, true, Some(index.to_string()))
+                    Reaction::to_item(Part::Row, Some(index.to_string()))
                 }
                 None => Reaction::default(),
             },

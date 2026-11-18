@@ -192,7 +192,7 @@ impl Primitive for EventList {
                 if let Some(key) = &target {
                     self.focused = Some(key.clone());
                 }
-                Reaction::item(Part::Event, true, target)
+                Reaction::to_item(Part::Event, target)
             }
             _ => Reaction::default(),
         }

@@ -124,7 +124,7 @@ impl TransferList {
         self.focused.clone_from(&landing);
         let destination = if to == 1 { "chosen" } else { "available" };
         Some(
-            Reaction::item(Part::Option, true, landing)
+            Reaction::to_item(Part::Option, landing)
                 .announcing(transfer_message(moving.len(), destination)),
         )
     }
@@ -283,7 +283,7 @@ impl Primitive for TransferList {
                     self.anchor = Some(key.clone());
                 }
                 self.focused = Some(key.clone());
-                Reaction::item(Part::Option, true, Some(key))
+                Reaction::to_item(Part::Option, Some(key))
             }
             Input::Key {
                 key: Key::Enter | Key::Space,
@@ -326,7 +326,7 @@ impl Primitive for TransferList {
                 if let Some(key) = &target {
                     self.focused = Some(key.clone());
                 }
-                Reaction::item(Part::Option, true, target)
+                Reaction::to_item(Part::Option, target)
             }
             _ => Reaction::default(),
         }
