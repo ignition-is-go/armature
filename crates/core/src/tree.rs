@@ -198,20 +198,8 @@ impl Tree {
     /// Every node's key, in the order the tree lists them with everything open.
     #[must_use]
     pub fn subtree_order(&self) -> Vec<String> {
-        fn walk(tree: &Tree, at: usize, keys: &mut Vec<String>) {
-            let Some(node) = tree.nodes.get(at) else {
-                return;
-            };
-            keys.push(node.key.clone());
-            for child in &node.children {
-                walk(tree, *child, keys);
-            }
-        }
-        let mut keys = Vec::new();
-        for root in self.roots() {
-            walk(self, root, &mut keys);
-        }
-        keys
+        // The nodes are kept in that order: each one, then everything beneath it.
+        self.nodes.iter().map(|node| node.key.clone()).collect()
     }
 
     /// The checked nodes as `strategy` reports them, in display order.
@@ -269,6 +257,32 @@ pub fn drop_position(fraction: f64, can_nest: bool) -> DropPosition {
     }
 }
 
+/// Whether `key` is this item or anything beneath it.
+fn contains(item: &TreeItem, key: &str) -> bool {
+    item.key == key || item.children.iter().any(|child| contains(child, key))
+}
+
+/// The item with `key`, at any depth.
+fn find<'a>(items: &'a [TreeItem], key: &str) -> Option<&'a TreeItem> {
+    items.iter().find_map(|item| {
+        if item.key == key {
+            Some(item)
+        } else {
+            find(&item.children, key)
+        }
+    })
+}
+
+/// Takes the item with `key` out of the tree, with everything beneath it.
+fn take(items: &mut Vec<TreeItem>, key: &str) -> Option<TreeItem> {
+    if let Some(at) = items.iter().position(|item| item.key == key) {
+        return Some(items.remove(at));
+    }
+    items
+        .iter_mut()
+        .find_map(|item| take(&mut item.children, key))
+}
+
 /// Moves node `key`, with everything beneath it, next to or into `target`. Returns
 /// `false` and changes nothing if either is missing or `target` is inside the moved
 /// subtree.
@@ -278,26 +292,6 @@ pub fn move_node(
     target: &str,
     position: DropPosition,
 ) -> bool {
-    fn contains(item: &TreeItem, key: &str) -> bool {
-        item.key == key || item.children.iter().any(|child| contains(child, key))
-    }
-    fn find<'a>(items: &'a [TreeItem], key: &str) -> Option<&'a TreeItem> {
-        items.iter().find_map(|item| {
-            if item.key == key {
-                Some(item)
-            } else {
-                find(&item.children, key)
-            }
-        })
-    }
-    fn take(items: &mut Vec<TreeItem>, key: &str) -> Option<TreeItem> {
-        if let Some(at) = items.iter().position(|item| item.key == key) {
-            return Some(items.remove(at));
-        }
-        items
-            .iter_mut()
-            .find_map(|item| take(&mut item.children, key))
-    }
     fn place(
         items: &mut Vec<TreeItem>,
         node: TreeItem,
@@ -416,26 +410,6 @@ pub fn place_node(
     parent: Option<&str>,
     index: usize,
 ) -> bool {
-    fn contains(item: &TreeItem, key: &str) -> bool {
-        item.key == key || item.children.iter().any(|child| contains(child, key))
-    }
-    fn find<'a>(items: &'a [TreeItem], key: &str) -> Option<&'a TreeItem> {
-        items.iter().find_map(|item| {
-            if item.key == key {
-                Some(item)
-            } else {
-                find(&item.children, key)
-            }
-        })
-    }
-    fn take(items: &mut Vec<TreeItem>, key: &str) -> Option<TreeItem> {
-        if let Some(at) = items.iter().position(|item| item.key == key) {
-            return Some(items.remove(at));
-        }
-        items
-            .iter_mut()
-            .find_map(|item| take(&mut item.children, key))
-    }
     fn children_of<'a>(items: &'a mut [TreeItem], key: &str) -> Option<&'a mut Vec<TreeItem>> {
         for item in items.iter_mut() {
             if item.key == key {
