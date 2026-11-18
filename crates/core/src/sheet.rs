@@ -39,6 +39,24 @@ pub enum Edge {
 
 const ACTIONS: &[&str] = &["open", "close", "snap"];
 
+/// The grip being dragged.
+#[derive(Clone, Copy, Debug)]
+struct Grab {
+    /// Where the pointer went down, along the way the sheet grows.
+    from: f64,
+    /// How tall the sheet was then.
+    height_at_start: f64,
+}
+
+/// The sheet being carried by scrolling.
+#[derive(Clone, Copy, Debug)]
+struct Scrolling {
+    /// The height scrolling has it at.
+    height: f64,
+    /// When it settles, if nothing moves it again first.
+    settles_at_ms: u64,
+}
+
 /// A panel that slides up from the bottom edge and rests at one of several heights.
 ///
 /// Dragging its grip moves it between them, and dragging it well below the lowest
@@ -55,8 +73,7 @@ pub struct Sheet {
     dismissible: bool,
     /// The detent it rests at, when open.
     at: Option<usize>,
-    /// Where the pointer went down and how tall the sheet was then.
-    grabbed: Option<(f64, f64)>,
+    grabbed: Option<Grab>,
     height: f64,
     speed: VelocityTracker,
     /// Whether the trigger holds focus, so Enter and Space can press it.
@@ -68,8 +85,7 @@ pub struct Sheet {
     content_at_start: bool,
     /// Whether the wheel has moved the sheet and it has yet to settle.
     wheeled: bool,
-    /// Where scrolling has the sheet, and when it settles if nothing more moves it.
-    scrolled: Option<(f64, u64)>,
+    scrolled: Option<Scrolling>,
 }
 
 impl Default for Sheet {
@@ -132,14 +148,16 @@ impl Sheet {
     /// How tall to draw the sheet now: its resting height, or wherever a drag has it.
     #[must_use]
     pub fn height(&self) -> f64 {
-        if let (Some((offset, _)), Some(_)) = (self.scrolled, self.at) {
-            return offset;
+        match (self.scrolled, self.grabbed) {
+            (Some(scrolling), _) if self.is_open() => scrolling.height,
+            (_, Some(_)) => self.height,
+            _ => self.resting_height(),
         }
-        match (self.grabbed, self.at) {
-            (Some(_), _) => self.height,
-            (None, Some(at)) => self.detent_at(at),
-            (None, None) => 0.0,
-        }
+    }
+
+    /// The height of the resting place it is at, or nothing when closed.
+    fn resting_height(&self) -> f64 {
+        self.at.map_or(0.0, |at| self.detent_at(at))
     }
 
     fn written(at: Option<usize>) -> Vec<String> {
@@ -193,27 +211,33 @@ impl Sheet {
         // Measured from where it last was, or from its resting place.
         let from = self
             .scrolled
-            .map_or_else(|| self.detent_at(at), |(was, _)| was);
+            .map_or_else(|| self.detent_at(at), |scrolling| scrolling.height);
         let moved = (from - offset).abs() > f64::EPSILON;
         if !moved {
             return Reaction::default();
         }
         let at_ms = now_ms.saturating_add(REST_MS);
-        self.scrolled = Some((offset, at_ms));
+        self.scrolled = Some(Scrolling {
+            height: offset,
+            settles_at_ms: at_ms,
+        });
         Reaction::default().with(Effect::Wake { at_ms })
     }
 
     /// Once scrolling has paused, the sheet settles on the nearest resting place.
     fn on_tick(&mut self, now_ms: u64, gate: Gate) -> Reaction<Part> {
         self.wheeled = false;
-        let Some((offset, _)) = self.scrolled.filter(|(_, at_ms)| now_ms >= *at_ms) else {
+        let Some(scrolling) = self
+            .scrolled
+            .filter(|scrolling| now_ms >= scrolling.settles_at_ms)
+        else {
             return Reaction::default();
         };
         self.scrolled = None;
-        let landing = self.landing(offset, 0.0);
+        let landing = self.landing(scrolling.height, 0.0);
         let settled = self.settle(landing, Source::User, Reason::Drag, gate);
         let rest = Effect::ScrollTo {
-            offset: self.at.map_or(0.0, |at| self.detent_at(at)).cast::<u32>(),
+            offset: self.resting_height().cast::<u32>(),
         };
         if settled && landing.is_none() {
             return Reaction::focusing(Part::Trigger).with(rest);
@@ -293,7 +317,7 @@ impl Primitive for Sheet {
     }
 
     fn wanted_scroll(&self) -> Option<f64> {
-        Some(self.at.map_or(0.0, |at| self.detent_at(at)))
+        Some(self.resting_height())
     }
 
     fn relations(part: Part) -> Relations<Part> {
@@ -369,7 +393,11 @@ impl Primitive for Sheet {
                 if delta < 0.0 && now >= tallest {
                     return Reaction::default();
                 }
-                self.scrolled = Some((f64::mul_add(delta, -40.0, now).clamp(0.0, tallest), 0));
+                // The wheel carries the sheet at once, and it settles on the next tick.
+                self.scrolled = Some(Scrolling {
+                    height: f64::mul_add(delta, -40.0, now).clamp(0.0, tallest),
+                    settles_at_ms: 0,
+                });
                 self.wheeled = true;
                 Reaction::handled()
             }
@@ -435,16 +463,19 @@ impl Primitive for Sheet {
             (PointerPhase::Down, Part::Backdrop) => self.dismiss(Reason::Press, gate),
             (PointerPhase::Down, Part::Handle) => {
                 self.height = self.detent_at(at);
-                self.grabbed = Some((self.along(&pointer), self.height));
+                self.grabbed = Some(Grab {
+                    from: self.along(&pointer),
+                    height_at_start: self.height,
+                });
                 self.speed = VelocityTracker::default();
                 Reaction::focusing(Part::Handle).with(Effect::CapturePointer)
             }
             (PointerPhase::Move, _) => {
-                let Some((from, started)) = self.grabbed else {
+                let Some(grab) = self.grabbed else {
                     return Reaction::default();
                 };
                 // Dragging up makes the sheet taller. Past the tallest height it resists.
-                let wanted = (started + self.along(&pointer) - from).max(0.0);
+                let wanted = (grab.height_at_start + self.along(&pointer) - grab.from).max(0.0);
                 let tallest = self.detents.last().copied().unwrap_or(0.0);
                 self.height = if wanted > tallest {
                     tallest + rubber_band(wanted - tallest, tallest.max(1.0), 0.55)
