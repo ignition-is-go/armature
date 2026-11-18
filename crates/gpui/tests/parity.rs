@@ -465,7 +465,7 @@ fn a_press_while_a_dialog_is_up_does_not_close_the_popover_under_it(cx: &mut Tes
         share: cx.new(|cx| Machine::new(Popover::default(), "Share", Vec::<Item>::new(), cx)),
         confirm: cx.new(|cx| Machine::new(Dialog::default(), "Confirm", Vec::<Item>::new(), cx)),
     });
-    let (share, confirm) = page.update(cx, |page, _| (page.share.clone(), page.confirm.clone()));
+    let share = page.update(cx, |page, _| page.share.clone());
     let act = |cx: &mut VisualTestContext, label: &str, action: &str| {
         cx.update(|_, cx| {
             let found = armature_gpui::agent::snapshot(cx)
@@ -491,7 +491,6 @@ fn a_press_while_a_dialog_is_up_does_not_close_the_popover_under_it(cx: &mut Tes
         !open(cx),
         "with the dialog gone, a press elsewhere closes it"
     );
-    let _ = confirm;
 }
 
 #[gpui::test]

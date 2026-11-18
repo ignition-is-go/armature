@@ -363,7 +363,7 @@ impl Primitive for Sheet {
                     delta,
                     ..
                 },
-                Some(at),
+                Some(_),
             ) if self.content_at_start => {
                 let tallest = self.detents.last().copied().unwrap_or(0.0);
                 let now = self.height();
@@ -371,7 +371,6 @@ impl Primitive for Sheet {
                 if delta < 0.0 && now >= tallest {
                     return Reaction::default();
                 }
-                let _ = at;
                 self.scrolled = Some((f64::mul_add(delta, -40.0, now).clamp(0.0, tallest), 0));
                 self.wheeled = true;
                 Reaction::handled()
