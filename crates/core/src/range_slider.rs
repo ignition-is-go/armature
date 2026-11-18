@@ -6,6 +6,7 @@ use crate::primitive::{
     Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction,
     Role, Semantics, ValueRange,
 };
+use crate::slider::fraction_along;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Part {
@@ -130,19 +131,7 @@ impl RangeSlider {
 
     fn value_at(&self, pointer: &Pointer<Part>, measure: Measure<Part>) -> Option<f64> {
         let track = measure(Part::Track, None)?;
-        let fraction = match self.opts.orientation {
-            Orientation::Horizontal => {
-                let along = (pointer.at.x - track.x) / track.width.max(f64::MIN_POSITIVE);
-                if self.opts.dir == Dir::Rtl {
-                    1.0 - along
-                } else {
-                    along
-                }
-            }
-            Orientation::Vertical => {
-                1.0 - (pointer.at.y - track.y) / track.height.max(f64::MIN_POSITIVE)
-            }
-        };
+        let fraction = fraction_along(track, pointer.at, self.opts.orientation, self.opts.dir);
         Some(self.opts.range.at_fraction(fraction))
     }
 

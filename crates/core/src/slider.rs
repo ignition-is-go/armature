@@ -1,5 +1,6 @@
 use crate::agent::{ActError, Snapshot};
 use crate::change::{Gate, Reason, Source, ValueChange};
+use crate::geometry::{Point, Rect};
 use crate::keys::{Dir, Key, Orientation};
 use crate::number::{NumberRange, read_number};
 use crate::primitive::{
@@ -31,6 +32,19 @@ impl Default for Options {
             dir: Dir::Ltr,
             large_step: 10.0,
         }
+    }
+}
+
+/// How far along a track a point is, from 0 at its start to 1 at its end. A
+/// sideways track starts at the right in a right-to-left page, and an upright one
+/// starts at the bottom.
+pub(crate) fn fraction_along(track: Rect, at: Point, orientation: Orientation, dir: Dir) -> f64 {
+    match orientation {
+        Orientation::Horizontal => {
+            let along = (at.x - track.x) / track.width.max(f64::MIN_POSITIVE);
+            if dir == Dir::Rtl { 1.0 - along } else { along }
+        }
+        Orientation::Vertical => 1.0 - (at.y - track.y) / track.height.max(f64::MIN_POSITIVE),
     }
 }
 
@@ -89,19 +103,7 @@ impl Slider {
 
     fn value_at(&self, pointer: &Pointer<Part>, measure: Measure<Part>) -> Option<f64> {
         let track = measure(Part::Track, None)?;
-        let fraction = match self.opts.orientation {
-            Orientation::Horizontal => {
-                let along = (pointer.at.x - track.x) / track.width.max(f64::MIN_POSITIVE);
-                if self.opts.dir == Dir::Rtl {
-                    1.0 - along
-                } else {
-                    along
-                }
-            }
-            Orientation::Vertical => {
-                1.0 - (pointer.at.y - track.y) / track.height.max(f64::MIN_POSITIVE)
-            }
-        };
+        let fraction = fraction_along(track, pointer.at, self.opts.orientation, self.opts.dir);
         Some(self.opts.range.at_fraction(fraction))
     }
 }
@@ -152,17 +154,17 @@ impl Primitive for Slider {
             return Reaction::default();
         };
         let forward = if self.opts.dir == Dir::Rtl { -1.0 } else { 1.0 };
-        let small = if mods.shift {
+        let steps = if mods.shift {
             self.opts.large_step
         } else {
             1.0
         };
         let range = self.opts.range;
         let target = match key {
-            Key::ArrowRight => range.nudge(self.value, forward * small),
-            Key::ArrowLeft => range.nudge(self.value, -forward * small),
-            Key::ArrowUp => range.nudge(self.value, small),
-            Key::ArrowDown => range.nudge(self.value, -small),
+            Key::ArrowRight => range.nudge(self.value, forward * steps),
+            Key::ArrowLeft => range.nudge(self.value, -forward * steps),
+            Key::ArrowUp => range.nudge(self.value, steps),
+            Key::ArrowDown => range.nudge(self.value, -steps),
             Key::PageUp => range.nudge(self.value, self.opts.large_step),
             Key::PageDown => range.nudge(self.value, -self.opts.large_step),
             Key::Home => range.min,
