@@ -100,9 +100,11 @@ impl TextField {
         self.revealed
     }
 
+    /// Changes the text, unless the owner refuses. Text that is already there is
+    /// nothing to ask about.
     fn write(&mut self, text: String, source: Source, reason: Reason, gate: Gate) -> bool {
         if text == self.text {
-            return false;
+            return true;
         }
         let allowed = gate(&ValueChange {
             value: vec![text.clone()],
@@ -335,7 +337,7 @@ impl Primitive for TextField {
         if self.disabled {
             return Err(ActError::Refused);
         }
-        if text == self.text || self.write(text, Source::Agent, Reason::Action, gate) {
+        if self.write(text, Source::Agent, Reason::Action, gate) {
             Ok(())
         } else {
             Err(ActError::Refused)
