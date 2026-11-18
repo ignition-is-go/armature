@@ -167,51 +167,48 @@ impl TreeView {
         states.get(key).copied().unwrap_or(Checked::Unchecked)
     }
 
+    /// Chooses a node: checks it in a tree of checkboxes, adds it to or takes it out
+    /// of a multiple selection, or makes it the one selected. Returns whether the
+    /// owner allowed it.
     fn select(&mut self, key: &str, source: Source, reason: Reason, gate: Gate) -> bool {
-        if let Some(strategy) = self.check {
-            let tree = Tree::new(&self.data);
-            let next = tree.toggle_checked(key, &self.checked);
-            let value = tree.checked_value(&next, strategy);
-            let allowed = gate(&ValueChange {
+        let mut offer = |value: Vec<String>| {
+            gate(&ValueChange {
                 value,
                 source,
                 reason,
-            });
+            })
+        };
+        let tree = Tree::new(&self.data);
+        if let Some(strategy) = self.check {
+            let next = tree.toggle_checked(key, &self.checked);
+            let allowed = offer(tree.checked_value(&next, strategy));
             if allowed {
                 self.checked = next;
             }
-            return allowed;
-        }
-        if self.multiple {
+            allowed
+        } else if self.multiple {
             let mut next = self.picked.clone();
             match next.iter().position(|picked| picked == key) {
                 Some(at) => drop(next.remove(at)),
                 None => next.push(key.to_string()),
             }
-            let order: Vec<String> = Tree::new(&self.data).subtree_order();
+            // The selection is kept in the tree's own order.
+            let order: Vec<String> = tree.subtree_order();
             next.sort_by_key(|key| order.iter().position(|node| node == key));
-            let allowed = gate(&ValueChange {
-                value: next.clone(),
-                source,
-                reason,
-            });
+            let allowed = offer(next.clone());
             if allowed {
                 self.picked = next;
             }
-            return allowed;
+            allowed
+        } else if self.selected.as_deref() == Some(key) {
+            true
+        } else {
+            let allowed = offer(vec![key.to_string()]);
+            if allowed {
+                self.selected = Some(key.to_string());
+            }
+            allowed
         }
-        if self.selected.as_deref() == Some(key) {
-            return true;
-        }
-        let allowed = gate(&ValueChange {
-            value: vec![key.to_string()],
-            source,
-            reason,
-        });
-        if allowed {
-            self.selected = Some(key.to_string());
-        }
-        allowed
     }
 
     /// Where a node being dragged would land, as the slot among the other rows and
@@ -322,21 +319,36 @@ impl TreeView {
         Reaction::item(Part::Node, true, target)
     }
 
+    /// Typing letters moves focus to the next row whose label starts with them.
+    fn find_by_letter(&mut self, ch: char, now_ms: u64, rows: &[Row], at: usize) -> Reaction<Part> {
+        let labels: Vec<String> = rows.iter().map(|row| self.label(&row.key)).collect();
+        let candidates: Vec<(&str, bool)> = rows
+            .iter()
+            .zip(&labels)
+            .map(|(row, label)| (label.as_str(), self.enabled(&row.key)))
+            .collect();
+        let target = self
+            .typeahead
+            .push(ch, now_ms, &candidates, Some(at))
+            .and_then(|index| rows.get(index))
+            .map(|row| row.key.clone());
+        Reaction {
+            handled: target.is_some(),
+            ..self.move_to(target)
+        }
+    }
+
     fn on_key(&mut self, key: Key, now_ms: u64, ctrl: bool, gate: Gate) -> Reaction<Part> {
         let rows = self.rows();
         let Some(current) = self.current(&rows) else {
             return Reaction::default();
         };
         let at = rows.iter().position(|row| row.key == current).unwrap_or(0);
+        // The first row of a run that can take focus.
         let enabled_from = |rows: &mut dyn Iterator<Item = &Row>| {
-            let mut found = None;
-            for row in rows {
-                if self.enabled(&row.key) {
-                    found = Some(row.key.clone());
-                    break;
-                }
-            }
-            found
+            rows.filter(|row| self.enabled(&row.key))
+                .map(|row| row.key.clone())
+                .next()
         };
         let (open_key, close_key) = if self.dir == Dir::Rtl {
             (Key::ArrowLeft, Key::ArrowRight)
@@ -389,24 +401,7 @@ impl TreeView {
                 self.select(&current, Source::User, Reason::Keyboard, gate);
                 Reaction::handled()
             }
-            Key::Char(ch) if !ctrl => {
-                let labels: Vec<String> = rows.iter().map(|row| self.label(&row.key)).collect();
-                let candidates: Vec<(&str, bool)> = rows
-                    .iter()
-                    .zip(&labels)
-                    .map(|(row, label)| (label.as_str(), self.enabled(&row.key)))
-                    .collect();
-                let target = self
-                    .typeahead
-                    .push(ch, now_ms, &candidates, Some(at))
-                    .and_then(|index| rows.get(index))
-                    .map(|row| row.key.clone());
-                let found = target.is_some();
-                Reaction {
-                    handled: found,
-                    ..self.move_to(target)
-                }
-            }
+            Key::Char(ch) if !ctrl => self.find_by_letter(ch, now_ms, &rows, at),
             _ => Reaction::default(),
         }
     }
@@ -661,7 +656,7 @@ impl Primitive for TreeView {
         Snapshot {
             name: "tree",
             label: label.to_string(),
-            value: self.value(),
+            value,
             expanded: None,
             actions: ACTIONS,
             items,
