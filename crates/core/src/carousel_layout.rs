@@ -5,7 +5,7 @@
 use crate::convert::Cast;
 
 /// A slide's place along the track.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct SlideBox {
     pub start: f64,
     pub size: f64,
@@ -51,6 +51,24 @@ pub struct Page {
     pub margin: f64,
 }
 
+/// The slide at `index`, or an empty one at the origin when there is none.
+fn slide_at(slides: &[SlideBox], index: usize) -> SlideBox {
+    slides.get(index).copied().unwrap_or_default()
+}
+
+/// The first slide of a page.
+fn leader_of(group: &[usize]) -> usize {
+    group.first().copied().unwrap_or_default()
+}
+
+/// The index after `index` among `count`, coming round to the first.
+fn next_around(index: usize, count: usize) -> usize {
+    index
+        .saturating_add(1)
+        .checked_rem(count)
+        .unwrap_or_default()
+}
+
 /// The slides in pages, by index.
 #[must_use]
 pub fn group_slides(slides: &[SlideBox], snapport: f64, per_page: PerPage) -> Vec<Vec<usize>> {
@@ -65,9 +83,8 @@ pub fn group_slides(slides: &[SlideBox], snapport: f64, per_page: PerPage) -> Ve
         PerPage::Auto => {
             for (index, slide) in slides.iter().enumerate() {
                 let fits = groups.last().is_some_and(|group| {
-                    slide.start + slide.size
-                        - slides[group.first().copied().unwrap_or_default()].start
-                        <= snapport + 0.5
+                    let page_start = slide_at(slides, leader_of(group)).start;
+                    slide.start + slide.size - page_start <= snapport + 0.5
                 });
                 match groups.last_mut().filter(|_| fits) {
                     Some(group) => group.push(index),
@@ -95,18 +112,13 @@ fn page_of(
     snapport: f64,
     padding_start: f64,
 ) -> Page {
-    let (first, last) = (
-        boxes[group.first().copied().unwrap_or_default()],
-        boxes[group
-            .get(group.len().saturating_sub(1))
-            .copied()
-            .unwrap_or_default()],
-    );
+    let first = slide_at(boxes, leader_of(group));
+    let last = slide_at(boxes, group.last().copied().unwrap_or_default());
     let margin = align_offset(align, snapport, last.start + last.size - first.start);
     Page {
         slides: group.to_vec(),
         position: first.start - margin - padding_start,
-        leader: group.first().copied().unwrap_or_default(),
+        leader: leader_of(group),
         margin,
     }
 }
@@ -207,14 +219,15 @@ pub fn place_slides(track: &Track, first: usize) -> Vec<SlideBox> {
     ];
     let mut at = track.start;
     for step in 0..count {
-        let index = (first.saturating_add(step))
+        let index = first
+            .saturating_add(step)
             .checked_rem(count)
             .unwrap_or_default();
-        boxes[index] = SlideBox {
-            start: at,
-            size: track.sizes.get(index).copied().unwrap_or_default(),
-        };
-        at += track.sizes.get(index).copied().unwrap_or_default() + track.gap;
+        let size = track.sizes.get(index).copied().unwrap_or_default();
+        if let Some(slot) = boxes.get_mut(index) {
+            *slot = SlideBox { start: at, size };
+        }
+        at += size + track.gap;
     }
     boxes
 }
@@ -226,12 +239,8 @@ pub fn measure_track(slides: &[SlideBox], first: usize) -> Option<Track> {
     if slides.len() < 2 || first >= slides.len() {
         return None;
     }
-    let (lead, next) = (
-        slides[first],
-        slides[(first.saturating_add(1))
-            .checked_rem(slides.len())
-            .unwrap_or_default()],
-    );
+    let lead = slide_at(slides, first);
+    let next = slide_at(slides, next_around(first, slides.len()));
     let track = Track {
         sizes: slides.iter().map(|slide| slide.size).collect(),
         gap: next.start - lead.start - lead.size,
@@ -271,10 +280,12 @@ pub fn can_loop(track: &Track, view: &LoopView) -> bool {
     let length: f64 = track.sizes.iter().map(|size| size + track.gap).sum();
     let step = (0..groups.len())
         .map(|index| {
-            let next = &groups[(index.saturating_add(1))
-                .checked_rem(groups.len())
-                .unwrap_or_default()];
-            (boxes[next[0]].start - boxes[groups[index][0]].start + length) % length
+            let page_start = |page: usize| {
+                let leader = groups.get(page).map_or(0, |group| leader_of(group));
+                slide_at(&boxes, leader).start
+            };
+            let to_next = page_start(next_around(index, groups.len())) - page_start(index);
+            (to_next + length) % length
         })
         .fold(0.0, f64::max);
     view.max_scroll >= 2.0f64.mul_add(step, -1.0)
@@ -307,7 +318,7 @@ pub struct Rotation {
 fn anchor_slide(boxes: &[SlideBox], view_start: f64, first: usize) -> usize {
     let mut anchor = first;
     for (index, slide) in boxes.iter().enumerate() {
-        if slide.start <= view_start + 0.5 && slide.start > boxes[anchor].start {
+        if slide.start <= view_start + 0.5 && slide.start > slide_at(boxes, anchor).start {
             anchor = index;
         }
     }
@@ -347,11 +358,13 @@ pub fn loop_rotation(
         } else {
             place_slides(track, first)
         };
-        let delta = boxes[anchor].start - now[anchor].start;
+        let delta = slide_at(&boxes, anchor).start - slide_at(&now, anchor).start;
         let position = at.position + delta;
         let mut room = position.min(view.max_scroll - position);
         if let Some(heading) = to {
-            let page = &groups[heading.page];
+            let Some(page) = groups.get(heading.page) else {
+                continue;
+            };
             let target =
                 page_of(&boxes, page, view.align, view.snapport, view.padding_start).position;
             let lies_ahead = if heading.forward {

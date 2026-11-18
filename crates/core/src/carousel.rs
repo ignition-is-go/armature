@@ -136,10 +136,12 @@ impl Carousel {
             })
             .collect();
         // Slides drawn on top of one another are not a track that can be read.
-        if slides
-            .windows(2)
-            .any(|pair| (pair[1].start - pair[0].start).abs() < 1.0)
-        {
+        if slides.windows(2).any(|pair| {
+            (pair.get(1).copied().unwrap_or_default().start
+                - pair.get(0).copied().unwrap_or_default().start)
+                .abs()
+                < 1.0
+        }) {
             return Vec::new();
         }
         let end = slides
