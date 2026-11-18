@@ -8,3 +8,6 @@ publish = false
 armature-core.workspace = true
 armature-leptos.workspace = true
 leptos = { workspace = true, features = ["csr"] }
+
+[lints]
+workspace = true

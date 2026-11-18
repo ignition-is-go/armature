@@ -7,6 +7,25 @@ version = "0.0.1"
 edition = "2024"
 license = "Apache-2.0"
 
+[workspace.lints.clippy]
+disallowed_types = "deny"
+pedantic = { level = "deny", priority = -1 }
+nursery = { level = "deny", priority = -1 }
+# DENY PANICS:
+unwrap_used = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+arithmetic_side_effects = "deny"
+unreachable = "deny"
+unimplemented = "deny"
+unchecked_time_subtraction = "deny"
+todo = "deny"
+string_slice = "deny"
+panic_in_result_fn = "deny"
+panic = "deny"
+exit = "deny"
+as_conversions = "deny"
+
 [workspace.dependencies]
 armature-core = { path = "crates/core" }
 armature-leptos = { path = "crates/leptos" }

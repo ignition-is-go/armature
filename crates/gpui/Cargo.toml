@@ -15,3 +15,6 @@ gpui = { package = "gpui-unofficial", version = "1.28" }
 [dev-dependencies]
 serde_json = "1"
 gpui = { package = "gpui-unofficial", version = "1.28", features = ["test-support"] }
+
+[lints]
+workspace = true
