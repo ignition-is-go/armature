@@ -144,72 +144,83 @@ impl<P: Primitive + Send + Sync> Context<P> {
             self.focus(target);
         }
         for effect in reaction.effects {
-            match effect {
-                Ask::Announce { message, assertive } => announce(&message, assertive),
-                Ask::Wake { at_ms } => {
-                    let wait = at_ms.saturating_sub(js_sys::Date::now().cast::<u64>());
-                    set_timeout(
-                        move || {
-                            self.dispatch(Input::Tick {
-                                now_ms: js_sys::Date::now().cast::<u64>(),
-                            });
-                        },
-                        Duration::from_millis(wait),
-                    );
-                }
-                // The part to send to was recorded when the gesture began.
-                Ask::CapturePointer => {}
-                Ask::ScrollTo { offset } => {
-                    let scrolling = P::parts().iter().copied().find(|part| P::scrolls(*part));
-                    let across = self
-                        .machine
-                        .with_untracked(armature_core::primitive::Primitive::scroll_axis)
-                        == Orientation::Horizontal;
-                    if let Some(element) = scrolling.and_then(|part| self.element_of(part, None)) {
-                        if across {
-                            element.set_scroll_left(offset.cast::<i32>());
-                        } else {
-                            element.set_scroll_top(offset.cast::<i32>());
-                        }
-                    }
-                }
-                Ask::Copy { text } => {
-                    let _ = window().navigator().clipboard().write_text(&text);
-                }
-                Ask::RestoreFocus => {
-                    let back = RETURN_TO.with_borrow_mut(|held| held.remove(&self.instance));
-                    if let Some(back) = back {
-                        let _ = back.focus();
-                    }
-                }
-                Ask::PickFiles { multiple, accept } => {
-                    // The browser only shows its picker from a file input, so one is
-                    // made for the occasion.
-                    let Ok(input) = document().create_element("input") else {
-                        continue;
-                    };
-                    let input: web_sys::HtmlInputElement = input.unchecked_into();
-                    input.set_type("file");
-                    input.set_multiple(multiple);
-                    input.set_accept(&accept);
-                    let chosen = input.clone();
-                    let picked = Closure::<dyn Fn()>::new(move || {
-                        let files = crate::files::remember(chosen.files());
-                        self.dispatch(Input::Files {
-                            files,
-                            dropped: false,
-                        });
-                    });
-                    let _ = input.add_event_listener_with_callback(
-                        "change",
-                        picked.as_ref().unchecked_ref(),
-                    );
-                    picked.forget();
-                    input.click();
-                }
-            }
+            self.carry_out(effect);
         }
         reaction.handled
+    }
+
+    /// Does what the primitive asked the page to do.
+    fn carry_out(self, effect: Ask) {
+        match effect {
+            Ask::Announce { message, assertive } => announce(&message, assertive),
+            Ask::Wake { at_ms } => self.wake_at(at_ms),
+            // The part to send to was recorded when the gesture began.
+            Ask::CapturePointer => {}
+            Ask::ScrollTo { offset } => self.scroll_to(offset),
+            Ask::Copy { text } => {
+                let _ = window().navigator().clipboard().write_text(&text);
+            }
+            Ask::RestoreFocus => {
+                let back = RETURN_TO.with_borrow_mut(|held| held.remove(&self.instance));
+                if let Some(back) = back {
+                    let _ = back.focus();
+                }
+            }
+            Ask::PickFiles { multiple, accept } => self.pick_files(multiple, &accept),
+        }
+    }
+
+    /// Sends the primitive a tick once the clock reaches `at_ms`.
+    fn wake_at(self, at_ms: u64) {
+        let wait = at_ms.saturating_sub(js_sys::Date::now().cast::<u64>());
+        set_timeout(
+            move || {
+                self.dispatch(Input::Tick {
+                    now_ms: js_sys::Date::now().cast::<u64>(),
+                });
+            },
+            Duration::from_millis(wait),
+        );
+    }
+
+    /// Scrolls the primitive's scrolling part, if it has one on the page.
+    fn scroll_to(self, offset: u32) {
+        let scrolling = P::parts().iter().copied().find(|part| P::scrolls(*part));
+        let Some(element) = scrolling.and_then(|part| self.element_of(part, None)) else {
+            return;
+        };
+        let axis = self
+            .machine
+            .with_untracked(armature_core::primitive::Primitive::scroll_axis);
+        if axis == Orientation::Horizontal {
+            element.set_scroll_left(offset.cast::<i32>());
+        } else {
+            element.set_scroll_top(offset.cast::<i32>());
+        }
+    }
+
+    /// Asks the person for files and hands the primitive what they chose. The
+    /// browser only shows its picker from a file input, so one is made for the
+    /// occasion.
+    fn pick_files(self, multiple: bool, accept: &str) {
+        let Ok(input) = document().create_element("input") else {
+            return;
+        };
+        let input: web_sys::HtmlInputElement = input.unchecked_into();
+        input.set_type("file");
+        input.set_multiple(multiple);
+        input.set_accept(accept);
+        let chosen = input.clone();
+        let picked = Closure::<dyn Fn()>::new(move || {
+            let files = crate::files::remember(chosen.files());
+            self.dispatch(Input::Files {
+                files,
+                dropped: false,
+            });
+        });
+        let _ = input.add_event_listener_with_callback("change", picked.as_ref().unchecked_ref());
+        picked.forget();
+        input.click();
     }
 
     fn rendered(self) -> Vec<Rendered> {

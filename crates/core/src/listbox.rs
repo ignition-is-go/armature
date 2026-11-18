@@ -178,6 +178,21 @@ impl Listbox {
     }
 }
 
+impl Listbox {
+    /// The selection with `key` added, as holding Ctrl and pressing it would leave it.
+    fn with_added(&self, key: &str) -> Vec<String> {
+        if self.is_selected(key) {
+            return self.selected.clone();
+        }
+        let adding = Modifiers {
+            ctrl: true,
+            shift: false,
+            alt: false,
+        };
+        self.proposal(key, adding)
+    }
+}
+
 impl PartOf for Part {
     type Primitive = Listbox;
 }
@@ -320,50 +335,39 @@ impl Primitive for Listbox {
     }
 
     fn act(&mut self, action: &str, item: Option<&str>, gate: Gate) -> Result<(), ActError> {
-        let mut landed = None;
-        let next = match action {
-            "clear" => Vec::new(),
-            "select" | "deselect" => {
-                let action = if action == "select" {
-                    "select"
-                } else {
-                    "deselect"
-                };
-                let key = item.ok_or(ActError::MissingItem { action })?;
-                let found = self
-                    .items
-                    .get(key)
-                    .ok_or_else(|| ActError::UnknownItem(key.to_string()))?;
-                if found.disabled {
-                    return Err(ActError::Disabled(key.to_string()));
-                }
-                if action == "deselect" {
-                    self.selected
-                        .iter()
-                        .filter(|k| *k != key)
-                        .cloned()
-                        .collect()
-                } else {
-                    landed = Some(key.to_string());
-                    if self.is_selected(key) {
-                        self.selected.clone()
-                    } else {
-                        self.proposal(
-                            key,
-                            Modifiers {
-                                ctrl: true,
-                                shift: false,
-                                alt: false,
-                            },
-                        )
-                    }
-                }
-            }
+        let action = match action {
+            "clear" => "clear",
+            "select" => "select",
+            "deselect" => "deselect",
             other => {
                 return Err(ActError::UnknownAction {
                     action: other.to_string(),
                     valid: ACTIONS,
                 });
+            }
+        };
+        // Selecting an option also moves the highlight to it.
+        let mut landed = None;
+        let next = if action == "clear" {
+            Vec::new()
+        } else {
+            let key = item.ok_or(ActError::MissingItem { action })?;
+            let found = self
+                .items
+                .get(key)
+                .ok_or_else(|| ActError::UnknownItem(key.to_string()))?;
+            if found.disabled {
+                return Err(ActError::Disabled(key.to_string()));
+            }
+            if action == "deselect" {
+                self.selected
+                    .iter()
+                    .filter(|k| *k != key)
+                    .cloned()
+                    .collect()
+            } else {
+                landed = Some(key.to_string());
+                self.with_added(key)
             }
         };
         if self.commit(next, Source::Agent, Reason::Action, gate) {
