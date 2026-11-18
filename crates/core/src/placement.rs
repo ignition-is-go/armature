@@ -1,6 +1,7 @@
 //! Placing a popup beside its anchor on any of four sides, keeping it on screen.
 
 use crate::geometry::{Rect, Size};
+use crate::keys::Dir;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PlaceSide {
@@ -44,7 +45,7 @@ pub struct PlaceOptions {
     /// How far the popup keeps from the edges of the view.
     pub collision_padding: f64,
     /// In a right-to-left layout `Start` is the right edge.
-    pub rtl: bool,
+    pub dir: Dir,
 }
 
 /// Where a popup was placed.
@@ -187,7 +188,10 @@ pub fn compute_placement(
     options: PlaceOptions,
 ) -> Placement {
     // In a right-to-left layout, start and end swap along a horizontal edge.
-    let align = match (options.rtl && options.side.is_vertical(), options.align) {
+    let align = match (
+        options.dir == Dir::Rtl && options.side.is_vertical(),
+        options.align,
+    ) {
         (true, PlaceAlign::Start) => PlaceAlign::End,
         (true, PlaceAlign::End) => PlaceAlign::Start,
         (_, align) => align,

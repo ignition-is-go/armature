@@ -24,6 +24,7 @@ pub struct Placement<Part> {
 
 use crate::geometry::Point;
 pub use crate::geometry::{Rect, Size};
+use crate::keys::Dir;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Placed {
@@ -59,7 +60,7 @@ pub fn place(
         side_offset: gap,
         align_offset: 0.0,
         collision_padding: 0.0,
-        rtl: false,
+        dir: Dir::Ltr,
     };
     let placed = compute_placement(
         anchor,

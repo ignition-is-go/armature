@@ -12,7 +12,7 @@ use armature_core::gauge::{Meter, MeterPart};
 use armature_core::gesture::{
     DECELERATION, VelocityTracker, dim_amount, expand_amount, project_distance, rubber_band,
 };
-use armature_core::keys::Direction;
+use armature_core::keys::{Dir, Direction};
 use armature_core::number::{NumberRange, decimals_of, wrap};
 use armature_core::outline::{OutlineMove, depth_at, move_row, slot_at};
 use armature_core::outline::{OutlineRow, Place, depth_range, moved_rows, place_of, subtree_end};
@@ -1532,29 +1532,29 @@ fn roving_tab_stops_left_and_right_leave_only_from_the() {
     use armature_core::keys::Key;
     use armature_core::roving::*;
     // "Left and Right leave only from the end they point at, with nothing selected"
-    let field = |start, end, rtl| FieldCaret {
+    let field = |start, end, dir| FieldCaret {
         selection: Some((start, end)),
         length: 5,
-        rtl,
+        dir,
         uses_up_down: false,
     };
-    assert!(!field_keeps_key(Key::ArrowRight, field(5, 5, false)));
-    assert!(field_keeps_key(Key::ArrowRight, field(2, 2, false)));
-    assert!(!field_keeps_key(Key::ArrowLeft, field(0, 0, false)));
-    assert!(field_keeps_key(Key::ArrowLeft, field(0, 3, false)));
+    assert!(!field_keeps_key(Key::ArrowRight, field(5, 5, Dir::Ltr)));
+    assert!(field_keeps_key(Key::ArrowRight, field(2, 2, Dir::Ltr)));
+    assert!(!field_keeps_key(Key::ArrowLeft, field(0, 0, Dir::Ltr)));
+    assert!(field_keeps_key(Key::ArrowLeft, field(0, 3, Dir::Ltr)));
     // "right to left, the arrows swap"
-    assert!(!field_keeps_key(Key::ArrowLeft, field(5, 5, true)));
-    assert!(!field_keeps_key(Key::ArrowRight, field(0, 0, true)));
-    assert!(field_keeps_key(Key::ArrowRight, field(5, 5, true)));
+    assert!(!field_keeps_key(Key::ArrowLeft, field(5, 5, Dir::Rtl)));
+    assert!(!field_keeps_key(Key::ArrowRight, field(0, 0, Dir::Rtl)));
+    assert!(field_keeps_key(Key::ArrowRight, field(5, 5, Dir::Rtl)));
     // "Home and End stay with the field, and Up and Down only with fields that use them"
-    assert!(field_keeps_key(Key::Home, field(0, 0, false)));
-    assert!(field_keeps_key(Key::End, field(5, 5, false)));
-    assert!(!field_keeps_key(Key::ArrowUp, field(0, 0, false)));
+    assert!(field_keeps_key(Key::Home, field(0, 0, Dir::Ltr)));
+    assert!(field_keeps_key(Key::End, field(5, 5, Dir::Ltr)));
+    assert!(!field_keeps_key(Key::ArrowUp, field(0, 0, Dir::Ltr)));
     assert!(field_keeps_key(
         Key::ArrowUp,
         FieldCaret {
             uses_up_down: true,
-            ..field(0, 0, false)
+            ..field(0, 0, Dir::Ltr)
         }
     ));
     // "fields without a caret never keep arrows"
@@ -1563,7 +1563,7 @@ fn roving_tab_stops_left_and_right_leave_only_from_the() {
         FieldCaret {
             selection: None,
             length: 0,
-            rtl: false,
+            dir: Dir::Ltr,
             uses_up_down: false
         }
     ));
@@ -2718,7 +2718,7 @@ const fn below_start() -> armature_core::placement::PlaceOptions {
         side_offset: 4.0,
         align_offset: 0.0,
         collision_padding: 8.0,
-        rtl: false,
+        dir: Dir::Ltr,
     }
 }
 
@@ -2785,7 +2785,7 @@ fn popup_placement_submenus_flip_to_the_left_when_there() {
         placed(
             Rect::new(500.0, 100.0, 80.0, 30.0),
             PlaceOptions {
-                rtl: true,
+                dir: Dir::Rtl,
                 ..options
             }
         )

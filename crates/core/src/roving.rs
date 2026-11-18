@@ -1,4 +1,4 @@
-use crate::keys::{Dir, Key, Modifiers, Orientation};
+use crate::keys::{Dir, Direction, Key, Modifiers, Orientation};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Nav {
@@ -185,7 +185,7 @@ pub struct FieldCaret {
     /// checkbox.
     pub selection: Option<(usize, usize)>,
     pub length: usize,
-    pub rtl: bool,
+    pub dir: Dir,
     /// Whether Up and Down mean something to the field, as they do in a number
     /// field or a text area.
     pub uses_up_down: bool,
@@ -197,20 +197,14 @@ pub struct FieldCaret {
 /// Left and Right leave only from the end they point at, with nothing selected. Home
 /// and End always stay.
 #[must_use]
-pub fn field_keeps_key(key: Key, field: FieldCaret) -> bool {
+pub const fn field_keeps_key(key: Key, field: FieldCaret) -> bool {
     let Some((start, end)) = field.selection else {
         return false;
     };
-    let (toward_start, toward_end) = if field.rtl {
-        (Key::ArrowRight, Key::ArrowLeft)
-    } else {
-        (Key::ArrowLeft, Key::ArrowRight)
-    };
-    match key {
-        Key::Home | Key::End => true,
-        Key::ArrowUp | Key::ArrowDown => field.uses_up_down,
-        key if key == toward_end => !(start == end && end == field.length),
-        key if key == toward_start => !(start == end && start == 0),
+    match (key, field.dir.along(key)) {
+        (Key::ArrowUp | Key::ArrowDown, _) => field.uses_up_down,
+        (_, Some(Direction::Forward)) => !(start == end && end == field.length),
+        (_, Some(Direction::Backward)) => !(start == end && start == 0),
         _ => true,
     }
 }
