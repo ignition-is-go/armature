@@ -438,17 +438,18 @@ impl<P: Primitive> Machine<P> {
 
     /// The nodes a part refers to: the one that names it, the one it controls and
     /// the one that describes it.
-    pub fn links(&self, part: P::Part, item: Option<&str>) -> [Option<accesskit::NodeId>; 3] {
+    pub fn links(&self, part: P::Part, item: Option<&str>) -> Links {
         let relations = P::relations(part);
+        // An item's partner is the same item's other part, such as a tab's panel.
         let node = |target: Option<P::Part>| {
             let target = target?;
             self.node(target, item).or_else(|| self.node(target, None))
         };
-        [
-            node(relations.labelled_by),
-            node(relations.controls),
-            node(relations.described_by),
-        ]
+        Links {
+            labelled_by: node(relations.labelled_by),
+            controls: node(relations.controls),
+            described_by: node(relations.described_by),
+        }
     }
 
     /// Everything announced so far, oldest first.
@@ -1290,22 +1291,6 @@ fn layout_of<P: Primitive>(
     }
 }
 
-/// The accessibility nodes of the parts this one names, controls or is described by.
-fn links_of<P: Primitive>(machine: &Machine<P>, part: P::Part, item: Option<&str>) -> Links {
-    let relations = P::relations(part);
-    // An item's partner is the same item's other part, such as a tab's panel.
-    let node = |target: Option<P::Part>| {
-        let target = target?;
-        let own = machine.nodes.get(&(target, item.map(str::to_string)));
-        own.or_else(|| machine.nodes.get(&(target, None))).copied()
-    };
-    Links {
-        labelled_by: node(relations.labelled_by),
-        controls: node(relations.controls),
-        described_by: node(relations.described_by),
-    }
-}
-
 /// Sends the primitive a tick at `at_ms`, once the frame being drawn is done.
 fn tick_at<P: Primitive>(state: &Entity<Machine<P>>, at_ms: u64, window: &Window, cx: &mut App) {
     let state = state.clone();
@@ -1467,7 +1452,7 @@ pub fn part<K: PartOf>(
     el = with_pointer_gesture(el, state, &key, tracks_pointer);
 
     let layout = layout_of(machine, placement, &semantics, item);
-    let links = links_of(machine, part, item);
+    let links = machine.links(part, item);
     let record = record_bounds(state, &key, scrolls);
 
     let handle = machine
@@ -1574,12 +1559,15 @@ pub struct PartElement {
     links: Links,
 }
 
-/// The nodes of the parts this one refers to.
-#[derive(Clone, Default)]
-struct Links {
-    labelled_by: Option<accesskit::NodeId>,
-    controls: Option<accesskit::NodeId>,
-    described_by: Option<accesskit::NodeId>,
+/// The accessibility nodes of the parts one part refers to.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Links {
+    /// The part whose text names it.
+    pub labelled_by: Option<accesskit::NodeId>,
+    /// The part it shows, hides or changes.
+    pub controls: Option<accesskit::NodeId>,
+    /// The part whose text explains it.
+    pub described_by: Option<accesskit::NodeId>,
 }
 
 /// The accessibility node GPUI draws an element as. GPUI keeps this to itself, so it

@@ -515,19 +515,16 @@ fn a_popup_is_tied_to_its_trigger_and_title_in_the_accessibility_tree(cx: &mut T
     };
     assert_ne!(node(popover::Part::Title), node(popover::Part::Content));
     assert_eq!(
-        links(popover::Part::Trigger)[1],
-        Some(node(popover::Part::Content)),
-        "controls"
+        links(popover::Part::Trigger).controls,
+        Some(node(popover::Part::Content))
     );
     assert_eq!(
-        links(popover::Part::Content)[0],
-        Some(node(popover::Part::Title)),
-        "labelled by"
+        links(popover::Part::Content).labelled_by,
+        Some(node(popover::Part::Title))
     );
     assert_eq!(
-        links(popover::Part::Content)[2],
-        Some(node(popover::Part::Description)),
-        "described by"
+        links(popover::Part::Content).described_by,
+        Some(node(popover::Part::Description))
     );
 }
 
