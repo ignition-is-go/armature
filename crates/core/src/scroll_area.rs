@@ -271,10 +271,9 @@ impl Primitive for ScrollArea {
                 let limit = (self.content - self.viewport).max(0.0);
                 scroll_to((self.offset + page).clamp(0.0, limit))
             }
-            (PointerPhase::Move, _) => match self.drag {
-                Some(drag) => scroll_to(self.offset_for(along - drag.grip, drag.track)),
-                None => Reaction::default(),
-            },
+            (PointerPhase::Move, _) => self.drag.map_or_else(Reaction::default, |drag| {
+                scroll_to(self.offset_for(along - drag.grip, drag.track))
+            }),
             (PointerPhase::Up | PointerPhase::Cancel, _) => {
                 self.drag = None;
                 Reaction::default()
