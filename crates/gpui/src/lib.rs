@@ -50,12 +50,16 @@ fn described(paths: &[std::path::PathBuf]) -> Vec<FileInfo> {
         .collect()
 }
 
+/// A length on screen as the core's plain number.
+fn number(pixels: Pixels) -> f64 {
+    f64::from(f32::from(pixels))
+}
+
 fn core_point(point: Point<Pixels>) -> CorePoint {
-    CorePoint::new(f64::from(f32::from(point.x)), f64::from(f32::from(point.y)))
+    CorePoint::new(number(point.x), number(point.y))
 }
 
 fn core_rect(bounds: Bounds<Pixels>) -> Rect {
-    let number = |pixels: Pixels| f64::from(f32::from(pixels));
     Rect {
         x: number(bounds.origin.x),
         y: number(bounds.origin.y),
@@ -75,23 +79,27 @@ impl gpui::Global for Layers {}
 /// Ctrl elsewhere.
 #[must_use]
 pub fn binding_for(shortcut: &Shortcut) -> String {
+    let lowered;
     let key = match shortcut.key {
-        Key::ArrowUp => "up".to_string(),
-        Key::ArrowDown => "down".to_string(),
-        Key::ArrowLeft => "left".to_string(),
-        Key::ArrowRight => "right".to_string(),
-        Key::Home => "home".to_string(),
-        Key::End => "end".to_string(),
-        Key::PageUp => "pageup".to_string(),
-        Key::PageDown => "pagedown".to_string(),
-        Key::Enter => "enter".to_string(),
-        Key::Space => "space".to_string(),
-        Key::Escape => "escape".to_string(),
-        Key::Tab => "tab".to_string(),
-        Key::Backspace => "backspace".to_string(),
-        Key::F2 => "f2".to_string(),
-        Key::F6 => "f6".to_string(),
-        Key::Char(ch) => ch.to_lowercase().to_string(),
+        Key::ArrowUp => "up",
+        Key::ArrowDown => "down",
+        Key::ArrowLeft => "left",
+        Key::ArrowRight => "right",
+        Key::Home => "home",
+        Key::End => "end",
+        Key::PageUp => "pageup",
+        Key::PageDown => "pagedown",
+        Key::Enter => "enter",
+        Key::Space => "space",
+        Key::Escape => "escape",
+        Key::Tab => "tab",
+        Key::Backspace => "backspace",
+        Key::F2 => "f2",
+        Key::F6 => "f6",
+        Key::Char(ch) => {
+            lowered = ch.to_lowercase().to_string();
+            lowered.as_str()
+        }
     };
     let mods = [
         (
@@ -169,8 +177,8 @@ pub struct Machine<P: Primitive> {
     return_to: Option<FocusHandle>,
     /// Whether files are being dragged over a part that takes drops.
     dragged_over: bool,
-    /// The pointer's path from a part towards this primitive's open popup, the
-    /// popup's box, and the part whose hover-leave is being held back meanwhile.
+    /// The pointer on its way from a part to this primitive's open popup, while that
+    /// part's hover-leave is held back.
     crossing: Option<Crossing<P>>,
     /// Whether the keyboard, and not a pointer, was the last thing used on this
     /// primitive.
@@ -624,10 +632,7 @@ impl<P: Primitive> Machine<P> {
             phase,
             part,
             item: item.clone(),
-            at: CorePoint::new(
-                f64::from(f32::from(position.x)),
-                f64::from(f32::from(position.y)),
-            ),
+            at: core_point(position),
             mods: modifiers(mods),
             now_ms: self.now_ms(),
         };
@@ -903,7 +908,6 @@ impl<P: Primitive> Machine<P> {
         let bounds = &self.bounds;
         let measure = |part: P::Part, item: Option<&str>| {
             let bounds = bounds.get(&(part, item.map(str::to_string)))?;
-            let number = |pixels: Pixels| f64::from(f32::from(pixels));
             Some(Rect {
                 x: number(bounds.origin.x),
                 y: number(bounds.origin.y),
@@ -1080,7 +1084,7 @@ fn with_wheel<P: Primitive>(
         el = el.on_scroll(move |event: &gpui::ScrollEvent, window, cx| {
             let lines = match event.delta {
                 gpui::ScrollDelta::Lines(lines) => f64::from(lines.y),
-                gpui::ScrollDelta::Pixels(pixels) => f64::from(f32::from(pixels.y)) / 20.0,
+                gpui::ScrollDelta::Pixels(pixels) => number(pixels.y) / 20.0,
             };
             let taken = state.update(cx, |state, cx| {
                 // The wheel goes to a part that asks for it now, and scrolls otherwise.
@@ -1116,10 +1120,7 @@ fn with_context_menu<P: Primitive>(
         el = el.on_mouse_down(
             MouseButton::Right,
             move |event: &MouseDownEvent, window, cx| {
-                let at = CorePoint::new(
-                    f64::from(f32::from(event.position.x)),
-                    f64::from(f32::from(event.position.y)),
-                );
+                let at = core_point(event.position);
                 let input = Input::ContextMenu {
                     part,
                     item: item.clone(),
@@ -1370,11 +1371,11 @@ fn record_bounds<P: Primitive>(
                     bounds.size.height,
                 )
             };
-            let viewport = f64::from(f32::from(length));
+            let viewport = number(length);
             let now = Scrolled {
                 offset: f64::from(-f32::from(offset)),
                 viewport,
-                content: viewport + f64::from(f32::from(max)),
+                content: viewport + number(max),
             };
             ((scrolls && now != state.scrolled).then_some(now), relinked)
         });
