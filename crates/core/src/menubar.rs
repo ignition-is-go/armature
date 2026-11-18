@@ -21,13 +21,22 @@ pub enum Part {
 
 const ACTIONS: &[&str] = &["open", "close", "run", "toggle"];
 
+/// One menu of the bar.
+#[derive(Clone, Debug)]
+struct BarMenu {
+    key: String,
+    /// What its trigger says.
+    title: String,
+    menu: Menu,
+}
+
 /// A row of menus, as at the top of a desktop application.
 ///
 /// Left and Right move along the bar, and with a menu open they move to the next menu.
 /// Entries are keyed `menu/entry`, in the value and in what is offered to the gate.
 #[derive(Clone, Debug, Default)]
 pub struct Menubar {
-    menus: Vec<(String, String, Menu)>,
+    menus: Vec<BarMenu>,
     dir: Dir,
     open: Option<usize>,
     focused: usize,
@@ -39,7 +48,11 @@ impl Menubar {
     pub fn new(menus: Vec<(&str, &str, Vec<Entry>)>, dir: Dir) -> Self {
         let menus = menus
             .into_iter()
-            .map(|(key, title, entries)| (key.to_string(), title.to_string(), Menu::new(entries)))
+            .map(|(key, title, entries)| BarMenu {
+                key: key.to_string(),
+                title: title.to_string(),
+                menu: Menu::new(entries),
+            })
             .collect();
         Self {
             menus,
@@ -60,23 +73,22 @@ impl Menubar {
 
     #[must_use]
     pub fn open_menu(&self) -> Option<&str> {
-        let (key, _, _) = self.menus.get(self.open?)?;
-        Some(key.as_str())
+        Some(self.menus.get(self.open?)?.key.as_str())
     }
 
     fn key_at(&self, at: usize) -> String {
         self.menus
             .get(at)
-            .map(|(key, _, _)| key.clone())
+            .map(|bar| bar.key.clone())
             .unwrap_or_default()
     }
 
     fn menu_at(&self, at: usize) -> Option<&Menu> {
-        self.menus.get(at).map(|(_, _, menu)| menu)
+        self.menus.get(at).map(|bar| &bar.menu)
     }
 
     fn menu_at_mut(&mut self, at: usize) -> Option<&mut Menu> {
-        self.menus.get_mut(at).map(|(_, _, menu)| menu)
+        self.menus.get_mut(at).map(|bar| &mut bar.menu)
     }
 
     fn close_menu(&mut self, at: usize) {
@@ -86,7 +98,7 @@ impl Menubar {
     }
 
     fn at(&self, menu: &str) -> Option<usize> {
-        self.menus.iter().position(|(key, _, _)| key == menu)
+        self.menus.iter().position(|bar| bar.key == menu)
     }
 
     fn split(item: &str) -> (&str, Option<&str>) {
@@ -401,7 +413,7 @@ impl Primitive for Menubar {
     fn value(&self) -> Vec<String> {
         self.menus
             .iter()
-            .flat_map(|(key, _, menu)| {
+            .flat_map(|BarMenu { key, menu, .. }| {
                 menu.value()
                     .into_iter()
                     .map(move |entry| prefixed(key, &entry))
@@ -410,7 +422,7 @@ impl Primitive for Menubar {
     }
 
     fn set_value(&mut self, value: Vec<String>) {
-        for (key, _, menu) in &mut self.menus {
+        for BarMenu { key, menu, .. } in &mut self.menus {
             let own = value
                 .iter()
                 .filter_map(|entry| entry.strip_prefix(&format!("{key}/")))
@@ -424,7 +436,7 @@ impl Primitive for Menubar {
         let items = self
             .menus
             .iter()
-            .flat_map(|(key, title, menu)| {
+            .flat_map(|BarMenu { key, title, menu }| {
                 menu.snapshot("")
                     .items
                     .into_iter()

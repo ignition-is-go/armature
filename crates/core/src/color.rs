@@ -517,15 +517,11 @@ impl P3 {
 
     #[must_use]
     pub fn from_rgb(color: Rgb) -> Self {
-        let (r, g, b) = (
-            to_linear(f64::from(color.r) / 255.0),
-            to_linear(f64::from(color.g) / 255.0),
-            to_linear(f64::from(color.b) / 255.0),
-        );
+        let rgb = [color.r, color.g, color.b].map(|part| to_linear(f64::from(part) / 255.0));
         Self {
-            r: from_linear(0.177_538_0_f64.mul_add(g, 0.822_462_1 * r)),
-            g: from_linear(0.966_805_8_f64.mul_add(g, 0.033_194_1 * r)),
-            b: from_linear(0.910_519_9_f64.mul_add(b, 0.072_397_4_f64.mul_add(g, 0.017_082_7 * r))),
+            r: from_linear(weighted([0.822_462_1, 0.177_538_0, 0.0], rgb)),
+            g: from_linear(weighted([0.033_194_1, 0.966_805_8, 0.0], rgb)),
+            b: from_linear(weighted([0.017_082_7, 0.072_397_4, 0.910_519_9], rgb)),
         }
     }
 

@@ -41,6 +41,18 @@ fn handle(name: &str) -> Option<Handle> {
     })
 }
 
+/// The selection being moved or resized.
+#[derive(Clone, Copy, Debug)]
+struct Dragging {
+    /// The grip that is held, or none when the whole selection is being moved.
+    grip: Option<Handle>,
+    /// Where the drag began on screen.
+    from: Point,
+    selection_at_start: Rect,
+    /// How many of the picture's pixels one screen unit covers.
+    scale: f64,
+}
+
 /// Chooses a rectangle of a picture to keep. The value is the rectangle as
 /// `x,y,width,height` in the picture's own pixels.
 #[derive(Clone, Debug)]
@@ -54,9 +66,7 @@ pub struct ImageCropper {
     zoom: f64,
     max_zoom: f64,
     selection: Rect,
-    /// The part being dragged, where the drag began on screen, the selection then,
-    /// and how many picture pixels one screen unit is.
-    drag: Option<(Option<Handle>, Point, Rect, f64)>,
+    drag: Option<Dragging>,
     focused: Option<String>,
 }
 
@@ -277,16 +287,16 @@ impl Primitive for ImageCropper {
             Part::Selection => Semantics {
                 role: Some(Role::Group),
                 focusable: Focusable::TabStop,
-                active: matches!(self.drag, Some((None, ..))),
+                active: self.drag.is_some_and(|drag| drag.grip.is_none()),
                 ..Default::default()
             },
             Part::Handle => Semantics {
                 role: Some(Role::Button),
                 hidden: item.is_some_and(|name| handle(name).is_none()),
                 focusable: Focusable::Programmatic,
-                active: item.and_then(handle).is_some_and(
-                    |grip| matches!(self.drag, Some((Some(held), ..)) if held == grip),
-                ),
+                active: item
+                    .and_then(handle)
+                    .is_some_and(|grip| self.drag.is_some_and(|drag| drag.grip == Some(grip))),
                 ..Default::default()
             },
         }
@@ -349,16 +359,22 @@ impl Primitive for ImageCropper {
                     return Reaction::default();
                 }
                 // Magnified, a screen unit covers less of the picture.
-                self.drag = Some((
+                self.drag = Some(Dragging {
                     grip,
-                    pointer.at,
-                    self.selection,
-                    self.image.width / self.zoom / shown.max(1.0),
-                ));
+                    from: pointer.at,
+                    selection_at_start: self.selection,
+                    scale: self.image.width / self.zoom / shown.max(1.0),
+                });
                 Reaction::handled().with(Effect::CapturePointer)
             }
             PointerPhase::Move => {
-                let Some((grip, from, start, scale)) = self.drag else {
+                let Some(Dragging {
+                    grip,
+                    from,
+                    selection_at_start: start,
+                    scale,
+                }) = self.drag
+                else {
                     return Reaction::default();
                 };
                 let delta = Point::new(
