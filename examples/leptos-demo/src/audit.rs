@@ -143,18 +143,11 @@ fn LazyRows() -> impl IntoView {
 #[component]
 fn ZoomCrop() -> impl IntoView {
     let cropper = use_primitive::<ImageCropper>();
-    let side = move |at: usize| {
-        move || {
-            format!(
-                "{}%",
-                cropper.with(|c| c.fractions().get(at).copied().unwrap_or_default()) * 100.0
-            )
-        }
-    };
+    let (left, top, width, height) = crate::more::crop_box(cropper);
     view! {
         <p id="zoom-value">"Zoom: " {move || format!("{:.2}", cropper.with(armature_core::image_cropper::ImageCropper::zoom))}</p>
         <Part part=image_cropper::Part::Area>
-            <div class="crop-box" style:left=side(0) style:top=side(1) style:width=side(2) style:height=side(3)>
+            <div class="crop-box" style:left=left style:top=top style:width=width style:height=height>
                 <Part part=image_cropper::Part::Selection label="Zoomed crop" />
             </div>
         </Part>

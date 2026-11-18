@@ -310,17 +310,31 @@ fn WideParts() -> impl IntoView {
     }
 }
 
-#[component]
-fn CropParts() -> impl IntoView {
-    let cropper = use_primitive::<ImageCropper>();
-    // One of the selection's left, top, width and height, as a share of the picture.
+/// Where to draw a cropper's selection over its picture: its left, top, width and
+/// height as shares of what is shown.
+pub fn crop_box(
+    cropper: ReadSignal<ImageCropper>,
+) -> (
+    impl Fn() -> String + Copy,
+    impl Fn() -> String + Copy,
+    impl Fn() -> String + Copy,
+    impl Fn() -> String + Copy,
+) {
     let share = move |pick: fn([f64; 4]) -> f64| {
         move || format!("{}%", cropper.with(|c| pick(c.fractions())) * 100.0)
     };
-    let left = share(|[left, _, _, _]| left);
-    let top = share(|[_, top, _, _]| top);
-    let width = share(|[_, _, width, _]| width);
-    let height = share(|[_, _, _, height]| height);
+    (
+        share(|[left, _, _, _]| left),
+        share(|[_, top, _, _]| top),
+        share(|[_, _, width, _]| width),
+        share(|[_, _, _, height]| height),
+    )
+}
+
+#[component]
+fn CropParts() -> impl IntoView {
+    let cropper = use_primitive::<ImageCropper>();
+    let (left, top, width, height) = crop_box(cropper);
     view! {
         <Part part=image_cropper::Part::Area>
             <div class="crop-box" style:left=left style:top=top style:width=width style:height=height>
