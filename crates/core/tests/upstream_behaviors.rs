@@ -570,23 +570,28 @@ fn hold_behaviors() {
     assert!(steady.tick(600));
 }
 
+/// The day the calendar tests start on.
+fn calendar_start() -> Date {
+    Date::new(2026, 10, 16).unwrap_or(Date::FIRST)
+}
+
+/// The day focus moves to after a key, if it moves.
+fn focus_of(calendar: &mut Calendar, pressed: Key, mods: Modifiers) -> Option<String> {
+    let input = Input::Key {
+        key: pressed,
+        mods,
+        now_ms: 0,
+    };
+    calendar
+        .send(input, &mut |_| true)
+        .focus_item()
+        .map(str::to_string)
+}
+
 // calendar.test.ts
 #[test]
 fn calendar_behaviors() {
-    let start = Date::new(2026, 10, 16).unwrap();
-    let focus_of = |calendar: &mut Calendar, pressed: Key, mods: Modifiers| {
-        calendar
-            .send(
-                Input::Key {
-                    key: pressed,
-                    mods,
-                    now_ms: 0,
-                },
-                &mut |_| true,
-            )
-            .focus_item()
-            .map(str::to_string)
-    };
+    let start = calendar_start();
     let plain = Modifiers::default();
     // "arrow keys move by day and week, into the next month as it renders"
     let mut calendar = Calendar::new(calendar::Options::default(), start);
@@ -636,20 +641,7 @@ fn calendar_behaviors() {
 
 #[test]
 fn calendar_behaviors_left_and_right_swap_in_a_right() {
-    let start = Date::new(2026, 10, 16).unwrap();
-    let focus_of = |calendar: &mut Calendar, pressed: Key, mods: Modifiers| {
-        calendar
-            .send(
-                Input::Key {
-                    key: pressed,
-                    mods,
-                    now_ms: 0,
-                },
-                &mut |_| true,
-            )
-            .focus_item()
-            .map(str::to_string)
-    };
+    let start = calendar_start();
     let plain = Modifiers::default();
     // "Left and Right swap in a right-to-left page"
     let mut rtl = Calendar::new(
@@ -680,20 +672,7 @@ fn calendar_behaviors_left_and_right_swap_in_a_right() {
 
 #[test]
 fn calendar_behaviors_a_press_or_enter_selects_one_date() {
-    let start = Date::new(2026, 10, 16).unwrap();
-    let focus_of = |calendar: &mut Calendar, pressed: Key, mods: Modifiers| {
-        calendar
-            .send(
-                Input::Key {
-                    key: pressed,
-                    mods,
-                    now_ms: 0,
-                },
-                &mut |_| true,
-            )
-            .focus_item()
-            .map(str::to_string)
-    };
+    let start = calendar_start();
     let plain = Modifiers::default();
     // "a press or Enter selects one date"
     let mut picking = Calendar::new(calendar::Options::default(), start);
@@ -733,6 +712,16 @@ fn calendar_behaviors_a_press_or_enter_selects_one_date() {
             .focusable,
         Focusable::TabStop
     );
+}
+
+/// A press on one of a dialog's parts, with every change allowed.
+fn press_part(dialog: &mut Dialog, part: dialog::Part) {
+    let input = Input::Press {
+        part,
+        item: None,
+        mods: Modifiers::default(),
+    };
+    dialog.send(input, &mut |_| true);
 }
 
 // dialog.test.ts
@@ -783,16 +772,6 @@ fn dialog_behaviors_close_parts_triggers_and_the_controller_close() {
 #[test]
 fn dialog_behaviors_a_refused_press_beside_a_non_modal() {
     let open = dialog::Options::default();
-    let press = |dialog: &mut Dialog, part: dialog::Part| {
-        dialog.send(
-            Input::Press {
-                part,
-                item: None,
-                mods: Modifiers::default(),
-            },
-            &mut |_| true,
-        );
-    };
     // "a refused press beside a non-modal dialog is the page's, not an attempt"
     let beside = dialog::Options {
         dismiss_on_backdrop: false,
@@ -814,7 +793,7 @@ fn dialog_behaviors_a_refused_press_beside_a_non_modal() {
         modal: false,
         ..open
     });
-    press(&mut alert, dialog::Part::Trigger);
+    press_part(&mut alert, dialog::Part::Trigger);
     alert.send(Input::PressOutside, &mut |_| true);
     assert!(alert.is_open() && alert.semantics(dialog::Part::Content, None).modal);
 }
@@ -822,19 +801,9 @@ fn dialog_behaviors_a_refused_press_beside_a_non_modal() {
 #[test]
 fn dialog_behaviors_a_dialog_is_modal_by_default_and() {
     let open = dialog::Options::default();
-    let press = |dialog: &mut Dialog, part: dialog::Part| {
-        dialog.send(
-            Input::Press {
-                part,
-                item: None,
-                mods: Modifiers::default(),
-            },
-            &mut |_| true,
-        );
-    };
     // "a dialog is modal by default, and marked modal"
     let mut modal = Dialog::default();
-    press(&mut modal, dialog::Part::Trigger);
+    press_part(&mut modal, dialog::Part::Trigger);
     assert!(modal.semantics(dialog::Part::Content, None).modal);
     // "a modal dialog's trigger has no aria-expanded, and a non-modal one's does"
     assert_eq!(modal.semantics(dialog::Part::Trigger, None).expanded, None);
@@ -852,7 +821,7 @@ fn dialog_behaviors_a_dialog_is_modal_by_default_and() {
         dismissible: false,
         ..open
     });
-    press(&mut fixed, dialog::Part::Trigger);
+    press_part(&mut fixed, dialog::Part::Trigger);
     key(&mut fixed, Key::Escape);
     assert!(fixed.is_open());
     assert_eq!(fixed.attempts(), 1);
