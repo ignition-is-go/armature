@@ -389,8 +389,8 @@ impl<Cx> Registry<Cx> {
 /// Runs steps in order against `registry`, stopping at the first that fails.
 /// `approve` is asked before any step on a component that needs approval.
 ///
-/// The registry is passed by value because steps run application code, which may
-/// mount or remove components. Pass a clone taken for this run.
+/// `registry` is asked for a fresh copy before every step, because steps run
+/// application code, which may mount or remove components.
 pub fn run<Cx>(
     registry: impl Fn(&Cx) -> Registry<Cx>,
     cx: &mut Cx,
@@ -409,27 +409,7 @@ pub fn run<Cx>(
     let mut failed = None;
 
     for (index, step) in steps.iter().enumerate() {
-        let current = registry(cx);
-        let outcome = (|| {
-            let reference = current.resolve(cx, &step.target)?;
-            let target = current.target(&reference)?;
-            if let Some(what) = &target.access.confirm
-                && !approve(step, what)
-            {
-                return Err(Error::NotApproved);
-            }
-            let seen = target
-                .seen(cx)
-                .ok_or_else(|| Error::UnknownRef(reference.clone()))?;
-            let after = target.act_approved(cx, &step.action, step.item.as_deref())?;
-            Ok(Change {
-                reference,
-                label: seen.label,
-                before: seen.value,
-                after,
-            })
-        })();
-        match outcome {
+        match run_step(&registry(cx), cx, step, &mut approve) {
             Ok(change) => changes.push(change),
             Err(error) => {
                 failed = Some((index, error));
@@ -447,6 +427,32 @@ pub fn run<Cx>(
         failed,
         appeared,
     }
+}
+
+/// Runs one step and says what it changed.
+fn run_step<Cx>(
+    registry: &Registry<Cx>,
+    cx: &mut Cx,
+    step: &Step,
+    approve: &mut impl FnMut(&Step, &str) -> bool,
+) -> Result<Change, Error> {
+    let reference = registry.resolve(cx, &step.target)?;
+    let target = registry.target(&reference)?;
+    if let Some(what) = &target.access.confirm
+        && !approve(step, what)
+    {
+        return Err(Error::NotApproved);
+    }
+    let seen = target
+        .seen(cx)
+        .ok_or_else(|| Error::UnknownRef(reference.clone()))?;
+    let after = target.act_approved(cx, &step.action, step.item.as_deref())?;
+    Ok(Change {
+        reference,
+        label: seen.label,
+        before: seen.value,
+        after,
+    })
 }
 
 /// A committed change, kept so it can be described and undone.
