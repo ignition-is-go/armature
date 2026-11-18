@@ -718,6 +718,7 @@ impl Primitive for Combobox {
 mod tests {
     use super::*;
     use crate::keys::Modifiers;
+    use crate::primitive::Politeness;
 
     fn fruit(opts: Options) -> Combobox {
         let mut combobox = Combobox::new(opts);
@@ -763,7 +764,7 @@ mod tests {
             said.effects,
             [crate::primitive::Effect::Announce {
                 message: "2 results".into(),
-                assertive: false
+                politeness: Politeness::Polite
             }]
         );
         assert!(combobox.semantics(Part::Option, Some("banana")).hidden);
@@ -876,7 +877,7 @@ mod tests {
             said.effects,
             [crate::primitive::Effect::Announce {
                 message: "Loading".into(),
-                assertive: false
+                politeness: Politeness::Polite
             }]
         );
         assert!(combobox.semantics(Part::Empty, None).hidden);

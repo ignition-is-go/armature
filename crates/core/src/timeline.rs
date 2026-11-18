@@ -449,6 +449,7 @@ mod tests {
     use super::*;
     use crate::geometry::{Point, Rect};
     use crate::keys::Modifiers;
+    use crate::primitive::Politeness;
 
     /// A 240-wide track standing for 24 hours, so ten units across is one hour.
     fn track(part: Part, _: Option<&str>) -> Option<Rect> {
@@ -642,7 +643,7 @@ mod tests {
             said.effects,
             [Effect::Announce {
                 message: "span-1 now runs from 8 to 13.".into(),
-                assertive: false
+                politeness: Politeness::Polite
             }]
         );
         key(&mut timeline, Key::Backspace, false);

@@ -3,8 +3,8 @@ use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::geometry::Point;
 use crate::keys::Key;
 use crate::primitive::{
-    Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction,
-    Role, Semantics,
+    Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Politeness, Primitive,
+    Reaction, Role, Semantics,
 };
 
 /// What a notification is about, which decides how it is announced.
@@ -298,7 +298,7 @@ impl Toaster {
         }
         // Whatever has just come into view starts its clock and is read out.
         let mut reaction = Reaction::default();
-        let started: Vec<(String, u64, String, bool)> = self
+        let started: Vec<(String, u64, String, Politeness)> = self
             .unstarted()
             .into_iter()
             .map(|toast| {
@@ -306,15 +306,19 @@ impl Toaster {
                     toast.id.clone(),
                     self.lasts(toast).unwrap_or(0),
                     toast.title.clone(),
-                    toast.kind == Kind::Error,
+                    if toast.kind == Kind::Error {
+                        Politeness::Assertive
+                    } else {
+                        Politeness::Polite
+                    },
                 )
             })
             .collect();
-        for (id, lasts, title, assertive) in started {
+        for (id, lasts, title, politeness) in started {
             self.deadlines.push((id, now_ms.saturating_add(lasts)));
             reaction = reaction.with(Effect::Announce {
                 message: title,
-                assertive,
+                politeness,
             });
         }
         let wake = self.wake();
@@ -645,11 +649,11 @@ mod tests {
             [
                 Effect::Announce {
                     message: "Saved".into(),
-                    assertive: false
+                    politeness: Politeness::Polite
                 },
                 Effect::Announce {
                     message: "Upload failed".into(),
-                    assertive: true
+                    politeness: Politeness::Assertive
                 },
                 Effect::Wake { at_ms: 6000 },
             ]

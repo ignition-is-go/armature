@@ -186,6 +186,7 @@ mod tests {
     use super::*;
     use crate::keys::Modifiers;
     use crate::primitive::Effect;
+    use crate::primitive::Politeness;
 
     fn press(button: &mut Button) -> (bool, Reaction<Part>) {
         let mut ran = false;
@@ -228,7 +229,7 @@ mod tests {
             reaction.effects,
             [Effect::Announce {
                 message: "Loading".into(),
-                assertive: false
+                politeness: Politeness::Polite
             }]
         );
         assert_eq!(

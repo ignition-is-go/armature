@@ -125,11 +125,24 @@ pub struct Pointer<Part> {
 /// Reports where a part is right now, if it is rendered.
 pub type Measure<'a, Part> = &'a dyn Fn(Part, Option<&str>) -> Option<Rect>;
 
+/// How urgently assistive technology reads an announcement.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Politeness {
+    /// Once it has finished what it is reading.
+    #[default]
+    Polite,
+    /// At once, interrupting what it is reading.
+    Assertive,
+}
+
 /// Something the adapter must do beyond moving focus.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Effect {
     /// Read a message to assistive technology.
-    Announce { message: String, assertive: bool },
+    Announce {
+        message: String,
+        politeness: Politeness,
+    },
     /// Send `Input::Tick` at this time.
     Wake { at_ms: u64 },
     /// Keep sending this pointer's moves here until it is released, wherever it goes.
@@ -328,7 +341,7 @@ impl<Part> Reaction<Part> {
     pub fn announcing(self, message: impl Into<String>) -> Self {
         self.with(Effect::Announce {
             message: message.into(),
-            assertive: false,
+            politeness: Politeness::Polite,
         })
     }
 
@@ -338,7 +351,7 @@ impl<Part> Reaction<Part> {
     pub fn alerting(self, message: impl Into<String>) -> Self {
         self.with(Effect::Announce {
             message: message.into(),
-            assertive: true,
+            politeness: Politeness::Assertive,
         })
     }
 

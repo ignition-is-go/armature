@@ -17,7 +17,7 @@ use armature_core::popup::{Align, Side};
 use armature_core::preference::Modality;
 use armature_core::primitive::{
     Effect, FileInfo, Focusable, Input, Item, Measure, Outcome, PartOf, Pointer, PointerPhase,
-    Primitive, Reaction, Role, Semantics,
+    Politeness, Primitive, Reaction, Role, Semantics,
 };
 use armature_core::safe_area::{Axis, SafeArea};
 use armature_core::shortcut::Shortcut;
@@ -138,7 +138,7 @@ type PartKey<P> = (<P as Primitive>::Part, Option<String>);
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Announcement {
     pub message: String,
-    pub assertive: bool,
+    pub politeness: Politeness,
 }
 
 /// The pointer on its way from a part to the popup that part opened.
@@ -855,10 +855,13 @@ impl<P: Primitive> Machine<P> {
     /// Does what the primitive asked the platform to do.
     fn carry_out(&mut self, effect: &Effect, window: &mut Window, cx: &mut Context<Self>) {
         match effect {
-            Effect::Announce { message, assertive } => {
+            Effect::Announce {
+                message,
+                politeness,
+            } => {
                 let announcement = Announcement {
                     message: message.clone(),
-                    assertive: *assertive,
+                    politeness: *politeness,
                 };
                 self.announcements.push(announcement.clone());
                 cx.emit(announcement);
@@ -1692,11 +1695,10 @@ const fn accessibility_role(role: Role) -> gpui::Role {
     }
 }
 
-fn live_node(id: ElementId, message: SharedString, assertive: bool) -> Measured {
-    let (role, live) = if assertive {
-        (gpui::Role::Alert, accesskit::Live::Assertive)
-    } else {
-        (gpui::Role::Status, accesskit::Live::Polite)
+fn live_node(id: ElementId, message: SharedString, politeness: Politeness) -> Measured {
+    let (role, live) = match politeness {
+        Politeness::Assertive => (gpui::Role::Alert, accesskit::Live::Assertive),
+        Politeness::Polite => (gpui::Role::Status, accesskit::Live::Polite),
     };
     Measured {
         inner: div().id(id).role(role).aria_label(message),
@@ -1717,11 +1719,11 @@ pub fn live_region<P: Primitive>(
     let message = latest
         .map(|said| SharedString::from(said.message.clone()))
         .unwrap_or_default();
-    let assertive = latest.is_some_and(|said| said.assertive);
+    let politeness = latest.map_or(Politeness::Polite, |said| said.politeness);
     live_node(
         ("armature-live", state.entity_id()).into(),
         message,
-        assertive,
+        politeness,
     )
 }
 
@@ -1835,11 +1837,11 @@ mod tests {
 
     #[test]
     fn a_live_region_marks_its_node_so_changes_are_spoken() {
-        let read = |assertive| {
+        let read = |politeness| {
             let region = live_node(
                 "live".into(),
                 "Dropped milk at position 3 of 4.".into(),
-                assertive,
+                politeness,
             );
             let mut node = accesskit::Node::new(Element::a11y_role(&region).unwrap());
             Element::write_a11y_info(&region, &mut node);
@@ -1847,7 +1849,7 @@ mod tests {
         };
         let said = Some("Dropped milk at position 3 of 4.".to_string());
         assert_eq!(
-            read(false),
+            read(Politeness::Polite),
             (
                 accesskit::Role::Status,
                 Some(accesskit::Live::Polite),
@@ -1855,7 +1857,7 @@ mod tests {
             )
         );
         assert_eq!(
-            read(true),
+            read(Politeness::Assertive),
             (
                 accesskit::Role::Alert,
                 Some(accesskit::Live::Assertive),
@@ -1866,7 +1868,7 @@ mod tests {
 
     #[test]
     fn a_part_points_at_the_parts_it_is_related_to() {
-        let mut part = live_node("part".into(), "".into(), false);
+        let mut part = live_node("part".into(), "".into(), Politeness::Polite);
         part.live = None;
         part.links = Links {
             labelled_by: Some(accesskit::NodeId(7)),

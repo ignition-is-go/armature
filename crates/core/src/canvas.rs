@@ -658,6 +658,7 @@ impl Primitive for Canvas {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::primitive::Politeness;
 
     fn canvas() -> Canvas {
         Canvas::new(vec![
@@ -960,7 +961,7 @@ mod tests {
             joined.effects,
             [Effect::Announce {
                 message: "a connected to b.".into(),
-                assertive: false
+                politeness: Politeness::Polite
             }]
         );
         assert_eq!(canvas.connections().len(), 1);
@@ -970,7 +971,7 @@ mod tests {
             refused.effects,
             [Effect::Announce {
                 message: "a cannot connect to a.".into(),
-                assertive: false
+                politeness: Politeness::Polite
             }]
         );
     }

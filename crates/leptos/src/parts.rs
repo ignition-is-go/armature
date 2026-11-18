@@ -13,7 +13,7 @@ use armature_core::popup::{self, Placement, Rect, Side, Size};
 use armature_core::presence::Presence;
 use armature_core::primitive::{
     Effect as Ask, FocusTarget, Focusable, Input, Item, Outcome, PartOf, Pointer, PointerPhase,
-    Primitive, Reaction, Role, Semantics,
+    Politeness, Primitive, Reaction, Role, Semantics,
 };
 use armature_core::safe_area::{Axis, SafeArea};
 use leptos::prelude::*;
@@ -157,7 +157,10 @@ impl<P: Primitive + Send + Sync> Context<P> {
     /// Does what the primitive asked the page to do.
     fn carry_out(self, effect: Ask) {
         match effect {
-            Ask::Announce { message, assertive } => announce(&message, assertive),
+            Ask::Announce {
+                message,
+                politeness,
+            } => announce(&message, politeness),
             Ask::Wake { at_ms } => self.wake_at(at_ms),
             // The part to send to was recorded when the gesture began.
             Ask::CapturePointer => {}
@@ -351,16 +354,15 @@ const fn modifiers(shift: bool, ctrl: bool, alt: bool) -> Modifiers {
 }
 
 /// Speaks a message through a live region shared by every component on the page.
-fn announce(message: &str, assertive: bool) {
-    let id = if assertive {
-        "armature-live-assertive"
-    } else {
-        "armature-live-polite"
+fn announce(message: &str, politeness: Politeness) {
+    let (id, live) = match politeness {
+        Politeness::Assertive => ("armature-live-assertive", "assertive"),
+        Politeness::Polite => ("armature-live-polite", "polite"),
     };
     let region = document().get_element_by_id(id).or_else(|| {
         let region = document().create_element("div").ok()?;
         region.set_id(id);
-        let _ = region.set_attribute("aria-live", if assertive { "assertive" } else { "polite" });
+        let _ = region.set_attribute("aria-live", live);
         let _ = region.set_attribute("aria-atomic", "true");
         let hidden = "position:absolute;width:1px;height:1px;overflow:hidden;\
                       clip-path:inset(50%);white-space:nowrap";

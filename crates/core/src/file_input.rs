@@ -363,6 +363,7 @@ impl Primitive for FileInput {
 mod tests {
     use super::*;
     use crate::keys::Modifiers;
+    use crate::primitive::Politeness;
 
     fn file(name: &str, kind: &str, size: u64) -> FileInfo {
         FileInfo {
@@ -426,7 +427,7 @@ mod tests {
             said.effects,
             [Effect::Announce {
                 message: "2 files added. 3 files not accepted.".into(),
-                assertive: false
+                politeness: Politeness::Polite
             }]
         );
     }

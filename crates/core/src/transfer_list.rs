@@ -412,6 +412,7 @@ impl Primitive for TransferList {
 mod tests {
     use super::*;
     use crate::primitive::Effect;
+    use crate::primitive::Politeness;
 
     fn lists() -> TransferList {
         TransferList::new(&["read", "write", "share", "delete"])
@@ -461,7 +462,7 @@ mod tests {
             moved.effects,
             [Effect::Announce {
                 message: "2 items moved to chosen.".into(),
-                assertive: false
+                politeness: Politeness::Polite
             }]
         );
     }
