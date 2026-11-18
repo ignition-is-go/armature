@@ -43,13 +43,13 @@ impl Rgb {
         let channel = |digits: &str| u8::from_str_radix(digits, 16).ok();
         match hex.len() {
             3 => {
-                let double = |i: usize| channel(&hex.get(i..=i).unwrap_or_default().repeat(2));
+                let double = |i: usize| channel(&hex.get(i..=i)?.repeat(2));
                 Some(Self::new(double(0)?, double(1)?, double(2)?))
             }
             6 => Some(Self::new(
-                channel(hex.get(0..2).unwrap_or_default())?,
-                channel(hex.get(2..4).unwrap_or_default())?,
-                channel(hex.get(4..6).unwrap_or_default())?,
+                channel(hex.get(0..2)?)?,
+                channel(hex.get(2..4)?)?,
+                channel(hex.get(4..6)?)?,
             )),
             _ => None,
         }
@@ -122,7 +122,7 @@ impl Rgb {
             }
         };
         let (r, g, b) = self.unit();
-        0.0722f64.mul_add(linear(b), 0.7152f64.mul_add(linear(g), 0.2126 * linear(r)))
+        weighted([0.2126, 0.7152, 0.0722], [linear(r), linear(g), linear(b)])
     }
 
     /// Contrast ratio against another colour, from 1 to 21. Body text needs 4.5.
@@ -131,6 +131,13 @@ impl Rgb {
         let (a, b) = (self.luminance(), other.luminance());
         (a.max(b) + 0.05) / (a.min(b) + 0.05)
     }
+}
+
+/// Each value times its weight, added up: one row of a colour matrix.
+fn weighted(weights: [f64; 3], values: [f64; 3]) -> f64 {
+    let [first, second, third] = weights;
+    let [x, y, z] = values;
+    third.mul_add(z, second.mul_add(y, first * x))
 }
 
 #[expect(
@@ -297,35 +304,57 @@ impl Rgb {
         let [r, g, b] = [self.r, self.g, self.b].map(|part| to_linear(f64::from(part) / 255.0));
         // To XYZ under D65, then adapted to the D50 white Lab is measured against,
         // with the matrices CSS Color gives.
-        let (x, y, z) = (
-            f64::mul_add(
-                12673.0 / 70218.0,
-                b,
-                f64::mul_add(87881.0 / 245_763.0, g, 506_752.0 / 1_228_815.0 * r),
+        let rgb = [r, g, b];
+        let xyz = [
+            weighted(
+                [
+                    506_752.0 / 1_228_815.0,
+                    87881.0 / 245_763.0,
+                    12673.0 / 70218.0,
+                ],
+                rgb,
             ),
-            f64::mul_add(
-                12673.0 / 175_545.0,
-                b,
-                f64::mul_add(175_762.0 / 245_763.0, g, 87098.0 / 409_605.0 * r),
+            weighted(
+                [
+                    87098.0 / 409_605.0,
+                    175_762.0 / 245_763.0,
+                    12673.0 / 175_545.0,
+                ],
+                rgb,
             ),
-            f64::mul_add(
-                1_001_167.0 / 1_053_270.0,
-                b,
-                f64::mul_add(87881.0 / 737_289.0, g, 7918.0 / 409_605.0 * r),
+            weighted(
+                [
+                    7918.0 / 409_605.0,
+                    87881.0 / 737_289.0,
+                    1_001_167.0 / 1_053_270.0,
+                ],
+                rgb,
             ),
-        );
+        ];
         let adapted = [
-            0.050_192_266_289_205_24_f64.mul_add(
-                -z,
-                0.022_946_870_601_609_652_f64.mul_add(y, 1.047_929_792_544_996_9 * x),
+            weighted(
+                [
+                    1.047_929_792_544_996_9,
+                    0.022_946_870_601_609_652,
+                    -0.050_192_266_289_205_24,
+                ],
+                xyz,
             ),
-            0.017_073_799_063_418_826_f64.mul_add(
-                -z,
-                0.990_434_426_753_879_9_f64.mul_add(y, 0.029_627_808_770_055_99 * x),
+            weighted(
+                [
+                    0.029_627_808_770_055_99,
+                    0.990_434_426_753_879_9,
+                    -0.017_073_799_063_418_826,
+                ],
+                xyz,
             ),
-            0.751_874_281_428_137_1_f64.mul_add(
-                z,
-                0.015_055_191_490_298_152_f64.mul_add(y, -0.009_243_040_646_204_504 * x),
+            weighted(
+                [
+                    -0.009_243_040_646_204_504,
+                    0.015_055_191_490_298_152,
+                    0.751_874_281_428_137_1,
+                ],
+                xyz,
             ),
         ];
         let white = [0.3457 / 0.3585, 1.0, (1.0 - 0.3457 - 0.3585) / 0.3585];
@@ -336,12 +365,9 @@ impl Rgb {
                 f64::mul_add(24389.0 / 27.0, t, 16.0) / 116.0
             }
         };
-        let [fx, fy, fz] = [0, 1, 2].map(|at| {
-            curve(
-                adapted.get(at).copied().unwrap_or_default()
-                    / white.get(at).copied().unwrap_or_default(),
-            )
-        });
+        let [white_x, white_y, white_z] = white;
+        let [x, y, z] = adapted;
+        let (fx, fy, fz) = (curve(x / white_x), curve(y / white_y), curve(z / white_z));
         (
             116.0f64.mul_add(fy, -16.0),
             500.0 * (fx - fy),
@@ -351,27 +377,18 @@ impl Rgb {
 
     /// Lightness from 0 to 1, colourfulness, and hue in degrees, in OKLCH.
     #[must_use]
-    #[expect(
-        clippy::many_single_char_names,
-        reason = "colour channels go by their letters"
-    )]
     pub fn to_oklch(self) -> (f64, f64, f64) {
         let [r, g, b] = [self.r, self.g, self.b].map(|part| to_linear(f64::from(part) / 255.0));
-        let l = 0.051_445_992_9_f64
-            .mul_add(b, 0.536_332_536_3_f64.mul_add(g, 0.412_221_470_8 * r))
-            .cbrt();
-        let m = 0.107_396_956_6_f64
-            .mul_add(b, 0.680_699_545_1_f64.mul_add(g, 0.211_903_498_2 * r))
-            .cbrt();
-        let s = 0.629_978_700_5_f64
-            .mul_add(b, 0.281_718_837_6_f64.mul_add(g, 0.088_302_461_9 * r))
-            .cbrt();
-        let lightness =
-            0.004_072_046_8_f64.mul_add(-s, 0.793_617_785_0_f64.mul_add(m, 0.210_454_255_3 * l));
-        let a =
-            0.450_593_709_9_f64.mul_add(s, 2.428_592_205_0_f64.mul_add(-m, 1.977_998_495_1 * l));
-        let b =
-            0.808_675_766_0_f64.mul_add(-s, 0.782_771_766_2_f64.mul_add(m, 0.025_904_037_1 * l));
+        // To the cone responses, their cube roots, and from those to Oklab.
+        let rgb = [r, g, b];
+        let cones = [
+            weighted([0.412_221_470_8, 0.536_332_536_3, 0.051_445_992_9], rgb).cbrt(),
+            weighted([0.211_903_498_2, 0.680_699_545_1, 0.107_396_956_6], rgb).cbrt(),
+            weighted([0.088_302_461_9, 0.281_718_837_6, 0.629_978_700_5], rgb).cbrt(),
+        ];
+        let lightness = weighted([0.210_454_255_3, 0.793_617_785_0, -0.004_072_046_8], cones);
+        let a = weighted([1.977_998_495_1, -2.428_592_205_0, 0.450_593_709_9], cones);
+        let b = weighted([0.025_904_037_1, 0.782_771_766_2, -0.808_675_766_0], cones);
         (
             lightness,
             a.hypot(b),
@@ -404,9 +421,9 @@ impl Rgb {
     pub fn read_alpha(text: &str) -> Option<(Self, f64)> {
         let text = text.trim();
         if let Some(hex) = text.strip_prefix('#').filter(|hex| hex.len() == 8) {
-            let alpha =
-                f64::from(u8::from_str_radix(hex.get(6..).unwrap_or_default(), 16).ok()?) / 255.0;
-            return Some((Self::from_hex(text.get(..7).unwrap_or_default())?, alpha));
+            let (colour, alpha) = hex.split_at_checked(6)?;
+            let alpha = f64::from(u8::from_str_radix(alpha, 16).ok()?) / 255.0;
+            return Some((Self::from_hex(colour)?, alpha));
         }
         let alpha = match text.rsplit_once('/') {
             Some((_, alpha)) => {
@@ -441,25 +458,22 @@ impl Rgb {
                 .and_then(|rest| rest.strip_suffix(')'))
         };
         if let Some(body) = inside("rgb").or_else(|| inside("rgba")) {
-            let n = numbers(body);
-            return (n.len() >= 3).then(|| {
-                Self::new(
-                    (n.first().copied().unwrap_or_default().clamp(0.0, 255.0)).cast::<u8>(),
-                    (n.get(1).copied().unwrap_or_default().clamp(0.0, 255.0)).cast::<u8>(),
-                    (n.get(2).copied().unwrap_or_default().clamp(0.0, 255.0)).cast::<u8>(),
-                )
-            });
+            let [r, g, b, ..] = numbers(body)[..] else {
+                return None;
+            };
+            let channel = |value: f64| value.clamp(0.0, 255.0).cast::<u8>();
+            return Some(Self::new(channel(r), channel(g), channel(b)));
         }
         if let Some(body) = inside("hsl").or_else(|| inside("hsla")) {
-            let n = numbers(body);
-            return (n.len() >= 3).then(|| {
-                Hsl {
-                    h: n.first().copied().unwrap_or_default().rem_euclid(360.0),
-                    s: (n.get(1).copied().unwrap_or_default() / 100.0).clamp(0.0, 1.0),
-                    l: (n.get(2).copied().unwrap_or_default() / 100.0).clamp(0.0, 1.0),
-                }
-                .to_rgb()
-            });
+            let [hue, saturation, lightness, ..] = numbers(body)[..] else {
+                return None;
+            };
+            let hsl = Hsl {
+                h: hue.rem_euclid(360.0),
+                s: (saturation / 100.0).clamp(0.0, 1.0),
+                l: (lightness / 100.0).clamp(0.0, 1.0),
+            };
+            return Some(hsl.to_rgb());
         }
         Self::parse(text)
     }
@@ -547,11 +561,10 @@ impl P3 {
             .split_whitespace()
             .filter_map(|part| part.parse().ok())
             .collect();
-        (parts.len() >= 3).then(|| Self {
-            r: parts.first().copied().unwrap_or_default(),
-            g: parts.get(1).copied().unwrap_or_default(),
-            b: parts.get(2).copied().unwrap_or_default(),
-        })
+        match parts[..] {
+            [r, g, b, ..] => Some(Self { r, g, b }),
+            _ => None,
+        }
     }
 
     #[must_use]
