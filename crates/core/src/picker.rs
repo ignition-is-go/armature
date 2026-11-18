@@ -96,6 +96,24 @@ impl Picker {
         true
     }
 
+    /// How many options a page moves: those on show, less one kept in view as
+    /// context.
+    fn page(&self) -> isize {
+        let on_show = (self.viewport / self.option_size.max(1.0)).cast::<isize>();
+        on_show.saturating_sub(1).max(1)
+    }
+
+    /// Scrolls the column so the chosen option sits in the middle.
+    fn scroll_effect(&self) -> Effect {
+        Effect::ScrollTo {
+            offset: self.offset().cast::<u32>(),
+        }
+    }
+
+    fn scroll_to_choice(&self) -> Reaction<Part> {
+        Reaction::handled().with(self.scroll_effect())
+    }
+
     /// Chooses the option `by` steps away, skipping disabled ones, and scrolls to it.
     fn step(&mut self, by: isize, gate: Gate) -> Reaction<Part> {
         let enabled: Vec<usize> = self
@@ -124,9 +142,7 @@ impl Picker {
             Reason::Keyboard,
             gate,
         );
-        Reaction::handled().with(Effect::ScrollTo {
-            offset: self.offset().cast::<u32>(),
-        })
+        self.scroll_to_choice()
     }
 }
 
@@ -186,10 +202,6 @@ impl Primitive for Picker {
     }
 
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
-        // A page is the options on show, less one kept in view as context.
-        let page = (((self.viewport / self.option_size.max(1.0)).cast::<isize>())
-            .saturating_sub(1))
-        .max(1);
         match input {
             Input::Scrolled {
                 offset,
@@ -199,11 +211,11 @@ impl Primitive for Picker {
             } => {
                 self.viewport = viewport;
                 // A report without movement only measures the column. Nobody chose.
-                if !self
+                let moved = self
                     .scrolled_from
                     .replace(offset)
-                    .is_some_and(|was| (was - offset).abs() > f64::EPSILON)
-                {
+                    .is_some_and(|was| (was - offset).abs() > f64::EPSILON);
+                if !moved {
                     return Reaction::default();
                 }
                 let middle = (offset / self.option_size.max(1.0))
@@ -220,9 +232,7 @@ impl Primitive for Picker {
             Input::Tick { now_ms } => match self.settle_at {
                 Some(at_ms) if now_ms >= at_ms => {
                     self.settle_at = None;
-                    Reaction::default().with(Effect::ScrollTo {
-                        offset: self.offset().cast::<u32>(),
-                    })
+                    Reaction::default().with(self.scroll_effect())
                 }
                 _ => Reaction::default(),
             },
@@ -232,15 +242,13 @@ impl Primitive for Picker {
                 ..
             } => {
                 self.choose(item, Source::User, Reason::Press, gate);
-                Reaction::handled().with(Effect::ScrollTo {
-                    offset: self.offset().cast::<u32>(),
-                })
+                self.scroll_to_choice()
             }
             Input::Key { key, mods, now_ms } if !mods.ctrl && !mods.alt => match key {
                 Key::ArrowDown => self.step(1, gate),
                 Key::ArrowUp => self.step(-1, gate),
-                Key::PageDown => self.step(page, gate),
-                Key::PageUp => self.step(page.saturating_neg(), gate),
+                Key::PageDown => self.step(self.page(), gate),
+                Key::PageUp => self.step(self.page().saturating_neg(), gate),
                 Key::Home => self.step(isize::MIN, gate),
                 Key::End => self.step(isize::MAX, gate),
                 Key::Char(ch) if ch != ' ' => {
@@ -258,9 +266,7 @@ impl Primitive for Picker {
                     };
                     let key = self.items.key_at(found);
                     self.choose(Some(key), Source::User, Reason::Keyboard, gate);
-                    Reaction::handled().with(Effect::ScrollTo {
-                        offset: self.offset().cast::<u32>(),
-                    })
+                    self.scroll_to_choice()
                 }
                 _ => Reaction::default(),
             },
