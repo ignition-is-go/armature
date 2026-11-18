@@ -917,24 +917,29 @@ fn animate_presence(
             request_animation_frame(settle);
             return;
         }
-        let wait = element
-            .get_untracked()
-            .and_then(|node| running_animations(&node));
-        match wait {
-            Some(finished) => {
-                let done = Closure::once_into_js(settle);
-                let then = js_sys::Reflect::get(&finished, &"then".into()).ok();
-                if let Some(then) = then
-                    .as_ref()
-                    .and_then(|then| then.dyn_ref::<js_sys::Function>())
-                {
-                    let _ = then.call2(&finished, &done, &done);
-                }
-            }
+        match element.get_untracked() {
+            Some(node) => after_animations(&node, settle),
             None => settle(),
         }
     });
     presence
+}
+
+/// Runs `done` once every animation running on `node` has finished, or at once if
+/// none is.
+fn after_animations(node: &web_sys::Element, done: impl FnOnce() + 'static) {
+    let Some(finished) = running_animations(node) else {
+        done();
+        return;
+    };
+    let done = Closure::once_into_js(done);
+    let then = js_sys::Reflect::get(&finished, &"then".into()).ok();
+    if let Some(then) = then
+        .as_ref()
+        .and_then(|then| then.dyn_ref::<js_sys::Function>())
+    {
+        let _ = then.call2(&finished, &done, &done);
+    }
 }
 
 /// A popup is placed against its anchor when it opens, and again whenever the page
@@ -985,6 +990,7 @@ fn keep_popup_placed<P: Primitive + Send + Sync>(
     }
 }
 
+/// A press on a part that does not follow the pointer.
 fn click_handler<P: Primitive + Send + Sync>(
     ctx: Context<P>,
     part: P::Part,
@@ -1007,6 +1013,7 @@ fn click_handler<P: Primitive + Send + Sync>(
     }
 }
 
+/// The start of a pointer gesture on a part that follows the pointer.
 fn pointerdown_handler<P: Primitive + Send + Sync>(
     ctx: Context<P>,
     part: P::Part,
@@ -1025,6 +1032,7 @@ fn pointerdown_handler<P: Primitive + Send + Sync>(
     }
 }
 
+/// Focus arriving on a part by some route the primitive did not ask for.
 fn focus_handler<P: Primitive + Send + Sync>(
     ctx: Context<P>,
     part: P::Part,
