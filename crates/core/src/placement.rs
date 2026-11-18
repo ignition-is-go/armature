@@ -125,12 +125,59 @@ const fn held(value: f64, least: f64, most: f64) -> f64 {
     value.min(most).max(least)
 }
 
-/// Places a popup of `popup` beside `anchor` within `viewport`, the part of the
-/// page on show.
+/// One axis of a box: where it starts and how long it is.
+#[derive(Clone, Copy)]
+struct Span {
+    start: f64,
+    length: f64,
+}
+
+impl Span {
+    fn end(self) -> f64 {
+        self.start + self.length
+    }
+}
+
+/// A box as its span across and its span down.
+const fn spans(rect: Rect) -> (Span, Span) {
+    let across = Span {
+        start: rect.x,
+        length: rect.width,
+    };
+    let down = Span {
+        start: rect.y,
+        length: rect.height,
+    };
+    (across, down)
+}
+
+/// `position` moved as little as it takes to keep `size` on screen, clear of the
+/// edges by `padding`.
+fn kept_on_screen(position: f64, size: f64, view: Span, padding: f64) -> f64 {
+    held(position, view.start + padding, view.end() - size - padding)
+}
+
+/// `position` moved as little as it takes to keep `size` inside the anchor.
+fn kept_inside(position: f64, size: f64, anchor: Span) -> f64 {
+    held(position, anchor.start, anchor.end() - size)
+}
+
+/// Slides along the anchor's edge to stay on screen, but never so far that the
+/// popup leaves the anchor behind.
+fn slid_along(position: f64, size: f64, view: Span, anchor: Span, padding: f64) -> f64 {
+    let on_screen = kept_on_screen(position, size, view, padding);
+    if (on_screen - position).abs() < f64::EPSILON {
+        return position;
+    }
+    held(on_screen, anchor.start - size, anchor.end())
+}
+
+/// Places a popup of size `popup` beside `anchor` within `viewport`, the part of
+/// the page on show.
 ///
-/// It flips to the other side when that overflows less, slides along the anchor to stay
-/// on screen without ever leaving the anchor behind, and goes inside an anchor bigger
-/// than it when neither side has room.
+/// It flips to the other side when that overflows less, slides along the anchor to
+/// stay on screen without ever leaving the anchor behind, and goes inside an anchor
+/// bigger than it when neither side has room.
 #[must_use]
 pub fn compute_placement(
     anchor: Rect,
@@ -145,62 +192,45 @@ pub fn compute_placement(
         (_, align) => align,
     };
     let padding = options.collision_padding;
+    let (anchor_across, anchor_down) = spans(anchor);
+    let (view_across, view_down) = spans(viewport);
+
+    // The side asked for, unless the opposite one overflows less.
     let mut side = options.side;
-    let mut at = point(anchor, popup, side, align, &options);
-    let over = overflow(side, at, popup, viewport, padding);
+    let (mut x, mut y) = point(anchor, popup, side, align, &options);
+    let over = overflow(side, (x, y), popup, viewport, padding);
     if over > 0.0 {
         let other = side.opposite();
         let there = point(anchor, popup, other, align, &options);
         if overflow(other, there, popup, viewport, padding) < over {
-            (side, at) = (other, there);
+            side = other;
+            (x, y) = there;
         }
     }
+
+    // With no room on either side, a popup smaller than its anchor goes inside it.
     let mut room = available(side, anchor, viewport, &options);
-    if overflow(side, at, popup, viewport, padding) > 0.0 {
+    if overflow(side, (x, y), popup, viewport, padding) > 0.0 {
+        let clear = |length: f64| padding.mul_add(-2.0, length).max(0.0);
         if side.is_vertical() && popup.height > 0.0 && anchor.height >= popup.height {
-            let on_screen = held(
-                at.1,
-                viewport.y + padding,
-                viewport.y + viewport.height - popup.height - padding,
-            );
-            at.1 = held(on_screen, anchor.y, anchor.y + anchor.height - popup.height);
-            room.height = padding.mul_add(-2.0, viewport.height).max(0.0);
+            let on_screen = kept_on_screen(y, popup.height, view_down, padding);
+            y = kept_inside(on_screen, popup.height, anchor_down);
+            room.height = clear(viewport.height);
         } else if !side.is_vertical() && popup.width > 0.0 && anchor.width >= popup.width {
-            let on_screen = held(
-                at.0,
-                viewport.x + padding,
-                viewport.x + viewport.width - popup.width - padding,
-            );
-            at.0 = held(on_screen, anchor.x, anchor.x + anchor.width - popup.width);
-            room.width = padding.mul_add(-2.0, viewport.width).max(0.0);
+            let on_screen = kept_on_screen(x, popup.width, view_across, padding);
+            x = kept_inside(on_screen, popup.width, anchor_across);
+            room.width = clear(viewport.width);
         }
     }
+
     if side.is_vertical() {
-        let x = held(
-            at.0,
-            viewport.x + padding,
-            viewport.x + viewport.width - popup.width - padding,
-        );
-        at.0 = if (x - at.0).abs() < f64::EPSILON {
-            x
-        } else {
-            held(x, anchor.x - popup.width, anchor.x + anchor.width)
-        };
+        x = slid_along(x, popup.width, view_across, anchor_across, padding);
     } else {
-        let y = held(
-            at.1,
-            viewport.y + padding,
-            viewport.y + viewport.height - popup.height - padding,
-        );
-        at.1 = if (y - at.1).abs() < f64::EPSILON {
-            y
-        } else {
-            held(y, anchor.y - popup.height, anchor.y + anchor.height)
-        };
+        y = slid_along(y, popup.height, view_down, anchor_down, padding);
     }
     Placement {
-        x: at.0,
-        y: at.1,
+        x,
+        y,
         side,
         available: room,
     }
