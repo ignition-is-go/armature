@@ -124,6 +124,14 @@ pub struct Announcement {
     pub assertive: bool,
 }
 
+/// Where a scrolling part is scrolled to, and the lengths of its view and content.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct Scrolled {
+    offset: f64,
+    viewport: f64,
+    content: f64,
+}
+
 /// Owns one primitive's state, its parts' focus handles, and its agent registration.
 #[expect(
     clippy::struct_excessive_bools,
@@ -141,8 +149,8 @@ pub struct Machine<P: Primitive> {
     edits: HashMap<PartKey<P>, TextEdit>,
     /// Scrolls the primitive's scrolling part, if it has one.
     scroll: ScrollHandle,
-    /// The scroll offset and viewport length last reported to the primitive.
-    scrolled: (f64, f64, f64),
+    /// How far the scrolling part was scrolled when the primitive last heard.
+    scrolled: Scrolled,
     /// The accessibility node each part was last drawn as, so parts can refer to
     /// one another.
     nodes: HashMap<PartKey<P>, accesskit::NodeId>,
@@ -252,7 +260,7 @@ impl<P: Primitive> Machine<P> {
             captured: None,
             edits: HashMap::new(),
             scroll: ScrollHandle::new(),
-            scrolled: (0.0, 0.0, 0.0),
+            scrolled: Scrolled::default(),
             announcements: Vec::new(),
             blur_watch: HashMap::new(),
             away_watch: None,
@@ -1314,11 +1322,11 @@ fn record_bounds<P: Primitive>(
                 )
             };
             let viewport = f64::from(f32::from(length));
-            let now = (
-                f64::from(-f32::from(offset)),
+            let now = Scrolled {
+                offset: f64::from(-f32::from(offset)),
                 viewport,
-                viewport + f64::from(f32::from(max)),
-            );
+                content: viewport + f64::from(f32::from(max)),
+            };
             ((scrolls && now != state.scrolled).then_some(now), relinked)
         });
         if listen {
@@ -1347,9 +1355,9 @@ fn record_bounds<P: Primitive>(
                     state.scrolled = now;
                     let input = Input::Scrolled {
                         part,
-                        offset: now.0,
-                        viewport: now.1,
-                        content: now.2,
+                        offset: now.offset,
+                        viewport: now.viewport,
+                        content: now.content,
                         now_ms: state.now_ms(),
                     };
                     state.run(window, cx, |machine, _, gate| machine.send(input, gate));

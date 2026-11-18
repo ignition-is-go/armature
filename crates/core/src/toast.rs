@@ -126,6 +126,16 @@ const ACTIONS: &[&str] = &["dismiss", "action", "dismiss_all"];
 /// How far sideways a notification is dragged before letting go dismisses it.
 const SWIPE: f64 = 60.0;
 
+/// A notification being swiped away.
+#[derive(Clone, Debug)]
+struct Swipe {
+    id: String,
+    /// Where the pointer went down.
+    from: Point,
+    /// How far sideways it has gone since.
+    moved: f64,
+}
+
 /// A stack of notifications.
 ///
 /// The value is the notifications, each written with `Toast::encode`, oldest first: the
@@ -144,7 +154,7 @@ pub struct Toaster {
     hovered: bool,
     focused: Option<(Part, String)>,
     /// The notification being dragged, where the drag began and how far it has gone.
-    drag: Option<(String, Point, f64)>,
+    drag: Option<Swipe>,
 }
 
 impl Default for Toaster {
@@ -181,8 +191,8 @@ impl Toaster {
     pub fn offset(&self, id: &str) -> f64 {
         self.drag
             .as_ref()
-            .filter(|(dragged, _, _)| dragged == id)
-            .map_or(0.0, |(_, _, moved)| *moved)
+            .filter(|swipe| swipe.id == id)
+            .map_or(0.0, |swipe| swipe.moved)
     }
 
     fn lasts(&self, toast: &Toast) -> Option<u64> {
@@ -386,7 +396,7 @@ impl Primitive for Toaster {
                 } else {
                     Role::Status
                 }),
-                active: self.drag.as_ref().is_some_and(|(id, _, _)| *id == toast.id),
+                active: self.drag.as_ref().is_some_and(|swipe| swipe.id == toast.id),
                 ..Default::default()
             },
             (Part::Title, Some(_)) => Semantics::default(),
@@ -489,20 +499,24 @@ impl Primitive for Toaster {
     fn pointer(&mut self, pointer: Pointer<Part>, _: Measure<Part>, gate: Gate) -> Reaction<Part> {
         match (pointer.phase, pointer.item) {
             (PointerPhase::Down, Some(id)) => {
-                self.drag = Some((id, pointer.at, 0.0));
+                self.drag = Some(Swipe {
+                    id,
+                    from: pointer.at,
+                    moved: 0.0,
+                });
                 Reaction::default().with(Effect::CapturePointer)
             }
             (PointerPhase::Move, _) => {
-                if let Some((_, from, moved)) = &mut self.drag {
-                    *moved = pointer.at.x - from.x;
+                if let Some(swipe) = &mut self.drag {
+                    swipe.moved = pointer.at.x - swipe.from.x;
                 }
                 Reaction::default()
             }
             (PointerPhase::Up, _) => {
-                if let Some((id, _, moved)) = self.drag.take()
-                    && moved.abs() >= SWIPE
+                if let Some(swipe) = self.drag.take()
+                    && swipe.moved.abs() >= SWIPE
                 {
-                    self.remove(&[id], Source::User, Reason::Drag, gate);
+                    self.remove(&[swipe.id], Source::User, Reason::Drag, gate);
                 }
                 Reaction::default()
             }

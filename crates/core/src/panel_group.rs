@@ -46,6 +46,16 @@ impl Default for Options {
 
 const ACTIONS: &[&str] = &["set"];
 
+/// A divider being dragged.
+#[derive(Clone, Debug)]
+struct HandleDrag {
+    handle: usize,
+    /// The panel sizes when the drag began, which the movement is measured from.
+    sizes_at_start: Vec<f64>,
+    /// Where the pointer was along the group when it began.
+    began: f64,
+}
+
 /// Any number of panels side by side with a divider between each pair.
 ///
 /// Moving a divider takes from the panel on one side and gives to the other. The value
@@ -62,8 +72,7 @@ pub struct PanelGroup {
     written_sizes: Vec<PanelSizes>,
     /// The length of the group as last measured.
     space: f64,
-    /// The divider being dragged, the sizes when the drag began, and where it began.
-    drag: Option<(usize, Vec<f64>, f64)>,
+    drag: Option<HandleDrag>,
     focused: usize,
 }
 
@@ -290,7 +299,7 @@ impl Primitive for PanelGroup {
                         Orientation::Horizontal
                     }),
                     focusable: Focusable::TabStop,
-                    active: self.drag.as_ref().is_some_and(|(held, _, _)| *held == at),
+                    active: self.drag.as_ref().is_some_and(|drag| drag.handle == at),
                     ..Default::default()
                 }
             }
@@ -377,12 +386,21 @@ impl Primitive for PanelGroup {
                 let Some(at) = self.divider(pointer.item.as_deref()) else {
                     return Reaction::default();
                 };
-                self.drag = Some((at, self.sizes.clone(), along));
+                self.drag = Some(HandleDrag {
+                    handle: at,
+                    sizes_at_start: self.sizes.clone(),
+                    began: along,
+                });
                 self.focused = at;
                 Reaction::item(Part::Handle, true, pointer.item).with(Effect::CapturePointer)
             }
             PointerPhase::Move => {
-                let Some((at, from, began)) = self.drag.clone() else {
+                let Some(HandleDrag {
+                    handle,
+                    sizes_at_start,
+                    began,
+                }) = self.drag.clone()
+                else {
                     return Reaction::default();
                 };
                 let Some(group) = measure(Part::Root, None) else {
@@ -393,7 +411,7 @@ impl Primitive for PanelGroup {
                 if across && self.opts.dir == Dir::Rtl {
                     by = -by;
                 }
-                let next = self.moved(&from, at, by, 0.5);
+                let next = self.moved(&sizes_at_start, handle, by, 0.5);
                 self.commit(next, Source::User, Reason::Drag, gate);
                 Reaction::handled()
             }
