@@ -1630,8 +1630,6 @@ fn hover_handler<P: Primitive + Send + Sync>(
         };
         // Leaving for a popup this component has open is not leaving yet: the
         // pointer may cross the gap, and cut the corner, on its way there.
-        // Leaving for a popup this component has open is not leaving yet: the
-        // pointer may cross the gap, and cut the corner, on its way there.
         let popup = if inside {
             None
         } else {
