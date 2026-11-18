@@ -1589,6 +1589,15 @@ fn panel() -> armature_core::panel_layout::PanelConstraints {
     armature_core::panel_layout::PanelConstraints::default()
 }
 
+/// A panel that can shut, and is at least 20% of the space while open.
+fn sidebar() -> armature_core::panel_layout::PanelConstraints {
+    armature_core::panel_layout::PanelConstraints {
+        min: 20.0,
+        collapsible: true,
+        ..panel()
+    }
+}
+
 /// The layout after a drag moves `handle` by `delta`, nothing locked.
 fn moved(
     layout: &[f64],
@@ -1644,11 +1653,7 @@ fn panel_layouts_constraints_keep_collapsed_at_most_the_minimum() {
         }
     );
     // settling
-    let sidebar = PanelConstraints {
-        min: 20.0,
-        collapsible: true,
-        ..panel()
-    };
+    let sidebar = sidebar();
     assert_eq!(
         (
             settle(&sidebar, 11.0, 30.0, 0.5),
@@ -1807,11 +1812,7 @@ fn panel_layouts_a_handle_s_bounds_stop_at_a() {
 #[test]
 fn panel_layouts_a_shrinking_panel_collapses_past_half_the() {
     use armature_core::panel_layout::*;
-    let sidebar = PanelConstraints {
-        min: 20.0,
-        collapsible: true,
-        ..panel()
-    };
+    let sidebar = sidebar();
     // "a shrinking panel collapses past half the way, and the other takes all it frees"
     let shutting = [sidebar, panel()];
     assert_eq!(
@@ -1899,11 +1900,7 @@ fn panel_layouts_a_collapsed_panel_stays_shut_when_its() {
 #[test]
 fn panel_layouts_every_handle_s_bounds_at_once_work() {
     use armature_core::panel_layout::*;
-    let sidebar = PanelConstraints {
-        min: 20.0,
-        collapsible: true,
-        ..panel()
-    };
+    let sidebar = sidebar();
     let shutting = [sidebar, panel()];
     // "every handle's bounds at once work each handle out alone when a panel can collapse or is out of its bounds"
     assert_eq!(
@@ -2011,11 +2008,7 @@ fn panel_layouts_every_handle_s_bounds_at_once_match() {
 #[test]
 fn panel_layouts_fitting_a_layout() {
     use armature_core::panel_layout::*;
-    let sidebar = PanelConstraints {
-        min: 20.0,
-        collapsible: true,
-        ..panel()
-    };
+    let sidebar = sidebar();
     // fitting a layout
     assert_eq!(fit_layout(&[1.0, 3.0], &[panel(), panel()]), [25.0, 75.0]);
     assert_eq!(
