@@ -65,6 +65,17 @@ const DRAG_SHARE: f64 = 0.25;
 /// How fast a flick must be, in units per second, to change slide whatever its length.
 const FLICK: f64 = 300.0;
 
+/// A drag of the strip of slides, along the way they run.
+#[derive(Clone, Copy, Debug)]
+struct Dragging {
+    /// Where the pointer went down.
+    from: f64,
+    /// How far it has gone since.
+    moved: f64,
+    /// How long the viewport is.
+    viewport: f64,
+}
+
 /// Slides shown one at a time, with buttons, dots, the arrow keys and dragging to
 /// move between them.
 ///
@@ -76,12 +87,13 @@ pub struct Carousel {
     slides: Items,
     current: usize,
     playing: bool,
-    /// Whether the pointer or focus is holding the slides still.
-    held: (bool, bool),
+    /// Whether the pointer is resting on the carousel, which holds the slides still.
+    hovered: bool,
+    /// Whether focus is inside it, which holds them still too.
+    has_focus: bool,
     advance_at: Option<u64>,
     focused: Option<(Part, Option<String>)>,
-    /// Where a drag began, how far it has gone, and how wide the viewport is.
-    drag: Option<(f64, f64, f64)>,
+    drag: Option<Dragging>,
     speed: VelocityTracker,
     /// The pages as last measured, when the slides have been.
     measured: Vec<Page>,
@@ -138,12 +150,8 @@ impl Carousel {
             })
             .collect();
         // Slides drawn on top of one another are not a track that can be read.
-        if slides.windows(2).any(|pair| {
-            (pair.get(1).copied().unwrap_or_default().start
-                - pair.first().copied().unwrap_or_default().start)
-                .abs()
-                < 1.0
-        }) {
+        let mut neighbours = slides.iter().zip(slides.iter().skip(1));
+        if neighbours.any(|(slide, next)| (next.start - slide.start).abs() < 1.0) {
             return Vec::new();
         }
         let end = slides
@@ -167,7 +175,11 @@ impl Carousel {
     /// How far to move the strip of slides back to show the current page, in the
     /// units the slides are measured in. `None` until they are rendered.
     pub fn offset(&self, measure: Measure<Part>) -> Option<f64> {
-        let pages = self.measured_pages(measure);
+        self.position_in(&self.measured_pages(measure))
+    }
+
+    /// How far the strip moves to show the page the current slide is on.
+    fn position_in(&self, pages: &[Page]) -> Option<f64> {
         pages
             .iter()
             .find(|page| page.slides.contains(&self.current))
@@ -185,10 +197,7 @@ impl Carousel {
     /// measurement.
     #[must_use]
     pub fn strip_offset(&self) -> Option<f64> {
-        self.measured
-            .iter()
-            .find(|page| page.slides.contains(&self.current))
-            .map(|page| page.position)
+        self.position_in(&self.measured)
     }
 
     #[must_use]
@@ -201,8 +210,8 @@ impl Carousel {
     #[must_use]
     pub fn position(&self) -> f64 {
         // A drag across the whole viewport is a whole page.
-        let dragged = self.drag.map_or(0.0, |(_, moved, width)| {
-            moved / width.max(1.0) * self.opts.per_page.max(1).cast::<f64>()
+        let dragged = self.drag.map_or(0.0, |drag| {
+            drag.moved / drag.viewport.max(1.0) * self.opts.per_page.max(1).cast::<f64>()
         });
         let dragged = if self.opts.dir == Dir::Rtl {
             -dragged
@@ -231,30 +240,34 @@ impl Carousel {
         self.slides.iter().count()
     }
 
+    /// Once the slides are measured, a step goes to the next page as measured.
+    fn measured_target(&self, by: isize) -> Option<usize> {
+        let page = self
+            .measured
+            .iter()
+            .position(|page| page.slides.contains(&self.current))
+            .unwrap_or(0);
+        let to = (step_page(
+            page.saturating_add(1),
+            by.signum().cast::<i64>(),
+            self.measured.len(),
+            self.opts.wrap,
+        ))
+        .saturating_sub(1);
+        self.measured
+            .get(to)
+            .filter(|_| to != page)
+            .map(|landing| landing.leader)
+    }
+
+    /// The slide a step forward or back lands on, if it lands anywhere new.
     fn target(&self, by: isize) -> Option<usize> {
         let count = self.count().cast::<isize>();
         if count == 0 {
             return None;
         }
-        // Once the slides are measured, a step goes to the next page as measured.
         if !self.measured.is_empty() {
-            let page = self
-                .measured
-                .iter()
-                .position(|page| page.slides.contains(&self.current))
-                .unwrap_or(0);
-            let to = (step_page(
-                page.saturating_add(1),
-                by.signum().cast::<i64>(),
-                self.measured.len(),
-                self.opts.wrap,
-            ))
-            .saturating_sub(1);
-            return self
-                .measured
-                .get(to)
-                .filter(|_| to != page)
-                .map(|landing| landing.leader);
+            return self.measured_target(by);
         }
         // A step is a page of slides, and the last page never runs past the end.
         let per_page = self.opts.per_page.max(1).cast::<isize>();
@@ -295,7 +308,7 @@ impl Carousel {
     }
 
     const fn running(&self) -> bool {
-        self.playing && !self.held.0 && !self.held.1 && self.opts.autoplay_ms.is_some()
+        self.playing && !self.hovered && !self.has_focus && self.opts.autoplay_ms.is_some()
     }
 
     fn said(&self) -> String {
@@ -411,13 +424,13 @@ impl Primitive for Carousel {
         match input {
             Input::Focus { part, item } => {
                 self.focused = Some((part, item));
-                self.held.1 = true;
+                self.has_focus = true;
                 self.advance_at = None;
                 Reaction::default()
             }
             Input::Blur { .. } => {
                 self.focused = None;
-                self.held.1 = false;
+                self.has_focus = false;
                 Reaction::default()
             }
             Input::Hover {
@@ -425,7 +438,7 @@ impl Primitive for Carousel {
                 inside,
                 ..
             } => {
-                self.held.0 = inside;
+                self.hovered = inside;
                 self.advance_at = None;
                 Reaction::default()
             }
@@ -522,7 +535,11 @@ impl Primitive for Carousel {
                 let down = self.opts.orientation == crate::keys::Orientation::Vertical;
                 let length = measure(Part::Viewport, None)
                     .map_or(1.0, |rect| if down { rect.height } else { rect.width });
-                self.drag = Some((self.along(&pointer), 0.0, length));
+                self.drag = Some(Dragging {
+                    from: self.along(&pointer),
+                    moved: 0.0,
+                    viewport: length,
+                });
                 self.measured = self.measured_pages(measure);
                 self.speed = VelocityTracker::default();
                 self.advance_at = None;
@@ -530,19 +547,22 @@ impl Primitive for Carousel {
             }
             PointerPhase::Move => {
                 let along = self.along(&pointer);
-                if let Some((from, moved, _)) = &mut self.drag {
-                    *moved = along - *from;
+                if let Some(drag) = &mut self.drag {
+                    drag.moved = along - drag.from;
                     self.speed.push(pointer.now_ms.cast::<f64>(), along);
                 }
                 Reaction::default()
             }
             PointerPhase::Up => {
-                let Some((_, moved, width)) = self.drag.take() else {
+                let Some(Dragging {
+                    moved, viewport, ..
+                }) = self.drag.take()
+                else {
                     return Reaction::default();
                 };
                 let velocity = self.speed.velocity_at(pointer.now_ms.cast::<f64>());
                 // Dragging towards the start of the line brings the next slide in.
-                let far = moved.abs() >= width * DRAG_SHARE || velocity.abs() >= FLICK;
+                let far = moved.abs() >= viewport * DRAG_SHARE || velocity.abs() >= FLICK;
                 let towards_start = if velocity.abs() >= FLICK {
                     velocity < 0.0
                 } else {
