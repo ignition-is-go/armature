@@ -4,7 +4,7 @@ use crate::keys::{Dir, Key, Modifiers};
 use crate::menu::{self, Entry, Landing, Menu};
 use crate::popup::{Align, Placement, Side};
 use crate::primitive::{
-    Focusable, Input, Item, PartOf, Primitive, Reaction, Relations, Role, Semantics,
+    FocusTarget, Focusable, Input, Item, PartOf, Primitive, Reaction, Relations, Role, Semantics,
 };
 use crate::roving::Ends;
 use crate::roving::{self, Nav};
@@ -135,15 +135,15 @@ impl Menubar {
             handled: reaction.handled,
             effects: reaction.effects,
             focus: reaction.focus.map(|target| match target.part {
-                menu::Part::Item => crate::primitive::FocusTarget {
+                menu::Part::Item => FocusTarget {
                     part: Part::Item,
                     item: target.item.map(|entry| format!("{key}/{entry}")),
                 },
-                menu::Part::Trigger => crate::primitive::FocusTarget {
+                menu::Part::Trigger => FocusTarget {
                     part: Part::Trigger,
                     item: Some(key.clone()),
                 },
-                menu::Part::Content | menu::Part::Area => crate::primitive::FocusTarget {
+                menu::Part::Content | menu::Part::Area => FocusTarget {
                     part: Part::Content,
                     item: Some(key.clone()),
                 },
