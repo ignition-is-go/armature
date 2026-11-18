@@ -2,6 +2,23 @@
 //! against armature's primitives. Each test is titled after the upstream file, and
 //! each assertion carries the upstream test's own name where one maps across.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::string_slice,
+    clippy::panic,
+    clippy::arithmetic_side_effects,
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::cast_lossless,
+    clippy::float_cmp,
+    clippy::too_many_lines,
+    reason = "a test fails by panicking, and its arithmetic is on values it wrote itself"
+)]
+
 use armature_core::accordion::{self, Accordion};
 use armature_core::keys::{Dir, Key, Modifiers, Orientation, apple_key};
 use armature_core::listbox::{self, Listbox};

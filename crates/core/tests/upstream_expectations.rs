@@ -2,6 +2,23 @@
 //! against armature. Each test names the upstream file it follows. Units differ in
 //! one place: upstream measures velocity in px/ms, armature in units per second.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::string_slice,
+    clippy::panic,
+    clippy::arithmetic_side_effects,
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::cast_lossless,
+    clippy::float_cmp,
+    clippy::too_many_lines,
+    reason = "a test fails by panicking, and its arithmetic is on values it wrote itself"
+)]
+
 use armature_core::gesture::{
     DECELERATION, VelocityTracker, dim_amount, expand_amount, project_distance, rubber_band,
 };
