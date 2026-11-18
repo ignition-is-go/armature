@@ -944,10 +944,6 @@ fn shortcuts() {
 
 // trigger-match.test.ts
 #[test]
-#[allow(
-    clippy::cloned_ref_to_slice_refs,
-    reason = "the rules are written as upstream writes them, one cloned into a list"
-)]
 fn trigger_matching() {
     use armature_core::trigger_match::*;
     let mention = || TriggerRule::new("@");
@@ -978,10 +974,6 @@ fn trigger_matching() {
 }
 
 #[test]
-#[allow(
-    clippy::cloned_ref_to_slice_refs,
-    reason = "the rules are written as upstream writes them, one cloned into a list"
-)]
 fn trigger_matching_the_nearest_trigger_before_the_caret_wins() {
     use armature_core::trigger_match::*;
     let mention = || TriggerRule::new("@");
@@ -1004,18 +996,14 @@ fn trigger_matching_the_nearest_trigger_before_the_caret_wins() {
         ..TriggerRule::new("/")
     };
     assert_eq!(
-        found("/mod", &[command.clone()], 0).as_deref(),
+        found("/mod", std::slice::from_ref(&command), 0).as_deref(),
         Some("/mod@0")
     );
-    assert_eq!(found(" /mod", &[command.clone()], 0), None);
+    assert_eq!(found(" /mod", std::slice::from_ref(&command), 0), None);
     assert_eq!(found("a /mod", &[command], 0), None);
 }
 
 #[test]
-#[allow(
-    clippy::cloned_ref_to_slice_refs,
-    reason = "the rules are written as upstream writes them, one cloned into a list"
-)]
 fn trigger_matching_boundary_line_matches_at_the_start_of() {
     use armature_core::trigger_match::*;
     let mention = || TriggerRule::new("@");
@@ -1029,7 +1017,7 @@ fn trigger_matching_boundary_line_matches_at_the_start_of() {
         ..TriggerRule::new("/")
     };
     assert_eq!(
-        found("one\n/x", &[line.clone()], 0).as_deref(),
+        found("one\n/x", std::slice::from_ref(&line), 0).as_deref(),
         Some("/x@4")
     );
     assert_eq!(found("one /x", &[line], 0), None);
@@ -1049,10 +1037,6 @@ fn trigger_matching_boundary_line_matches_at_the_start_of() {
 }
 
 #[test]
-#[allow(
-    clippy::cloned_ref_to_slice_refs,
-    reason = "the rules are written as upstream writes them, one cloned into a list"
-)]
 fn trigger_matching_spaces_allow_phrases_and_a_number_caps() {
     use armature_core::trigger_match::*;
     let mention = || TriggerRule::new("@");
@@ -1066,11 +1050,11 @@ fn trigger_matching_spaces_allow_phrases_and_a_number_caps() {
         ..mention()
     };
     assert_eq!(
-        found("@next wed", &[phrases.clone()], 0).as_deref(),
+        found("@next wed", std::slice::from_ref(&phrases), 0).as_deref(),
         Some("@next wed@0")
     );
     assert_eq!(
-        found("@next ", &[phrases.clone()], 0).as_deref(),
+        found("@next ", std::slice::from_ref(&phrases), 0).as_deref(),
         Some("@next @0")
     );
     assert_eq!(found("@a  b", &[phrases], 0), None);
@@ -1078,19 +1062,18 @@ fn trigger_matching_spaces_allow_phrases_and_a_number_caps() {
         spaces: Spaces::Words(2),
         ..mention()
     };
-    assert_eq!(found("@a b", &[two.clone()], 0).as_deref(), Some("@a b@0"));
     assert_eq!(
-        found("@a b ", &[two.clone()], 0).as_deref(),
+        found("@a b", std::slice::from_ref(&two), 0).as_deref(),
+        Some("@a b@0")
+    );
+    assert_eq!(
+        found("@a b ", std::slice::from_ref(&two), 0).as_deref(),
         Some("@a b @0")
     );
     assert_eq!(found("@a b c", &[two], 0), None);
 }
 
 #[test]
-#[allow(
-    clippy::cloned_ref_to_slice_refs,
-    reason = "the rules are written as upstream writes them, one cloned into a list"
-)]
 fn trigger_matching_a_multi_character_trigger_matches() {
     use armature_core::trigger_match::*;
     let found = |text: &str, rules: &[TriggerRule], offset: usize| {
@@ -1119,10 +1102,6 @@ fn trigger_matching_a_multi_character_trigger_matches() {
 }
 
 #[test]
-#[allow(
-    clippy::cloned_ref_to_slice_refs,
-    reason = "the rules are written as upstream writes them, one cloned into a list"
-)]
 fn trigger_matching_maxlength_ends_a_long_query() {
     use armature_core::trigger_match::*;
     let mention = || TriggerRule::new("@");
@@ -1136,7 +1115,7 @@ fn trigger_matching_maxlength_ends_a_long_query() {
         max_length: 3,
         ..mention()
     };
-    assert_eq!(found("@abcd", &[short.clone()], 0), None);
+    assert_eq!(found("@abcd", std::slice::from_ref(&short), 0), None);
     assert_eq!(found("@abc", &[short], 0).as_deref(), Some("@abc@0"));
     // "the offset says where the text starts, and an unknown character before it is no boundary"
     assert_eq!(found(" @al", &[mention()], 10).as_deref(), Some("@al@11"));
@@ -1153,10 +1132,6 @@ fn trigger_matching_maxlength_ends_a_long_query() {
 }
 
 #[test]
-#[allow(
-    clippy::cloned_ref_to_slice_refs,
-    reason = "the rules are written as upstream writes them, one cloned into a list"
-)]
 fn trigger_matching_isvalidquery_and_isatboundary() {
     use armature_core::trigger_match::*;
     let mention = || TriggerRule::new("@");
@@ -1199,10 +1174,6 @@ fn trigger_matching_isvalidquery_and_isatboundary() {
 }
 
 #[test]
-#[allow(
-    clippy::cloned_ref_to_slice_refs,
-    reason = "the rules are written as upstream writes them, one cloned into a list"
-)]
 fn trigger_matching_random_edits_never_leave_a_range_that() {
     use armature_core::trigger_match::*;
     // "random edits never leave a range that ends before its trigger"
