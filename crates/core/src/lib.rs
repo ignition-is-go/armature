@@ -52,6 +52,7 @@ pub mod otp_input;
 pub mod outline;
 pub mod pagination;
 pub mod panel_group;
+pub mod panel_layout;
 pub mod picker;
 pub mod popover;
 pub mod popup;

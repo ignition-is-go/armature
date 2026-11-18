@@ -1460,3 +1460,442 @@ fn locale_tags() {
     assert_eq!(to_locale("not a locale!"), None);
     assert_eq!(to_locale(""), None);
 }
+
+// resizable.test.ts: sizes, settling, moving a handle, fitting a layout, panels and keys
+#[test]
+fn panel_layouts() {
+    use armature_core::panel_layout::*;
+    let panel = PanelConstraints::default;
+    let moved = |layout: &[f64], panels: &[PanelConstraints], handle, delta| {
+        resize_at(layout, panels, handle, delta, 0.5, &[])
+    };
+    // "numbers are percentages, and pixel and rem sizes resolve against the space"
+    assert_eq!(to_percent(PanelSize::Percent(30.0), 0.0, 16.0), Some(30.0));
+    assert_eq!(to_percent(PanelSize::Px(200.0), 800.0, 16.0), Some(25.0));
+    assert_eq!(to_percent(PanelSize::Rem(10.0), 800.0, 20.0), Some(25.0));
+    // "pixel sizes stay unknown until the group is measured"
+    assert_eq!(to_percent(PanelSize::Px(200.0), 0.0, 16.0), None);
+    assert_eq!(
+        constraints_of(
+            PanelSizes {
+                min_size: Some(PanelSize::Px(200.0)),
+                ..Default::default()
+            },
+            0.0,
+            16.0
+        )
+        .min,
+        0.0
+    );
+    // "constraints keep collapsed at most the minimum and the maximum at least the minimum"
+    let odd = PanelSizes {
+        min_size: Some(PanelSize::Percent(30.0)),
+        max_size: Some(PanelSize::Percent(20.0)),
+        collapsed_size: Some(PanelSize::Percent(40.0)),
+        ..Default::default()
+    };
+    assert_eq!(
+        constraints_of(odd, 1000.0, 16.0),
+        PanelConstraints {
+            min: 30.0,
+            max: 30.0,
+            collapsible: false,
+            collapsed: 30.0,
+            initial: None
+        }
+    );
+    // settling
+    let sidebar = PanelConstraints {
+        min: 20.0,
+        collapsible: true,
+        ..panel()
+    };
+    assert_eq!(
+        (
+            settle(&sidebar, 11.0, 30.0, 0.5),
+            settle(&sidebar, 9.0, 30.0, 0.5)
+        ),
+        (20.0, 0.0)
+    );
+    assert_eq!(
+        (
+            settle(&sidebar, 9.0, 0.0, 0.5),
+            settle(&sidebar, 11.0, 0.0, 0.5)
+        ),
+        (0.0, 20.0)
+    );
+    assert_eq!(
+        (
+            settle(&sidebar, 19.0, 20.0, 1.0),
+            settle(&sidebar, 1.0, 0.0, 1.0)
+        ),
+        (0.0, 20.0)
+    );
+    assert_eq!(
+        settle(
+            &PanelConstraints {
+                min: 20.0,
+                ..panel()
+            },
+            5.0,
+            30.0,
+            0.5
+        ),
+        20.0
+    );
+    // "the panels on either side give and take the same amount"
+    assert_eq!(
+        moved(&[30.0, 70.0], &[panel(), panel()], 0, 10.0),
+        Some(vec![40.0, 60.0])
+    );
+    assert_eq!(
+        moved(&[30.0, 70.0], &[panel(), panel()], 0, -10.0),
+        Some(vec![20.0, 80.0])
+    );
+    // "returns the same array when nothing can move"
+    assert_eq!(
+        moved(
+            &[30.0, 70.0],
+            &[
+                PanelConstraints {
+                    max: 30.0,
+                    ..panel()
+                },
+                panel()
+            ],
+            0,
+            10.0
+        ),
+        None
+    );
+    assert_eq!(moved(&[30.0, 70.0], &[panel(), panel()], 0, 0.0), None);
+    assert_eq!(moved(&[30.0, 70.0], &[panel(), panel()], 1, 10.0), None);
+    // "a panel at its minimum passes the rest on to the next one"
+    let three = [
+        panel(),
+        PanelConstraints {
+            min: 20.0,
+            ..panel()
+        },
+        panel(),
+    ];
+    assert_eq!(
+        moved(&[20.0, 30.0, 50.0], &three, 0, 30.0),
+        Some(vec![50.0, 20.0, 30.0])
+    );
+    // "a disabled handle stops the cascade either way, so the panels past it keep their sizes"
+    let four = [
+        panel(),
+        PanelConstraints {
+            min: 20.0,
+            ..panel()
+        },
+        panel(),
+        PanelConstraints {
+            min: 10.0,
+            ..panel()
+        },
+    ];
+    let layout = [20.0, 30.0, 30.0, 20.0];
+    let locked = [false, true];
+    assert_eq!(
+        resize_at(&layout, &four, 0, 30.0, 0.5, &locked),
+        Some(vec![30.0, 20.0, 30.0, 20.0])
+    );
+    assert_eq!(
+        resize_at(&layout, &four, 2, -40.0, 0.5, &locked),
+        Some(vec![20.0, 30.0, 0.0, 50.0])
+    );
+    assert_eq!(
+        resize_at(&[20.0, 30.0, 0.0, 50.0], &four, 2, -5.0, 0.5, &locked),
+        None
+    );
+    assert_eq!(
+        moved(&layout, &four, 0, 30.0),
+        Some(vec![50.0, 20.0, 10.0, 20.0])
+    );
+    // "a handle's bounds stop at a disabled handle"
+    assert_eq!(
+        handle_bounds(&[20.0, 30.0, 50.0], &three, 0, &locked),
+        (0.0, 30.0)
+    );
+    assert_eq!(
+        handle_bounds(&[20.0, 30.0, 50.0], &three, 0, &[]),
+        (0.0, 80.0)
+    );
+    // "the growing panel stops at its maximum"
+    assert_eq!(
+        moved(
+            &[20.0, 80.0],
+            &[
+                PanelConstraints {
+                    max: 40.0,
+                    ..panel()
+                },
+                panel()
+            ],
+            0,
+            50.0
+        ),
+        Some(vec![40.0, 60.0])
+    );
+    // "a shrinking panel collapses past half the way, and the other takes all it frees"
+    let shutting = [sidebar, panel()];
+    assert_eq!(
+        moved(&[30.0, 70.0], &shutting, 0, -15.0),
+        Some(vec![20.0, 80.0])
+    );
+    assert_eq!(
+        moved(&[30.0, 70.0], &shutting, 0, -21.0),
+        Some(vec![0.0, 100.0])
+    );
+    // "dragging a collapsed panel open snaps it to its minimum"
+    assert_eq!(moved(&[0.0, 100.0], &shutting, 0, 5.0), None);
+    assert_eq!(
+        moved(&[0.0, 100.0], &shutting, 0, 12.0),
+        Some(vec![20.0, 80.0])
+    );
+    // "a collapse that frees more than the other panel can take stops at the minimum"
+    assert_eq!(
+        moved(
+            &[30.0, 70.0],
+            &[
+                sidebar,
+                PanelConstraints {
+                    max: 75.0,
+                    ..panel()
+                }
+            ],
+            0,
+            -25.0
+        ),
+        Some(vec![25.0, 75.0])
+    );
+    // "a collapsed panel stays shut when its neighbours can't free its minimum"
+    let tight = [
+        PanelConstraints {
+            min: 30.0,
+            collapsible: true,
+            ..panel()
+        },
+        PanelConstraints {
+            min: 80.0,
+            ..panel()
+        },
+    ];
+    assert_eq!(moved(&[0.0, 100.0], &tight, 0, 40.0), None);
+    // "Home and End go as far as the panels allow"
+    let ends = [
+        PanelConstraints {
+            min: 10.0,
+            max: 60.0,
+            collapsible: true,
+            ..panel()
+        },
+        PanelConstraints {
+            min: 30.0,
+            ..panel()
+        },
+    ];
+    assert_eq!(handle_bounds(&[30.0, 70.0], &ends, 0, &[]), (0.0, 60.0));
+    assert_eq!(
+        handle_bounds(
+            &[30.0, 70.0],
+            &[
+                PanelConstraints {
+                    min: 10.0,
+                    ..panel()
+                },
+                PanelConstraints {
+                    min: 50.0,
+                    ..panel()
+                }
+            ],
+            0,
+            &[]
+        ),
+        (10.0, 50.0)
+    );
+    // "every handle's bounds at once work each handle out alone when a panel can collapse or is out of its bounds"
+    assert_eq!(
+        all_handle_bounds(&[30.0, 70.0], &shutting, &[]),
+        [(0.0, 100.0)]
+    );
+    assert_eq!(
+        all_handle_bounds(
+            &[5.0, 95.0],
+            &[
+                PanelConstraints {
+                    min: 10.0,
+                    ..panel()
+                },
+                panel()
+            ],
+            &[]
+        ),
+        [(10.0, 100.0)]
+    );
+    // "every handle's bounds at once match each handle's own", with upstream's seeded generator
+    let mut seed: u64 = 7;
+    let mut random = || {
+        seed = seed * 16807 % 2_147_483_647;
+        (seed - 1) as f64 / 2_147_483_646.0
+    };
+    let mut one_pass = 0;
+    for run in 0..500 {
+        let count = 2 + (random() * 7.0) as usize;
+        let collapsing = run % 4 == 0;
+        let bound = |random: &mut dyn FnMut() -> f64, most: f64| {
+            if random() < 0.5 {
+                (random() * most).round()
+            } else {
+                random() * most
+            }
+        };
+        let panels: Vec<PanelConstraints> = (0..count)
+            .map(|_| {
+                let min = if random() < 0.4 {
+                    0.0
+                } else {
+                    bound(&mut random, 15.0)
+                };
+                let collapsible = collapsing && random() < 0.5;
+                let max = if random() < 0.4 {
+                    100.0
+                } else {
+                    (min + bound(&mut random, 60.0)).min(100.0)
+                };
+                let collapsed = if collapsible && random() < 0.5 {
+                    min / 2.0
+                } else {
+                    0.0
+                };
+                PanelConstraints {
+                    min,
+                    max,
+                    collapsible,
+                    collapsed,
+                    initial: None,
+                }
+            })
+            .collect();
+        let wanted: Vec<f64> = panels.iter().map(|_| random() * 100.0).collect();
+        let mut layout = fit_layout(&wanted, &panels);
+        for handle in 0..count - 1 {
+            let pick = random();
+            let delta = if pick < 0.15 {
+                home_delta(&layout, &panels, handle)
+            } else if pick < 0.3 {
+                end_delta(&layout, &panels, handle)
+            } else {
+                continue;
+            };
+            layout = resize_at(&layout, &panels, handle, delta, 1.0, &[]).unwrap_or(layout);
+        }
+        if run % 10 == 5 {
+            layout = vec![100.0 / count as f64; count];
+        }
+        if panels.iter().zip(&layout).all(|(one, size)| {
+            !one.collapsible && *size >= one.min - 1e-6 && *size <= one.max + 1e-6
+        }) {
+            one_pass += 1;
+        }
+        let locked: Vec<bool> = panels.iter().map(|_| random() < 0.2).collect();
+        let all = all_handle_bounds(&layout, &panels, &locked);
+        assert_eq!(all.len(), count - 1);
+        for (handle, bounds) in all.iter().enumerate() {
+            let one = handle_bounds(&layout, &panels, handle, &locked);
+            assert!(
+                (bounds.0 - one.0).abs() < 1e-9 && (bounds.1 - one.1).abs() < 1e-9,
+                "run {run}, handle {handle}: {bounds:?} against {one:?}"
+            );
+        }
+    }
+    assert!(one_pass > 250, "most runs take the one pass: {one_pass}");
+    // fitting a layout
+    assert_eq!(fit_layout(&[1.0, 3.0], &[panel(), panel()]), [25.0, 75.0]);
+    assert_eq!(
+        fit_layout(
+            &[10.0, 90.0],
+            &[
+                PanelConstraints {
+                    min: 20.0,
+                    ..panel()
+                },
+                panel()
+            ]
+        ),
+        [20.0, 80.0]
+    );
+    assert_eq!(
+        fit_layout(
+            &[50.0, 50.0],
+            &[
+                PanelConstraints {
+                    max: 30.0,
+                    ..panel()
+                },
+                panel()
+            ]
+        ),
+        [30.0, 70.0]
+    );
+    assert_eq!(
+        fit_layout(&[0.0, 50.0, 50.0], &[sidebar, panel(), panel()]),
+        [0.0, 50.0, 50.0]
+    );
+    // "panels without a default share what's left evenly"
+    assert_eq!(
+        initial_layout(&[
+            PanelConstraints {
+                initial: Some(40.0),
+                ..panel()
+            },
+            panel(),
+            panel()
+        ]),
+        [40.0, 30.0, 30.0]
+    );
+    let thirds = initial_layout(&[panel(), panel(), panel()]);
+    assert!(thirds.iter().all(|size| (size - 100.0 / 3.0).abs() < 1e-3));
+    // "panels that stay keep their sizes relative to each other when one comes"
+    let grown = carry_layout(
+        &[("a", 25.0), ("b", 75.0)],
+        &["a", "b", "c"],
+        &[
+            panel(),
+            panel(),
+            PanelConstraints {
+                initial: Some(20.0),
+                ..panel()
+            },
+        ],
+    );
+    assert_eq!(grown, [20.0, 60.0, 20.0]);
+    assert_eq!(
+        carry_layout(
+            &[("a", 20.0), ("b", 60.0), ("c", 20.0)],
+            &["a", "b"],
+            &[panel(), panel()]
+        ),
+        [25.0, 75.0]
+    );
+    // "resizing a panel goes through the handle after it, or before it for the last"
+    let plain = [panel(), panel(), panel()];
+    assert_eq!(
+        resize_panel(&[30.0, 40.0, 30.0], &plain, 0, 20.0, 0.5, &[]),
+        Some(vec![20.0, 50.0, 30.0])
+    );
+    assert_eq!(
+        resize_panel(&[30.0, 40.0, 30.0], &plain, 2, 40.0, 0.5, &[]),
+        Some(vec![30.0, 30.0, 40.0])
+    );
+    // "Enter collapses the panel before a handle, or the one after when only it can"
+    let can = PanelConstraints {
+        collapsible: true,
+        ..panel()
+    };
+    assert_eq!(toggle_target(&[can, panel()], 0), Some(0));
+    assert_eq!(toggle_target(&[panel(), can], 0), Some(1));
+    assert_eq!(toggle_target(&[panel(), panel()], 0), None);
+}

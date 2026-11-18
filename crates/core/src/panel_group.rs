@@ -1,6 +1,10 @@
 use crate::agent::{ActError, Snapshot};
 use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::keys::{Dir, Key, Orientation};
+use crate::panel_layout::{
+    PanelConstraints, end_delta, fit_layout, handle_bounds, home_delta, initial_layout, resize_at,
+    resize_panel, toggle_target,
+};
 use crate::primitive::{
     Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction,
     Role, Semantics, ValueRange,
@@ -48,6 +52,10 @@ const ACTIONS: &[&str] = &["set"];
 pub struct PanelGroup {
     opts: Options,
     sizes: Vec<f64>,
+    /// Each panel's own limits.
+    panels: Vec<PanelConstraints>,
+    /// The dividers that cannot be moved.
+    locked: Vec<bool>,
     /// The divider being dragged, the sizes when the drag began, and where it began.
     drag: Option<(usize, Vec<f64>, f64)>,
     focused: usize,
@@ -63,7 +71,7 @@ impl PanelGroup {
     /// `sizes` are brought to a total of a hundred, keeping their proportions.
     pub fn new(opts: Options, sizes: &[f64]) -> Self {
         let total: f64 = sizes.iter().sum();
-        let sizes = sizes
+        let sizes: Vec<f64> = sizes
             .iter()
             .map(|size| {
                 if total > 0.0 {
@@ -73,12 +81,53 @@ impl PanelGroup {
                 }
             })
             .collect();
+        let panels = sizes
+            .iter()
+            .map(|_| PanelConstraints {
+                min: opts.min,
+                ..Default::default()
+            })
+            .collect();
         PanelGroup {
             opts,
             sizes,
+            panels,
+            locked: Vec::new(),
             drag: None,
             focused: 0,
         }
+    }
+
+    /// Gives each panel its own limits: a least and greatest size, and whether it
+    /// can shut. The sizes are brought within them, and a panel with a default
+    /// size starts at it.
+    pub fn with_panels(mut self, panels: &[PanelConstraints]) -> Self {
+        if panels.len() == self.sizes.len() {
+            self.panels = panels.to_vec();
+            self.sizes = if panels.iter().any(|panel| panel.initial.is_some()) {
+                initial_layout(panels)
+            } else {
+                fit_layout(&self.sizes, panels)
+            };
+        }
+        self
+    }
+
+    /// Fixes dividers in place, by their index. Resizing does not reach past one.
+    pub fn locking(mut self, dividers: &[usize]) -> Self {
+        self.locked = (0..self.sizes.len())
+            .map(|at| dividers.contains(&at))
+            .collect();
+        self
+    }
+
+    /// Whether a panel that can shut is shut.
+    pub fn is_collapsed(&self, panel: usize) -> bool {
+        self.panels.get(panel).is_some_and(|limits| {
+            limits.collapsible
+                && self.sizes[panel] <= limits.collapsed + 1e-6
+                && limits.collapsed < limits.min
+        })
     }
 
     /// Each panel's share, in percent.
@@ -94,14 +143,15 @@ impl PanelGroup {
     }
 
     /// The sizes after the divider following panel `at` moves by `by` percent, from
-    /// `from`. Neither panel beside it goes below the minimum.
-    fn moved(&self, from: &[f64], at: usize, by: f64) -> Vec<f64> {
-        let (before, after) = (from[at], from[at + 1]);
-        let by = by.clamp(self.opts.min - before, after - self.opts.min);
-        let mut next = from.to_vec();
-        next[at] = before + by;
-        next[at + 1] = after - by;
-        next
+    /// `from`. A panel at its minimum passes the rest on to the next, and one
+    /// that can shut does so past `threshold` of the way: half for a drag, all
+    /// of it for a key.
+    fn moved(&self, from: &[f64], at: usize, by: f64, threshold: f64) -> Vec<f64> {
+        if self.locked.get(at).copied().unwrap_or(false) {
+            return from.to_vec();
+        }
+        resize_at(from, &self.panels, at, by, threshold, &self.locked)
+            .unwrap_or_else(|| from.to_vec())
     }
 
     fn commit(&mut self, next: Vec<f64>, source: Source, reason: Reason, gate: Gate) -> bool {
@@ -159,13 +209,13 @@ impl Primitive for PanelGroup {
             },
             (Part::Panel, _) => Semantics::default(),
             (Part::Handle, Some(at)) => {
-                let pair = self.sizes[at] + self.sizes[at + 1];
+                let (least, most) = handle_bounds(&self.sizes, &self.panels, at, &self.locked);
                 Semantics {
                     role: Some(Role::Separator),
                     range: Some(ValueRange {
                         now: self.sizes[at],
-                        min: self.opts.min,
-                        max: pair - self.opts.min,
+                        min: least,
+                        max: most,
                     }),
                     // A divider between side-by-side panels stands upright.
                     orientation: Some(if self.opts.orientation == Orientation::Horizontal {
@@ -210,12 +260,36 @@ impl Primitive for PanelGroup {
                     Key::ArrowLeft if across => -step * forward,
                     Key::ArrowDown if !across => step,
                     Key::ArrowUp if !across => -step,
-                    // All the way to one side or the other.
-                    Key::Home => -100.0,
-                    Key::End => 100.0,
+                    // As far as the panel before the divider goes, either way.
+                    Key::Home => home_delta(&self.sizes, &self.panels, self.focused),
+                    Key::End => end_delta(&self.sizes, &self.panels, self.focused),
+                    // Enter shuts the panel beside the divider that can shut, or
+                    // opens it again.
+                    Key::Enter => {
+                        let Some(panel) = toggle_target(&self.panels, self.focused) else {
+                            return Reaction::default();
+                        };
+                        let limits = self.panels[panel];
+                        let target = if self.is_collapsed(panel) {
+                            limits.min
+                        } else {
+                            limits.collapsed
+                        };
+                        if let Some(next) = resize_panel(
+                            &self.sizes,
+                            &self.panels,
+                            panel,
+                            target,
+                            1.0,
+                            &self.locked,
+                        ) {
+                            self.commit(next, Source::User, Reason::Keyboard, gate);
+                        }
+                        return Reaction::handled();
+                    }
                     _ => return Reaction::default(),
                 };
-                let next = self.moved(&self.sizes, self.focused, by);
+                let next = self.moved(&self.sizes, self.focused, by, 1.0);
                 self.commit(next, Source::User, Reason::Keyboard, gate);
                 Reaction::handled()
             }
@@ -252,7 +326,7 @@ impl Primitive for PanelGroup {
                 if across && self.opts.dir == Dir::Rtl {
                     by = -by;
                 }
-                let next = self.moved(&from, at, by);
+                let next = self.moved(&from, at, by, 0.5);
                 self.commit(next, Source::User, Reason::Drag, gate);
                 Reaction::handled()
             }
@@ -302,7 +376,7 @@ impl Primitive for PanelGroup {
         let (at, share) = parsed
             .filter(|(at, _)| at + 1 < self.sizes.len())
             .ok_or_else(|| ActError::UnknownItem(given.to_string()))?;
-        let next = self.moved(&self.sizes, at, share - self.sizes[at]);
+        let next = self.moved(&self.sizes, at, share - self.sizes[at], 1.0);
         if self.commit(next, Source::Agent, Reason::Action, gate) {
             Ok(())
         } else {
@@ -339,6 +413,25 @@ mod tests {
         }
     }
 
+    /// Presses a key on the divider after panel `divider`.
+    fn key(group: &mut PanelGroup, divider: usize, key: Key) {
+        group.send(
+            Input::Focus {
+                part: Part::Handle,
+                item: Some(divider.to_string()),
+            },
+            &mut |_| true,
+        );
+        group.send(
+            Input::Key {
+                key,
+                mods: Modifiers::default(),
+                now_ms: 0,
+            },
+            &mut |_| true,
+        );
+    }
+
     #[test]
     fn a_divider_moves_share_between_the_two_panels_beside_it() {
         let mut group = PanelGroup::default();
@@ -348,7 +441,21 @@ mod tests {
             ["35", "40", "25"],
             "the third panel is untouched"
         );
-        drag(&mut group, "1", 300.0, 0.0);
+        drag(&mut group, "1", 300.0, 240.0);
+        assert_eq!(
+            group.value(),
+            ["35", "25", "40"],
+            "the first panel is untouched"
+        );
+        drag(&mut group, "1", 240.0, 0.0);
+        assert_eq!(
+            group.value(),
+            ["10", "10", "80"],
+            "a panel at its minimum passes the rest on to the one before"
+        );
+        let mut group = PanelGroup::default();
+        drag(&mut group, "0", 100.0, 140.0);
+        drag(&mut group, "1", 300.0, 180.0);
         assert_eq!(
             group.value(),
             ["35", "10", "55"],
@@ -388,11 +495,52 @@ mod tests {
         assert_eq!(group.value(), ["25", "25", "50"]);
         assert_eq!(
             group.semantics(Part::Handle, Some("0")).range.unwrap().max,
-            40.0
+            80.0,
+            "it can take from both panels after it, down to their minimum"
         );
         assert!(
             group.semantics(Part::Handle, Some("2")).hidden,
             "nothing follows the last panel"
+        );
+    }
+
+    #[test]
+    fn a_panel_with_its_own_limits_shuts_opens_and_passes_a_resize_on() {
+        let sidebar = PanelConstraints {
+            min: 20.0,
+            collapsible: true,
+            ..Default::default()
+        };
+        let plain = PanelConstraints::default();
+        let mut group = PanelGroup::new(Options::default(), &[30.0, 40.0, 30.0]).with_panels(&[
+            sidebar,
+            PanelConstraints { min: 20.0, ..plain },
+            plain,
+        ]);
+        // Enter on the first divider shuts the sidebar, and again opens it to its least size.
+        key(&mut group, 0, Key::Enter);
+        assert!(group.is_collapsed(0));
+        assert_eq!(group.sizes(), [0.0, 70.0, 30.0]);
+        key(&mut group, 0, Key::Enter);
+        assert_eq!(group.sizes(), [20.0, 50.0, 30.0]);
+        // End takes from the middle panel until it is at its least, then from the last.
+        key(&mut group, 0, Key::End);
+        assert_eq!(group.sizes(), [100.0 - 20.0, 20.0, 0.0]);
+        let range = group.semantics(Part::Handle, Some("0")).range.unwrap();
+        assert_eq!((range.min, range.max), (0.0, 80.0));
+    }
+
+    #[test]
+    fn a_locked_divider_does_not_move_and_stops_a_resize_reaching_past_it() {
+        let limits = [PanelConstraints::default(); 3];
+        let mut group = PanelGroup::new(Options::default(), &[20.0, 30.0, 50.0])
+            .with_panels(&limits)
+            .locking(&[1]);
+        key(&mut group, 0, Key::End);
+        assert_eq!(
+            group.sizes(),
+            [50.0, 0.0, 50.0],
+            "the last panel keeps its size"
         );
     }
 
