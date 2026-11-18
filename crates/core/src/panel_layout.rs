@@ -118,17 +118,21 @@ pub fn settle(panel: &PanelConstraints, target: f64, current: f64, threshold: f6
     }
 }
 
+/// Whether a handle is fixed in place. Handles past the end of `locked` are not.
+fn is_locked(locked: &[bool], handle: usize) -> bool {
+    locked.get(handle).copied().unwrap_or(false)
+}
+
 /// The panels a handle can take from, nearest first. It stops at a locked handle.
 fn shrinkable(count: usize, handle: usize, forward: bool, locked: &[bool]) -> Vec<usize> {
-    let is_locked = |handle: usize| locked.get(handle).copied().unwrap_or(false);
     if forward {
         (handle + 1..count)
-            .take_while(|index| *index == handle + 1 || !is_locked(index - 1))
+            .take_while(|index| *index == handle + 1 || !is_locked(locked, index - 1))
             .collect()
     } else {
         (0..=handle)
             .rev()
-            .take_while(|index| *index == handle || !is_locked(*index))
+            .take_while(|index| *index == handle || !is_locked(locked, *index))
             .collect()
     }
 }
@@ -230,23 +234,24 @@ pub fn all_handle_bounds(
             .map(|handle| handle_bounds(layout, panels, handle, locked))
             .collect();
     }
-    let is_locked = |handle: usize| locked.get(handle).copied().unwrap_or(false);
+    // How much each panel, and those after it that a resize can reach, can give up.
     let mut spare = vec![0.0; layout.len() + 1];
     for index in (0..layout.len()).rev() {
-        spare[index] = (layout[index] - panels[index].min).max(0.0)
-            + if is_locked(index) {
-                0.0
-            } else {
-                spare[index + 1]
-            };
+        let own = (layout[index] - panels[index].min).max(0.0);
+        let passed_on = if is_locked(locked, index) {
+            0.0
+        } else {
+            spare[index + 1]
+        };
+        spare[index] = own + passed_on;
     }
     handles
         .map(|handle| {
-            let size = layout[handle];
-            let shrink =
-                (size - panels[handle].min).min(panels[handle + 1].max - layout[handle + 1]);
-            let grow = (panels[handle].max - size).min(spare[handle + 1]);
-            (size - shrink.max(0.0), size + grow.max(0.0))
+            let (before, after) = (handle, handle + 1);
+            let size = layout[before];
+            let can_shrink = (size - panels[before].min).min(panels[after].max - layout[after]);
+            let can_grow = (panels[before].max - size).min(spare[after]);
+            (size - can_shrink.max(0.0), size + can_grow.max(0.0))
         })
         .collect()
 }
@@ -314,33 +319,38 @@ pub fn carry_layout(
     ids: &[&str],
     panels: &[PanelConstraints],
 ) -> Vec<f64> {
-    let kept = |id: &str| {
+    let kept_size = |id: &str| {
         previous
             .iter()
             .find(|(known, _)| *known == id)
             .map(|(_, size)| *size)
     };
-    if !ids.iter().any(|id| kept(id).is_some()) {
+    if !ids.iter().any(|id| kept_size(id).is_some()) {
         return initial_layout(panels);
     }
-    let fresh: Vec<Option<f64>> = ids
+    // A new panel takes its default, or an even share.
+    let even_share = 100.0 / ids.len() as f64;
+    let new_size = |panel: &PanelConstraints| panel.initial.unwrap_or(even_share);
+    let new_total: f64 = ids
         .iter()
         .zip(panels)
-        .map(|(id, panel)| {
-            kept(id)
-                .is_none()
-                .then(|| panel.initial.unwrap_or(100.0 / ids.len() as f64))
-        })
-        .collect();
-    let kept_total: f64 = ids.iter().filter_map(|id| kept(id)).sum();
-    let room = (100.0 - fresh.iter().flatten().sum::<f64>()).max(0.0);
+        .filter(|(id, _)| kept_size(id).is_none())
+        .map(|(_, panel)| new_size(panel))
+        .sum();
+    // The panels that stay share what is left, in the proportions they had.
+    let kept_total: f64 = ids.iter().filter_map(|id| kept_size(id)).sum();
+    let room = (100.0 - new_total).max(0.0);
+    let scale = if kept_total > 0.0 {
+        room / kept_total
+    } else {
+        0.0
+    };
     let wanted: Vec<f64> = ids
         .iter()
-        .zip(&fresh)
-        .map(|(id, fresh)| {
-            fresh.unwrap_or_else(|| {
-                kept(id).unwrap_or(0.0) / if kept_total == 0.0 { 1.0 } else { kept_total } * room
-            })
+        .zip(panels)
+        .map(|(id, panel)| match kept_size(id) {
+            Some(size) => size * scale,
+            None => new_size(panel),
         })
         .collect();
     fit_layout(&wanted, panels)
@@ -356,12 +366,11 @@ pub fn resize_panel(
     threshold: f64,
     locked: &[bool],
 ) -> Option<Vec<f64>> {
-    let is_locked = |handle: usize| locked.get(handle).copied().unwrap_or(false);
     let delta = target - layout[index];
-    let after = (index + 1 < layout.len() && !is_locked(index))
+    let after = (index + 1 < layout.len() && !is_locked(locked, index))
         .then(|| resize_at(layout, panels, index, delta, threshold, locked))
         .flatten();
-    let before = (index > 0 && !is_locked(index - 1))
+    let before = (index > 0 && !is_locked(locked, index - 1))
         .then(|| resize_at(layout, panels, index - 1, -delta, threshold, locked))
         .flatten();
     let mut best: Option<Vec<f64>> = None;
@@ -387,67 +396,99 @@ pub fn storage_key(save_id: &str) -> String {
     format!("armature-panels:{save_id}")
 }
 
-/// Reads stored layouts: a JSON object from each set of panel ids, joined by
-/// commas, to its sizes. Anything else reads as nothing stored.
-fn stored_entries(stored: &str) -> Vec<(String, Vec<f64>)> {
-    let mut entries = Vec::new();
-    let mut rest = stored
-        .trim()
-        .strip_prefix('{')
-        .and_then(|rest| rest.strip_suffix('}'))
-        .unwrap_or_default()
-        .trim();
-    while let Some(after) = rest.strip_prefix('"') {
-        // The key, with `\"` and `\\` unescaped.
-        let mut key = String::new();
-        let mut chars = after.char_indices();
-        let end = loop {
-            match chars.next() {
-                Some((_, '\\')) => key.extend(chars.next().map(|(_, ch)| ch)),
-                Some((at, '"')) => break at,
-                Some((_, ch)) => key.push(ch),
-                None => return Vec::new(),
+/// The stored text being read, and how far the reading has got.
+struct Reader<'a> {
+    rest: &'a str,
+}
+
+impl<'a> Reader<'a> {
+    /// Steps past `expected`, and any space before it. `false` if it is not next.
+    fn take(&mut self, expected: char) -> bool {
+        match self.rest.trim_start().strip_prefix(expected) {
+            Some(rest) => {
+                self.rest = rest;
+                true
             }
-        };
-        let Some(list) = after[end + 1..]
-            .trim_start()
-            .strip_prefix(':')
-            .map(str::trim_start)
-            .and_then(|list| list.strip_prefix('['))
-        else {
-            return Vec::new();
-        };
-        let Some(close) = list.find(']') else {
-            return Vec::new();
-        };
-        let sizes: Option<Vec<f64>> = list[..close]
-            .split(',')
-            .filter(|size| !size.trim().is_empty())
-            .map(|size| {
-                size.trim()
-                    .parse::<f64>()
-                    .ok()
-                    .filter(|size| size.is_finite())
-            })
-            .collect();
-        let Some(sizes) = sizes else {
-            return Vec::new();
-        };
-        entries.push((key, sizes));
-        rest = list[close + 1..]
-            .trim_start()
-            .strip_prefix(',')
-            .unwrap_or(&list[close + 1..])
-            .trim_start();
+            None => false,
+        }
     }
-    if rest.is_empty() { entries } else { Vec::new() }
+
+    /// A quoted string, with `\"` and `\\` unescaped.
+    fn string(&mut self) -> Option<String> {
+        if !self.take('"') {
+            return None;
+        }
+        let mut text = String::new();
+        let mut chars = self.rest.char_indices();
+        loop {
+            match chars.next()? {
+                (_, '\\') => text.push(chars.next()?.1),
+                (end, '"') => {
+                    self.rest = &self.rest[end + 1..];
+                    return Some(text);
+                }
+                (_, ch) => text.push(ch),
+            }
+        }
+    }
+
+    /// A list of numbers in square brackets.
+    fn numbers(&mut self) -> Option<Vec<f64>> {
+        if !self.take('[') {
+            return None;
+        }
+        let end = self.rest.find(']')?;
+        let (list, rest) = (&self.rest[..end], &self.rest[end + 1..]);
+        self.rest = rest;
+        list.split(',')
+            .map(str::trim)
+            .filter(|number| !number.is_empty())
+            .map(|number| number.parse::<f64>().ok().filter(|size| size.is_finite()))
+            .collect()
+    }
+
+    /// One `"ids": [sizes]` pair.
+    fn entry(&mut self) -> Option<(String, Vec<f64>)> {
+        let ids = self.string()?;
+        if !self.take(':') {
+            return None;
+        }
+        Some((ids, self.numbers()?))
+    }
+}
+
+/// Reads stored layouts: a JSON object from each set of panel ids, joined by
+/// commas, to its sizes. `None` for anything else, which reads as nothing stored.
+fn parse_layouts(stored: &str) -> Option<Vec<(String, Vec<f64>)>> {
+    let mut reader = Reader { rest: stored };
+    if !reader.take('{') {
+        return None;
+    }
+    let mut layouts = Vec::new();
+    if reader.take('}') {
+        return Some(layouts);
+    }
+    loop {
+        layouts.push(reader.entry()?);
+        if reader.take('}') {
+            break;
+        }
+        if !reader.take(',') {
+            return None;
+        }
+    }
+    reader.rest.trim().is_empty().then_some(layouts)
+}
+
+fn stored_layouts(stored: &str) -> Vec<(String, Vec<f64>)> {
+    parse_layouts(stored).unwrap_or_default()
 }
 
 /// The layout saved for exactly this set of panels, from what was stored. Each
 /// set of panels keeps its own, so adding or removing one does not lose the rest.
 pub fn load_layout(stored: &str, ids: &[&str]) -> Option<Vec<f64>> {
     let wanted = ids.join(",");
-    stored_entries(stored)
+    stored_layouts(stored)
         .into_iter()
         .find(|(key, sizes)| *key == wanted && sizes.len() == ids.len())
         .map(|(_, sizes)| sizes)
@@ -457,7 +498,7 @@ pub fn load_layout(stored: &str, ids: &[&str]) -> Option<Vec<f64>> {
 /// layouts already stored for other sets. Sizes are rounded to a thousandth.
 pub fn save_layout(stored: &str, ids: &[&str], layout: &[f64]) -> String {
     let wanted = ids.join(",");
-    let mut entries: Vec<(String, Vec<f64>)> = stored_entries(stored)
+    let mut entries: Vec<(String, Vec<f64>)> = stored_layouts(stored)
         .into_iter()
         .filter(|(key, _)| *key != wanted)
         .collect();

@@ -1947,22 +1947,30 @@ fn carousel_layouts() {
     );
     assert_eq!(positions(&pages), [600.0, 900.0, 1200.0, 0.0, 300.0]);
     // "at rest, the current page moves mid-track with the same slides in view"
+    let at = |position, first| LoopAt { position, first };
+    let forward_to = |page| {
+        Some(Heading {
+            page,
+            forward: true,
+        })
+    };
+    let rotated = |first, delta| Some(Rotation { first, delta });
     assert_eq!(
-        loop_rotation(&track, &view, 0.0, 0, None, false),
-        Some((3, 600.0))
+        loop_rotation(&track, &view, at(0.0, 0), None, false),
+        rotated(3, 600.0)
     );
     assert_eq!(
-        loop_rotation(&track, &view, 600.0, 3, None, false),
-        Some((3, 0.0))
+        loop_rotation(&track, &view, at(600.0, 3), None, false),
+        rotated(3, 0.0)
     );
     // "a step past the end rotates only when the next page doesn't lie ahead"
     assert_eq!(
-        loop_rotation(&track, &view, 1200.0, 0, Some((0, true)), true),
-        Some((2, -600.0))
+        loop_rotation(&track, &view, at(1200.0, 0), forward_to(0), true),
+        rotated(2, -600.0)
     );
     assert_eq!(
-        loop_rotation(&track, &view, 600.0, 0, Some((3, true)), true),
-        Some((0, 0.0))
+        loop_rotation(&track, &view, at(600.0, 0), forward_to(3), true),
+        rotated(0, 0.0)
     );
     // "loops seamlessly only with a page's step of room to either side"
     assert!(can_loop(
@@ -1995,9 +2003,11 @@ fn carousel_layouts() {
                 max_scroll: 0.0,
                 ..view
             },
-            0.0,
-            0,
-            Some((1, false)),
+            at(0.0, 0),
+            Some(Heading {
+                page: 1,
+                forward: false
+            }),
             false
         ),
         None

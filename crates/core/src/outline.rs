@@ -661,35 +661,32 @@ impl Primitive for Outline {
     }
 
     fn act(&mut self, action: &str, item: Option<&str>, gate: Gate) -> Result<(), ActError> {
-        if !ACTIONS.contains(&action) {
-            return Err(ActError::UnknownAction {
-                action: action.to_string(),
-                valid: ACTIONS,
-            });
-        }
-        let key = item.ok_or(ActError::MissingItem {
-            action: ACTIONS
-                .iter()
-                .find(|known| **known == action)
-                .copied()
-                .unwrap_or("move_up"),
-        })?;
+        let unknown = || ActError::UnknownAction {
+            action: action.to_string(),
+            valid: ACTIONS,
+        };
+        let action = ACTIONS
+            .iter()
+            .copied()
+            .find(|known| *known == action)
+            .ok_or_else(unknown)?;
+        let key = item.ok_or(ActError::MissingItem { action })?;
         let mut moving = OutlineMove::grab(&self.rows, key, self.opts.max_depth)
             .ok_or_else(|| ActError::UnknownItem(key.to_string()))?;
-        let all = |_: &str| true;
+        let every_row = |_: &str| true;
         match action {
-            "move_up" => moving.step(false, &all),
-            "move_down" => moving.step(true, &all),
-            "indent" => moving.indent(true, &all),
-            _ => moving.indent(false, &all),
+            "move_up" => moving.step(false, &every_row),
+            "move_down" => moving.step(true, &every_row),
+            "indent" => moving.indent(true, &every_row),
+            _ => moving.indent(false, &every_row),
         };
-        match moving.dropped(&self.rows) {
-            // Nowhere to go that way.
-            None => Ok(()),
-            Some(landed) => self
-                .commit(landed, Source::Agent, Reason::Action, gate)
-                .map(|_| ())
-                .ok_or(ActError::Refused),
+        // With nowhere to go that way there is nothing to commit, or to refuse.
+        let Some(landed) = moving.dropped(&self.rows) else {
+            return Ok(());
+        };
+        match self.commit(landed, Source::Agent, Reason::Action, gate) {
+            Some(_) => Ok(()),
+            None => Err(ActError::Refused),
         }
     }
 }

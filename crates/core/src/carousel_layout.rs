@@ -250,55 +250,82 @@ pub fn can_loop(track: &Track, view: &LoopView) -> bool {
     view.max_scroll >= 2.0 * step - 1.0
 }
 
-/// Which slide the track should start at, and how far the scroll position shifts
-/// to keep the same slides in view. At rest it moves the current page toward the
-/// middle of the track, so there is room to scroll either way. Heading for a
-/// page, given as `(page, forward)`, it makes sure that page lies ahead; with
-/// `lazy` it leaves the track alone when it already does. `None` when the track
-/// is too short to rotate.
-pub fn loop_rotation(
-    track: &Track,
-    view: &LoopView,
-    position: f64,
-    first: usize,
-    to: Option<(usize, bool)>,
-    lazy: bool,
-) -> Option<(usize, f64)> {
-    let groups = loop_groups(track, view);
-    let now = place_slides(track, first);
-    let edge = position + view.padding_start;
-    // The slide at the start of the view, which stays put through a rotation.
+/// Where a looping carousel is: how far it is scrolled, and which slide the
+/// track starts at.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LoopAt {
+    pub position: f64,
+    pub first: usize,
+}
+
+/// The page a looping carousel is heading for, and which way it is going there.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Heading {
+    pub page: usize,
+    pub forward: bool,
+}
+
+/// A change to which slide the track starts at, and how far the scroll position
+/// shifts with it so that the same slides stay in view.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Rotation {
+    pub first: usize,
+    pub delta: f64,
+}
+
+/// The slide at the start of the view, which stays put through a rotation.
+fn anchor_slide(boxes: &[SlideBox], view_start: f64, first: usize) -> usize {
     let mut anchor = first;
-    for (index, slide) in now.iter().enumerate() {
-        if slide.start <= edge + 0.5 && slide.start > now[anchor].start {
+    for (index, slide) in boxes.iter().enumerate() {
+        if slide.start <= view_start + 0.5 && slide.start > boxes[anchor].start {
             anchor = index;
         }
     }
-    let mut leaders: Vec<usize> = groups.iter().map(|group| group[0]).collect();
-    if leaders.contains(&first) {
-        leaders.insert(0, first);
+    anchor
+}
+
+/// The rotation a looping carousel should take. At rest it moves the current
+/// page toward the middle of the track, so there is room to scroll either way.
+/// Heading for a page, it makes sure that page lies ahead; with `lazy` it leaves
+/// the track alone when it already does. `None` when the track is too short to
+/// rotate.
+pub fn loop_rotation(
+    track: &Track,
+    view: &LoopView,
+    at: LoopAt,
+    to: Option<Heading>,
+    lazy: bool,
+) -> Option<Rotation> {
+    let groups = loop_groups(track, view);
+    let now = place_slides(track, at.first);
+    let anchor = anchor_slide(&now, at.position + view.padding_start, at.first);
+    // The track can start at any page's first slide. Where it starts now is
+    // tried first, so it wins a tie.
+    let mut starts: Vec<usize> = groups.iter().map(|group| group[0]).collect();
+    if starts.contains(&at.first) {
+        starts.insert(0, at.first);
     }
-    let mut best: Option<(usize, f64, f64)> = None;
-    for candidate in leaders {
-        let boxes = if candidate == first {
+    // The best start is the one that leaves most room to scroll either way.
+    let mut best: Option<(Rotation, f64)> = None;
+    for first in starts {
+        let boxes = if first == at.first {
             now.clone()
         } else {
-            place_slides(track, candidate)
+            place_slides(track, first)
         };
         let delta = boxes[anchor].start - now[anchor].start;
-        let moved = position + delta;
-        let mut room = moved.min(view.max_scroll - moved);
-        if let Some((page, forward)) = to {
-            let target = page_of(
-                &boxes,
-                &groups[page],
-                view.align,
-                view.snapport,
-                view.padding_start,
-            )
-            .position;
-            let heading = if forward { 1.0 } else { -1.0 };
-            if (target - moved) * heading < -0.5 {
+        let position = at.position + delta;
+        let mut room = position.min(view.max_scroll - position);
+        if let Some(heading) = to {
+            let page = &groups[heading.page];
+            let target =
+                page_of(&boxes, page, view.align, view.snapport, view.padding_start).position;
+            let lies_ahead = if heading.forward {
+                target >= position - 0.5
+            } else {
+                target <= position + 0.5
+            };
+            if !lies_ahead {
                 continue;
             }
             room = room.min(target).min(view.max_scroll - target);
@@ -306,12 +333,12 @@ pub fn loop_rotation(
         if room < -0.5 {
             continue;
         }
-        if best.is_none_or(|(_, _, most)| room > most + 0.5) {
-            best = Some((candidate, delta, room));
+        if best.is_none_or(|(_, most)| room > most + 0.5) {
+            best = Some((Rotation { first, delta }, room));
         }
-        if lazy && candidate == first {
+        if lazy && first == at.first {
             break;
         }
     }
-    best.map(|(first, delta, _)| (first, delta))
+    best.map(|(rotation, _)| rotation)
 }

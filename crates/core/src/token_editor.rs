@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use crate::agent::{ActError, Snapshot, SnapshotItem};
 use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::keys::{Dir, Key};
@@ -5,7 +7,7 @@ use crate::primitive::{
     Effect, Focusable, Input, Item, PartOf, Primitive, Reaction, Role, Semantics,
 };
 use crate::token_text::{
-    Segment, Token, from_text, line_boundary, normalize, offset_text, replace_range, slice_value,
+    Segment, Token, from_text, normalize, offset_of_token, offset_text, replace_range, slice_value,
     to_label, to_text, token_at, value_length, word_boundary,
 };
 use crate::trigger_match::{TriggerMatch, TriggerRule, find_trigger_match};
@@ -33,6 +35,42 @@ const ACTIONS: &[&str] = &["set", "insert", "remove_token", "clear", "undo", "re
 /// How many edits can be undone.
 const HISTORY: usize = 100;
 
+/// Who made an edit and how, as the owner's gate hears it.
+#[derive(Clone, Copy)]
+struct Cause {
+    source: Source,
+    reason: Reason,
+}
+
+impl Cause {
+    /// Typing, deleting, pasting and cutting.
+    const TYPED: Cause = Cause {
+        source: Source::User,
+        reason: Reason::Text,
+    };
+    /// Choosing a suggestion.
+    const CHOSEN: Cause = Cause {
+        source: Source::User,
+        reason: Reason::Press,
+    };
+    /// A call the owner makes on the person's behalf, such as attaching a file.
+    const OWNER: Cause = Cause {
+        source: Source::User,
+        reason: Reason::Action,
+    };
+    const AGENT: Cause = Cause {
+        source: Source::Agent,
+        reason: Reason::Action,
+    };
+}
+
+/// The content at an earlier moment, for undo.
+#[derive(Clone, Debug)]
+struct Past {
+    value: Vec<Segment>,
+    caret: usize,
+}
+
 /// Text with tokens set into it, edited at a caret: a prompt that mentions people
 /// and files, say. A token is one step for the caret and goes whole when deleted.
 /// The value is the content written as text, each token as `[@label](kind:value)`.
@@ -44,11 +82,13 @@ pub struct TokenEditor {
     caret: usize,
     /// The other end of the selection, when there is one.
     anchor: Option<usize>,
-    /// Earlier contents and where the caret was, newest last.
-    undone: Vec<(Vec<Segment>, usize)>,
-    redone: Vec<(Vec<Segment>, usize)>,
+    /// What undo steps back to, newest last.
+    undone: Vec<Past>,
+    /// What redo steps forward to, newest last.
+    redone: Vec<Past>,
 }
 
+// Reading the editor.
 impl TokenEditor {
     pub fn new(opts: Options) -> Self {
         TokenEditor {
@@ -67,118 +107,17 @@ impl TokenEditor {
     }
 
     /// What is selected, as where it starts and ends. `None` when it is empty.
-    pub fn selection(&self) -> Option<(usize, usize)> {
+    pub fn selection(&self) -> Option<Range<usize>> {
         let anchor = self.anchor.filter(|anchor| *anchor != self.caret)?;
-        Some((anchor.min(self.caret), anchor.max(self.caret)))
+        Some(anchor.min(self.caret)..anchor.max(self.caret))
     }
 
-    /// The range an edit replaces: the selection, or nothing at the caret.
-    fn target(&self) -> (usize, usize) {
-        self.selection().unwrap_or((self.caret, self.caret))
-    }
-
-    /// Puts a token at the caret that is still loading, such as a file being
-    /// uploaded, and returns its id for `settle`. `None` if the owner refused.
-    pub fn insert_pending(&mut self, token: Token, gate: Gate) -> Option<String> {
-        // An id the content already has names that token, so this one gets its own.
-        let taken = crate::token_text::offset_of_token(&self.value, &token.id).is_some();
-        let token = Token {
-            pending: true,
-            id: if taken {
-                String::new()
-            } else {
-                token.id.clone()
-            },
-            ..token
-        };
-        let (start, end) = self.target();
-        if !self.replace(
-            start,
-            end,
-            vec![Segment::Token(token)],
-            Source::User,
-            Reason::Action,
-            gate,
-        ) {
-            return None;
-        }
-        token_at(&self.value, self.caret - 1).map(|token| token.id.clone())
-    }
-
-    /// Says a loading token has finished. One that loaded stays, settled, here and
-    /// in what undo would bring back. One that failed is taken out.
-    pub fn settle(&mut self, id: &str, loaded: bool, gate: Gate) {
-        let settled = |value: &mut Vec<Segment>| {
-            for segment in value.iter_mut() {
-                if let Segment::Token(token) = segment
-                    && token.id == id
-                {
-                    token.pending = false;
-                }
-            }
-        };
-        settled(&mut self.value);
-        self.undone
-            .iter_mut()
-            .chain(self.redone.iter_mut())
-            .for_each(|(value, _)| settled(value));
-        if !loaded && let Some(at) = crate::token_text::offset_of_token(&self.value, id) {
-            let caret = self.caret;
-            self.replace(at, at + 1, Vec::new(), Source::User, Reason::Action, gate);
-            self.caret = if caret > at { caret - 1 } else { caret }.min(value_length(&self.value));
-            // A token that never loaded is not something to undo back to.
-            self.undone.pop();
-        }
-    }
-
-    /// Changes what a token shows. Returns whether there is such a token and the
-    /// owner allowed it.
-    pub fn update_token(&mut self, id: &str, label: &str, gate: Gate) -> bool {
-        let Some(at) = crate::token_text::offset_of_token(&self.value, id) else {
-            return false;
-        };
-        let Some(token) = token_at(&self.value, at).cloned() else {
-            return false;
-        };
-        let caret = self.caret;
-        let allowed = self.replace(
-            at,
-            at + 1,
-            vec![Segment::Token(Token {
-                label: label.to_string(),
-                ..token
-            })],
-            Source::User,
-            Reason::Action,
-            gate,
-        );
-        self.caret = caret;
-        allowed
-    }
-
-    /// Steps back or forward through the edits. Returns whether there was one and
-    /// the owner allowed it.
-    fn travel(&mut self, back: bool, source: Source, gate: Gate) -> bool {
-        let (from, to) = if back {
-            (&mut self.undone, &mut self.redone)
-        } else {
-            (&mut self.redone, &mut self.undone)
-        };
-        let Some((value, caret)) = from.last().cloned() else {
-            return false;
-        };
-        if !gate(&ValueChange {
-            value: vec![to_text(&value)],
-            source,
-            reason: Reason::Edit,
-        }) {
-            return false;
-        }
-        from.pop();
-        to.push((std::mem::replace(&mut self.value, value), self.caret));
-        self.caret = caret.min(value_length(&self.value));
-        self.anchor = None;
-        true
+    /// The content before and after the caret, for drawing the caret between them.
+    pub fn split_at_caret(&self) -> (Vec<Segment>, Vec<Segment>) {
+        (
+            slice_value(&self.value, 0, self.caret),
+            slice_value(&self.value, self.caret, usize::MAX),
+        )
     }
 
     /// The content as a person reads it, with each token as its label.
@@ -193,176 +132,314 @@ impl TokenEditor {
         find_trigger_match(&before, 0, rules)
     }
 
+    fn length(&self) -> usize {
+        value_length(&self.value)
+    }
+
+    /// The range the next edit replaces: the selection, or nothing at the caret.
+    fn target(&self) -> Range<usize> {
+        self.selection().unwrap_or(self.caret..self.caret)
+    }
+
+    /// Where a token sits, and the token.
+    fn token(&self, id: &str) -> Option<(usize, &Token)> {
+        let at = offset_of_token(&self.value, id)?;
+        Some((at, token_at(&self.value, at)?))
+    }
+
+    /// The token just before the caret: the one Backspace would take.
+    fn token_before_caret(&self) -> Option<&Token> {
+        token_at(&self.value, self.caret.checked_sub(1)?)
+    }
+
+    /// Where the line the caret is on starts.
+    fn line_start(&self) -> usize {
+        let before: Vec<char> = offset_text(&self.value).chars().take(self.caret).collect();
+        before
+            .iter()
+            .rposition(|ch| *ch == '\n')
+            .map_or(0, |line_break| line_break + 1)
+    }
+
+    /// Where the line the caret is on ends.
+    fn line_end(&self) -> usize {
+        let after = offset_text(&self.value)
+            .chars()
+            .skip(self.caret)
+            .position(|ch| ch == '\n');
+        after.map_or(self.length(), |line_break| self.caret + line_break)
+    }
+}
+
+// Changing the content.
+impl TokenEditor {
     /// Replaces a trigger and its query with a token and a space, as choosing a
     /// suggestion does. Returns whether the owner allowed it.
     pub fn complete(&mut self, found: &TriggerMatch, token: Token, gate: Gate) -> bool {
-        self.replace(
-            found.start,
-            found.end,
-            vec![Segment::Token(token), Segment::Text(" ".into())],
-            Source::User,
-            Reason::Press,
-            gate,
-        )
+        let content = vec![Segment::Token(token), Segment::Text(" ".into())];
+        self.replace(found.start..found.end, content, Cause::CHOSEN, gate)
     }
 
-    /// Puts `content` in place of `start..end` and the caret after it.
-    fn replace(
-        &mut self,
-        start: usize,
-        end: usize,
-        content: Vec<Segment>,
-        source: Source,
-        reason: Reason,
-        gate: Gate,
-    ) -> bool {
-        let added = value_length(&normalize(content.clone()));
-        let next = replace_range(&self.value, start, end, content);
-        if next == self.value {
-            return true;
+    /// Puts a token at the caret that is still loading, such as a file being
+    /// uploaded, and returns its id for `settle`. `None` if the owner refused.
+    pub fn insert_pending(&mut self, token: Token, gate: Gate) -> Option<String> {
+        // An id the content already has names that token, so this one gets its own.
+        let id = if self.token(&token.id).is_some() {
+            String::new()
+        } else {
+            token.id.clone()
+        };
+        let token = Token {
+            pending: true,
+            id,
+            ..token
+        };
+        if !self.replace(
+            self.target(),
+            vec![Segment::Token(token)],
+            Cause::OWNER,
+            gate,
+        ) {
+            return None;
         }
-        let allowed = gate(&ValueChange {
-            value: vec![to_text(&next)],
-            source,
-            reason,
-        });
-        if allowed {
-            self.undone
-                .push((std::mem::replace(&mut self.value, next), self.caret));
-            if self.undone.len() > HISTORY {
-                self.undone.remove(0);
+        self.token_before_caret().map(|token| token.id.clone())
+    }
+
+    /// Says a loading token has finished. One that loaded stays, settled, here and
+    /// in what undo would bring back. One that failed is taken out.
+    pub fn settle(&mut self, id: &str, loaded: bool, gate: Gate) {
+        let settle_in = |value: &mut Vec<Segment>| {
+            for segment in value {
+                if let Segment::Token(token) = segment
+                    && token.id == id
+                {
+                    token.pending = false;
+                }
             }
-            self.redone.clear();
-            self.caret = start + added;
-            self.anchor = None;
+        };
+        settle_in(&mut self.value);
+        for past in self.undone.iter_mut().chain(&mut self.redone) {
+            settle_in(&mut past.value);
         }
+        if loaded {
+            return;
+        }
+        let Some((at, _)) = self.token(id) else {
+            return;
+        };
+        let caret = self.caret;
+        if self.replace(at..at + 1, Vec::new(), Cause::OWNER, gate) {
+            // The caret stays with the text it was in.
+            self.caret = if caret > at { caret - 1 } else { caret };
+            // A token that never loaded is not something to undo back to.
+            self.undone.pop();
+        }
+    }
+
+    /// Changes what a token shows. Returns whether there is such a token and the
+    /// owner allowed it.
+    pub fn update_token(&mut self, id: &str, label: &str, gate: Gate) -> bool {
+        let Some((at, token)) = self.token(id) else {
+            return false;
+        };
+        let renamed = Token {
+            label: label.to_string(),
+            ..token.clone()
+        };
+        let caret = self.caret;
+        let allowed = self.replace(
+            at..at + 1,
+            vec![Segment::Token(renamed)],
+            Cause::OWNER,
+            gate,
+        );
+        self.caret = caret;
         allowed
     }
 
-    fn typed(&mut self, text: &str, gate: Gate) -> Reaction<Part> {
-        let (start, end) = self.target();
-        self.replace(
-            start,
-            end,
-            vec![Segment::Text(text.to_string())],
-            Source::User,
-            Reason::Text,
-            gate,
-        );
-        Reaction::handled()
+    /// Puts `content` in place of `range` and the caret after it. Every edit goes
+    /// through here, so each one is offered to the owner and can be undone.
+    fn replace(
+        &mut self,
+        range: Range<usize>,
+        content: Vec<Segment>,
+        cause: Cause,
+        gate: Gate,
+    ) -> bool {
+        let added = value_length(&normalize(content.clone()));
+        let next = replace_range(&self.value, range.start, range.end, content);
+        if next == self.value {
+            return true;
+        }
+        let change = ValueChange {
+            value: vec![to_text(&next)],
+            source: cause.source,
+            reason: cause.reason,
+        };
+        if !gate(&change) {
+            return false;
+        }
+        let before = Past {
+            value: std::mem::replace(&mut self.value, next),
+            caret: self.caret,
+        };
+        self.undone.push(before);
+        if self.undone.len() > HISTORY {
+            self.undone.remove(0);
+        }
+        self.redone.clear();
+        self.caret = range.start + added;
+        self.anchor = None;
+        true
     }
 
-    /// The shortcuts held with Ctrl, or Cmd on a Mac.
-    fn command(&mut self, key: Key, shift: bool, gate: Gate) -> Option<Reaction<Part>> {
-        let copied = |editor: &Self| {
-            editor.selection().map(|(start, end)| Effect::Copy {
-                text: to_text(&slice_value(&editor.value, start, end)),
+    fn delete(&mut self, range: Range<usize>, cause: Cause, gate: Gate) -> bool {
+        self.replace(range, Vec::new(), cause, gate)
+    }
+
+    fn insert_text(&mut self, text: &str, gate: Gate) {
+        self.replace(
+            self.target(),
+            vec![Segment::Text(text.to_string())],
+            Cause::TYPED,
+            gate,
+        );
+    }
+
+    /// Undoes the last edit, or redoes the last one undone. Returns whether there
+    /// was one and the owner allowed it.
+    fn step_history(&mut self, undo: bool, source: Source, gate: Gate) -> bool {
+        let (from, to) = if undo {
+            (&mut self.undone, &mut self.redone)
+        } else {
+            (&mut self.redone, &mut self.undone)
+        };
+        let Some(past) = from.last() else {
+            return false;
+        };
+        let change = ValueChange {
+            value: vec![to_text(&past.value)],
+            source,
+            reason: Reason::Edit,
+        };
+        if !gate(&change) {
+            return false;
+        }
+        let Some(past) = from.pop() else {
+            return false;
+        };
+        to.push(Past {
+            value: std::mem::replace(&mut self.value, past.value),
+            caret: self.caret,
+        });
+        self.caret = past.caret.min(value_length(&self.value));
+        self.anchor = None;
+        true
+    }
+}
+
+// Keys.
+impl TokenEditor {
+    /// A key held with Ctrl, or Cmd on a Mac: select all, copy, cut, undo, redo.
+    /// `None` for a key that is not one of these.
+    fn on_command(&mut self, key: Key, shift: bool, gate: Gate) -> Option<Reaction<Part>> {
+        let Key::Char(letter) = key else {
+            return None;
+        };
+        let may_edit = !self.opts.read_only;
+        let copy_selection = |editor: &Self| {
+            let selected = editor.selection()?;
+            Some(Effect::Copy {
+                text: to_text(&slice_value(&editor.value, selected.start, selected.end)),
             })
         };
-        Some(match key {
-            Key::Char('a' | 'A') => {
+        let reaction = match letter.to_ascii_lowercase() {
+            'a' => {
                 self.anchor = Some(0);
-                self.caret = value_length(&self.value);
+                self.caret = self.length();
                 Reaction::handled()
             }
-            Key::Char('c' | 'C') => {
-                copied(self).map_or_else(Reaction::handled, |copy| Reaction::handled().with(copy))
-            }
-            Key::Char('x' | 'X') if !self.opts.read_only => {
-                let (Some(copy), Some((start, end))) = (copied(self), self.selection()) else {
-                    return Some(Reaction::handled());
-                };
-                self.replace(start, end, Vec::new(), Source::User, Reason::Text, gate);
-                Reaction::handled().with(copy)
-            }
-            Key::Char('z' | 'Z') if !self.opts.read_only => {
-                self.travel(!shift, Source::User, gate);
+            'c' => match copy_selection(self) {
+                Some(copy) => Reaction::handled().with(copy),
+                None => Reaction::handled(),
+            },
+            'x' if may_edit => match (copy_selection(self), self.selection()) {
+                (Some(copy), Some(selected)) => {
+                    self.delete(selected, Cause::TYPED, gate);
+                    Reaction::handled().with(copy)
+                }
+                _ => Reaction::handled(),
+            },
+            'z' if may_edit => {
+                self.step_history(!shift, Source::User, gate);
                 Reaction::handled()
             }
-            Key::Char('y' | 'Y') if !self.opts.read_only => {
-                self.travel(false, Source::User, gate);
+            'y' if may_edit => {
+                self.step_history(false, Source::User, gate);
                 Reaction::handled()
             }
             _ => return None,
-        })
+        };
+        Some(reaction)
     }
 
     fn on_key(&mut self, key: Key, by_word: bool, shift: bool, gate: Gate) -> Reaction<Part> {
-        let length = value_length(&self.value);
         let (back, forward) = if self.opts.dir == Dir::Rtl {
             (Key::ArrowRight, Key::ArrowLeft)
         } else {
             (Key::ArrowLeft, Key::ArrowRight)
         };
         match key {
-            key if key == back || key == forward => {
-                let ahead = key == forward;
-                // Shift keeps the other end of the selection where it is. Without
-                // it, a selection collapses to the side the arrow points at.
-                match (shift, self.selection()) {
-                    (true, _) => self.anchor = self.anchor.or(Some(self.caret)),
-                    (false, Some((start, end))) if !by_word => {
-                        self.anchor = None;
-                        self.caret = if ahead { end } else { start };
-                        return Reaction::handled();
-                    }
-                    (false, _) => self.anchor = None,
-                }
-                self.caret = match (by_word, ahead) {
-                    (true, _) => word_boundary(&self.value, self.caret, ahead),
-                    (false, true) => (self.caret + 1).min(length),
-                    (false, false) => self.caret.saturating_sub(1),
-                };
-                Reaction::handled()
-            }
-            Key::Home | Key::End => {
-                self.anchor = if shift {
-                    self.anchor.or(Some(self.caret))
-                } else {
-                    None
-                };
-                let text: Vec<char> = offset_text(&self.value).chars().collect();
-                self.caret = if key == Key::Home {
-                    text[..self.caret]
-                        .iter()
-                        .rposition(|ch| *ch == '\n')
-                        .map_or(0, |at| at + 1)
-                } else {
-                    text[self.caret..]
-                        .iter()
-                        .position(|ch| *ch == '\n')
-                        .map_or(length, |at| self.caret + at)
-                };
-                Reaction::handled()
-            }
-            _ if self.opts.read_only => Reaction::default(),
-            Key::Backspace if self.selection().is_some() => {
-                let (start, end) = self.target();
-                self.replace(start, end, Vec::new(), Source::User, Reason::Text, gate);
-                Reaction::handled()
-            }
-            Key::Backspace if self.caret > 0 => {
-                let start = if by_word {
-                    word_boundary(&self.value, self.caret, false)
-                } else {
-                    self.caret - 1
-                };
-                self.replace(
-                    start,
-                    self.caret,
-                    Vec::new(),
-                    Source::User,
-                    Reason::Text,
-                    gate,
-                );
-                Reaction::handled()
-            }
-            Key::Backspace => Reaction::handled(),
-            Key::Char(ch) if !by_word => self.typed(&ch.to_string(), gate),
-            Key::Space => self.typed(" ", gate),
-            Key::Enter if self.opts.multiline || shift => self.typed("\n", gate),
-            _ => Reaction::default(),
+            key if key == back || key == forward => self.move_caret(key == forward, by_word, shift),
+            Key::Home => self.move_caret_to(self.line_start(), shift),
+            Key::End => self.move_caret_to(self.line_end(), shift),
+            _ if self.opts.read_only => return Reaction::default(),
+            Key::Backspace => self.delete_back(by_word, gate),
+            Key::Char(ch) if !by_word => self.insert_text(&ch.to_string(), gate),
+            Key::Space => self.insert_text(" ", gate),
+            Key::Enter if self.opts.multiline || shift => self.insert_text("\n", gate),
+            _ => return Reaction::default(),
         }
+        Reaction::handled()
+    }
+
+    /// Moves the caret. With Shift the other end of the selection stays where it
+    /// is; without, the selection is dropped.
+    fn move_caret_to(&mut self, caret: usize, shift: bool) {
+        self.anchor = if shift {
+            self.anchor.or(Some(self.caret))
+        } else {
+            None
+        };
+        self.caret = caret;
+    }
+
+    /// An arrow key: one step, or one word. A plain arrow with something selected
+    /// only collapses the selection, to the side the arrow points at.
+    fn move_caret(&mut self, ahead: bool, by_word: bool, shift: bool) {
+        let to = match self.selection() {
+            Some(selected) if !shift && !by_word => {
+                if ahead {
+                    selected.end
+                } else {
+                    selected.start
+                }
+            }
+            _ if by_word => word_boundary(&self.value, self.caret, ahead),
+            _ if ahead => (self.caret + 1).min(self.length()),
+            _ => self.caret.saturating_sub(1),
+        };
+        self.move_caret_to(to, shift);
+    }
+
+    /// Backspace: the selection, or else the word or the one step before the caret.
+    fn delete_back(&mut self, by_word: bool, gate: Gate) {
+        let range = match self.selection() {
+            Some(selected) => selected,
+            None if by_word => word_boundary(&self.value, self.caret, false)..self.caret,
+            None => self.caret.saturating_sub(1)..self.caret,
+        };
+        self.delete(range, Cause::TYPED, gate);
     }
 }
 
@@ -387,56 +464,50 @@ impl Primitive for TokenEditor {
     fn set_order(&mut self, _: &[(String, String)]) {}
 
     fn semantics(&self, part: Part, item: Option<&str>) -> Semantics {
-        match part {
-            Part::Root => Semantics {
+        if part == Part::Root {
+            return Semantics {
                 role: Some(Role::TextBox),
                 focusable: Focusable::TabStop,
                 ..Default::default()
-            },
-            // The token just before the caret is the one Backspace would take.
-            Part::Token => Semantics {
-                selected: Some(
-                    item.and_then(|id| crate::token_text::offset_of_token(&self.value, id))
-                        .is_some_and(|at| {
-                            self.selection()
-                                .is_some_and(|(start, end)| start <= at && at < end)
-                        }),
-                ),
-                busy: item
-                    .and_then(|id| crate::token_text::offset_of_token(&self.value, id))
-                    .and_then(|at| token_at(&self.value, at))
-                    .is_some_and(|token| token.pending),
-                active: self
-                    .caret
-                    .checked_sub(1)
-                    .and_then(|at| token_at(&self.value, at))
-                    .is_some_and(|token| Some(token.id.as_str()) == item),
-                ..Default::default()
-            },
+            };
+        }
+        let Some((at, token)) = item.and_then(|id| self.token(id)) else {
+            return Semantics::default();
+        };
+        Semantics {
+            selected: Some(
+                self.selection()
+                    .is_some_and(|selected| selected.contains(&at)),
+            ),
+            busy: token.pending,
+            active: self
+                .token_before_caret()
+                .is_some_and(|before| before.id == token.id),
+            ..Default::default()
         }
     }
 
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
         match input {
             Input::Key { key, mods, .. } => {
-                match mods
-                    .ctrl
-                    .then(|| self.command(key, mods.shift, gate))
-                    .flatten()
-                {
-                    Some(reaction) => reaction,
-                    None => self.on_key(key, mods.ctrl || mods.alt, mods.shift, gate),
-                }
+                let command = if mods.ctrl {
+                    self.on_command(key, mods.shift, gate)
+                } else {
+                    None
+                };
+                command.unwrap_or_else(|| self.on_key(key, mods.ctrl || mods.alt, mods.shift, gate))
             }
-            Input::Paste { text } if !self.opts.read_only => self.typed(&text, gate),
+            Input::Paste { text } if !self.opts.read_only => {
+                self.insert_text(&text, gate);
+                Reaction::handled()
+            }
             Input::Press {
                 part: Part::Token,
                 item: Some(id),
                 ..
             } => {
-                if let Some(at) = crate::token_text::offset_of_token(&self.value, &id) {
-                    self.caret = at + 1;
-                    self.anchor = None;
+                if let Some((at, _)) = self.token(&id) {
+                    self.move_caret_to(at + 1, false);
                 }
                 Reaction::focusing(Part::Root)
             }
@@ -450,7 +521,7 @@ impl Primitive for TokenEditor {
 
     fn set_value(&mut self, value: Vec<String>) {
         self.value = from_text(value.first().map(String::as_str).unwrap_or_default());
-        self.caret = value_length(&self.value);
+        self.caret = self.length();
         self.anchor = None;
     }
 
@@ -475,34 +546,31 @@ impl Primitive for TokenEditor {
     }
 
     fn act(&mut self, action: &str, item: Option<&str>, gate: Gate) -> Result<(), ActError> {
-        let length = value_length(&self.value);
-        let needs = |action: &'static str| item.ok_or(ActError::MissingItem { action });
+        let written = |action: &'static str| item.ok_or(ActError::MissingItem { action });
         let allowed = match action {
-            "undo" => self.travel(true, Source::Agent, gate) || self.undone.is_empty(),
-            "redo" => self.travel(false, Source::Agent, gate) || self.redone.is_empty(),
-            "clear" => self.replace(0, length, Vec::new(), Source::Agent, Reason::Action, gate),
+            // With nothing to undo or redo there is nothing to refuse.
+            "undo" => self.undone.is_empty() || self.step_history(true, Source::Agent, gate),
+            "redo" => self.redone.is_empty() || self.step_history(false, Source::Agent, gate),
+            "clear" => self.delete(0..self.length(), Cause::AGENT, gate),
             // Both take the written form, so an agent can add tokens as links.
             "set" => self.replace(
-                0,
-                length,
-                from_text(needs("set")?),
-                Source::Agent,
-                Reason::Action,
+                0..self.length(),
+                from_text(written("set")?),
+                Cause::AGENT,
                 gate,
             ),
             "insert" => self.replace(
-                self.caret,
-                self.caret,
-                from_text(needs("insert")?),
-                Source::Agent,
-                Reason::Action,
+                self.caret..self.caret,
+                from_text(written("insert")?),
+                Cause::AGENT,
                 gate,
             ),
             "remove_token" => {
-                let id = needs("remove_token")?;
-                let at = crate::token_text::offset_of_token(&self.value, id)
+                let id = written("remove_token")?;
+                let (at, _) = self
+                    .token(id)
                     .ok_or_else(|| ActError::UnknownItem(id.to_string()))?;
-                self.replace(at, at + 1, Vec::new(), Source::Agent, Reason::Action, gate)
+                self.delete(at..at + 1, Cause::AGENT, gate)
             }
             other => {
                 return Err(ActError::UnknownAction {
@@ -517,20 +585,6 @@ impl Primitive for TokenEditor {
             Err(ActError::Refused)
         }
     }
-}
-
-/// The content before and after the caret, for drawing the caret between them.
-pub fn split_at_caret(editor: &TokenEditor) -> (Vec<Segment>, Vec<Segment>) {
-    (
-        slice_value(editor.segments(), 0, editor.caret()),
-        slice_value(editor.segments(), editor.caret(), usize::MAX),
-    )
-}
-
-/// Where the caret goes for Home or End on a line, exposed for adapters that
-/// handle those keys themselves.
-pub fn line_edge(editor: &TokenEditor, forward: bool) -> usize {
-    line_boundary(editor.segments(), editor.caret(), forward)
 }
 
 #[cfg(test)]
@@ -709,7 +763,7 @@ mod tests {
                 &mut |_| true,
             );
         }
-        assert_eq!(editor.selection(), Some((0, 4)));
+        assert_eq!(editor.selection(), Some(0..4));
         let id = editor.snapshot("Prompt").items[0].key.clone();
         assert_eq!(
             editor.semantics(Part::Token, Some(&id)).selected,

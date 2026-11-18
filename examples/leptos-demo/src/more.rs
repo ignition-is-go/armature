@@ -63,13 +63,13 @@ fn MenuItems() -> impl IntoView {
 
 #[component]
 fn PromptContent() -> impl IntoView {
-    use armature_core::token_editor::{Part as EditorPart, TokenEditor, split_at_caret};
+    use armature_core::token_editor::{Part as EditorPart, TokenEditor};
     use armature_core::token_text::Segment;
     let editor = use_primitive::<TokenEditor>();
     // Each piece with a key that changes when its content does.
     let pieces = move || {
         editor.with(|editor| {
-            let (before, after) = split_at_caret(editor);
+            let (before, after) = editor.split_at_caret();
             let caret = std::iter::once((String::from("caret"), None, String::new()));
             let piece = |side: &'static str| {
                 move |(at, segment): (usize, Segment)| match segment {
