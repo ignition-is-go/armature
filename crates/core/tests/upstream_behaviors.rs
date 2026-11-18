@@ -3,12 +3,19 @@
 //! each assertion carries the upstream test's own name where one maps across.
 
 use armature_core::accordion::{self, Accordion};
+use armature_core::calendar::{self, Calendar, Selecting};
+use armature_core::collapsible::{self, Collapsible};
+use armature_core::date::Date;
 use armature_core::keys::{Dir, Key, Modifiers, Orientation, apple_key};
 use armature_core::listbox::{self, Listbox};
+use armature_core::otp_input::{self, Accept, OtpInput};
+use armature_core::primitive::Focusable;
 use armature_core::primitive::{Input, Item, Primitive};
 use armature_core::range_slider::{self, RangeSlider};
 use armature_core::rating::{self, Rating};
 use armature_core::tabs::{self, Tabs};
+use armature_core::timing::Hold;
+use armature_core::toggle_group::{self, ToggleGroup};
 
 fn item(key: &str, disabled: bool) -> Item {
     Item {
@@ -296,16 +303,8 @@ fn rating_behaviors() {
     );
 }
 
-use armature_core::calendar::{self, Calendar, Selecting};
-use armature_core::collapsible::{self, Collapsible};
-use armature_core::date::Date;
-use armature_core::otp_input::{self, Accept, OtpInput};
-use armature_core::primitive::Focusable;
-use armature_core::timing::Hold;
-use armature_core::toggle_group::{self, ToggleGroup};
-
-fn focused_code(length: usize) -> OtpInput {
-    let mut code = OtpInput::new(length);
+/// Puts focus in a one-time code's field, as clicking or tabbing into it would.
+fn focus_code(code: &mut OtpInput) {
     code.send(
         Input::Focus {
             part: otp_input::Part::Input,
@@ -313,6 +312,11 @@ fn focused_code(length: usize) -> OtpInput {
         },
         &mut |_| true,
     );
+}
+
+fn focused_code(length: usize) -> OtpInput {
+    let mut code = OtpInput::new(length);
+    focus_code(&mut code);
     code
 }
 
@@ -330,13 +334,7 @@ fn otp_input_behaviors() {
     type_keys(&mut digits, "1a2");
     assert_eq!(digits.value(), ["12"]);
     let mut letters = OtpInput::new(4).accepting(Accept::Alphanumeric);
-    letters.send(
-        Input::Focus {
-            part: otp_input::Part::Input,
-            item: None,
-        },
-        &mut |_| true,
-    );
+    focus_code(&mut letters);
     type_keys(&mut letters, "a1-");
     assert_eq!(letters.value(), ["a1"]);
     // "tests each character against a custom expression"
@@ -396,13 +394,7 @@ fn otp_input_behaviors() {
     // "right to left, the arrows swap"
     let mut rtl = OtpInput::new(4).direction(Dir::Rtl);
     rtl.set_value(vec!["12".into()]);
-    rtl.send(
-        Input::Focus {
-            part: otp_input::Part::Input,
-            item: None,
-        },
-        &mut |_| true,
-    );
+    focus_code(&mut rtl);
     key(&mut rtl, Key::ArrowRight);
     assert_eq!(rtl.active_cell(), Some(1));
     // "a press selects that slot's character, or the slot after the code"
