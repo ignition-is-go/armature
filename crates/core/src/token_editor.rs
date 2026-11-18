@@ -4,7 +4,7 @@ use crate::agent::{ActError, Snapshot, SnapshotItem};
 use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::keys::{Dir, Direction, Key};
 use crate::primitive::{
-    Effect, Focusable, Input, Item, PartOf, Primitive, Reaction, Role, Semantics,
+    Effect, Focusable, Input, Item, Outcome, PartOf, Primitive, Reaction, Role, Semantics,
 };
 use crate::token_text::{
     Segment, Token, from_text, normalize, offset_of_token, offset_text, replace_range, slice_value,
@@ -219,7 +219,7 @@ impl TokenEditor {
 
     /// Says a loading token has finished. One that loaded stays, settled, here and
     /// in what undo would bring back. One that failed is taken out.
-    pub fn settle(&mut self, id: &str, loaded: bool, gate: Gate) {
+    pub fn settle(&mut self, id: &str, outcome: Outcome, gate: Gate) {
         let settle_in = |value: &mut Vec<Segment>| {
             for segment in value {
                 if let Segment::Token(token) = segment
@@ -233,7 +233,7 @@ impl TokenEditor {
         for past in self.undone.iter_mut().chain(&mut self.redone) {
             settle_in(&mut past.value);
         }
-        if loaded {
+        if outcome == Outcome::Loaded {
             return;
         }
         let Some((at, _)) = self.token(id) else {
@@ -855,7 +855,7 @@ mod tests {
         editor
             .act("remove_token", Some(&id), &mut |_| true)
             .unwrap();
-        editor.settle(&id, true, &mut |_| true);
+        editor.settle(&id, Outcome::Loaded, &mut |_| true);
         editor.act("undo", None, &mut |_| true).unwrap();
         let restored = editor.snapshot("Prompt").items[0].key.clone();
         assert_eq!(restored, id);
@@ -875,7 +875,7 @@ mod tests {
             )
             .unwrap();
         assert_ne!(id, kept);
-        editor.settle(&id, false, &mut |_| true);
+        editor.settle(&id, Outcome::Failed, &mut |_| true);
         let labels: Vec<String> = editor
             .snapshot("Prompt")
             .items

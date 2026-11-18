@@ -11,6 +11,18 @@ pub enum Part {
 const ACTIONS: &[&str] = &["press"];
 const PRESSED: &str = "pressed";
 
+/// Whether a button takes presses, and whether a disabled one keeps its place in the
+/// Tab order.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Availability {
+    #[default]
+    Enabled,
+    Disabled,
+    /// Disabled, but focusable, so it can hold focus as it becomes disabled and carry a
+    /// tooltip saying why.
+    DisabledButFocusable,
+}
+
 /// A button.
 ///
 /// A press is offered to the gate, which runs the action. It keeps no value, except
@@ -18,10 +30,7 @@ const PRESSED: &str = "pressed";
 /// runs: it then ignores presses and says so to a screen reader.
 #[derive(Clone, Debug)]
 pub struct Button {
-    disabled: bool,
-    /// Keeps a disabled button in the Tab order, so it can hold focus as it becomes
-    /// disabled and carry a tooltip saying why.
-    focusable_when_disabled: bool,
+    availability: Availability,
     pending: bool,
     /// What a screen reader hears when a pending button is pressed.
     pending_message: String,
@@ -30,8 +39,7 @@ pub struct Button {
 impl Default for Button {
     fn default() -> Self {
         Self {
-            disabled: false,
-            focusable_when_disabled: false,
+            availability: Availability::Enabled,
             pending: false,
             pending_message: "Loading".into(),
         }
@@ -40,10 +48,21 @@ impl Default for Button {
 
 impl Button {
     #[must_use]
-    pub const fn disabled(mut self, focusable: bool) -> Self {
-        self.disabled = true;
-        self.focusable_when_disabled = focusable;
+    pub const fn disabled(mut self) -> Self {
+        self.availability = Availability::Disabled;
         self
+    }
+
+    /// Disabled, but kept in the Tab order, so it can hold focus as it becomes
+    /// disabled and carry a tooltip saying why.
+    #[must_use]
+    pub const fn disabled_but_focusable(mut self) -> Self {
+        self.availability = Availability::DisabledButFocusable;
+        self
+    }
+
+    const fn is_disabled(&self) -> bool {
+        !matches!(self.availability, Availability::Enabled)
     }
 
     #[must_use]
@@ -88,8 +107,8 @@ impl Primitive for Button {
     fn semantics(&self, _: Part, _: Option<&str>) -> Semantics {
         Semantics {
             role: Some(Role::Button),
-            disabled: self.disabled || self.pending,
-            focusable: if self.disabled && !self.focusable_when_disabled {
+            disabled: self.is_disabled() || self.pending,
+            focusable: if self.availability == Availability::Disabled {
                 Focusable::No
             } else {
                 Focusable::TabStop
@@ -107,7 +126,7 @@ impl Primitive for Button {
             } => Reason::Keyboard,
             _ => return Reaction::default(),
         };
-        if self.disabled {
+        if self.is_disabled() {
             return Reaction::handled();
         }
         if self.pending {
@@ -151,7 +170,7 @@ impl Primitive for Button {
                 valid: ACTIONS,
             });
         }
-        if self.disabled || self.pending {
+        if self.is_disabled() || self.pending {
             return Err(ActError::Refused);
         }
         if Self::press(Source::Agent, Reason::Action, gate) {
@@ -187,12 +206,12 @@ mod tests {
     #[test]
     fn a_press_runs_the_action_and_a_disabled_button_does_nothing() {
         assert!(press(&mut Button::default()).0);
-        let mut off = Button::default().disabled(false);
+        let mut off = Button::default().disabled();
         assert!(!press(&mut off).0);
         assert_eq!(off.semantics(Part::Root, None).focusable, Focusable::No);
         assert_eq!(
             Button::default()
-                .disabled(true)
+                .disabled_but_focusable()
                 .semantics(Part::Root, None)
                 .focusable,
             Focusable::TabStop

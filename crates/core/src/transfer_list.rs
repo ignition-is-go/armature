@@ -24,8 +24,24 @@ pub enum Part {
 const ACTIONS: &[&str] = &["add", "remove"];
 
 /// Where each list is kept among the two.
-const AVAILABLE: usize = 0;
-const CHOSEN: usize = 1;
+/// One of a transfer list's two lists.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Side {
+    Available,
+    Chosen,
+}
+
+impl Side {
+    /// Its place among the lists.
+    const fn index(self) -> usize {
+        match self {
+            Self::Available => 0,
+            Self::Chosen => 1,
+        }
+    }
+}
+
+const CHOSEN: usize = Side::Chosen.index();
 
 /// Two lists with buttons to move the selected items between them. The value is the
 /// keys in the chosen list.
@@ -57,15 +73,15 @@ impl TransferList {
         }
     }
 
-    /// One of the two lists, by its place: `AVAILABLE` or `CHOSEN`.
+    /// One of the two lists, by its place.
     fn side(&self, side: usize) -> &[String] {
         self.lists.get(side).map_or(&[], Vec::as_slice)
     }
 
-    /// The keys in the available list (`false`) or the chosen one (`true`), in order.
+    /// The keys in one of the lists, in order.
     #[must_use]
-    pub fn list(&self, chosen: bool) -> &[String] {
-        self.side(if chosen { CHOSEN } else { AVAILABLE })
+    pub fn list(&self, side: Side) -> &[String] {
+        self.side(side.index())
     }
 
     fn side_of(&self, key: &str) -> Option<usize> {
@@ -435,7 +451,7 @@ mod tests {
         press(&mut lists, Part::Option, Some("share"), SHIFT);
         let moved = press(&mut lists, Part::Add, None, NONE);
         assert_eq!(lists.value(), ["write", "share"]);
-        assert_eq!(lists.list(false), ["read", "delete"]);
+        assert_eq!(lists.list(Side::Available), ["read", "delete"]);
         assert_eq!(
             moved.focus_item(),
             Some("delete"),
@@ -456,7 +472,7 @@ mod tests {
         press(&mut lists, Part::Option, Some("read"), NONE);
         press(&mut lists, Part::Option, Some("delete"), SHIFT);
         let moved = press(&mut lists, Part::Add, None, NONE);
-        assert_eq!(lists.list(false).len(), 0);
+        assert_eq!(lists.list(Side::Available).len(), 0);
         assert_eq!(moved.focus_item(), Some("delete"));
     }
 

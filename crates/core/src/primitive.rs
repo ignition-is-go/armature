@@ -427,7 +427,7 @@ pub enum Focusable {
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 #[expect(
     clippy::struct_excessive_bools,
-    reason = "each flag is an independent setting"
+    reason = "each flag mirrors an independent accessibility state"
 )]
 pub struct Semantics {
     pub role: Option<Role>,

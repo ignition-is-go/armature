@@ -31,7 +31,17 @@ pub struct Form {
 impl Form {
     /// Adds a field with the value it starts with. A reset returns to it.
     #[must_use]
-    pub fn field(mut self, name: &str, initial: &[&str], required: bool) -> Self {
+    pub fn field(self, name: &str, initial: &[&str]) -> Self {
+        self.add(name, initial, false)
+    }
+
+    /// Adds a field that must be filled in before the form is submitted.
+    #[must_use]
+    pub fn required_field(self, name: &str, initial: &[&str]) -> Self {
+        self.add(name, initial, true)
+    }
+
+    fn add(mut self, name: &str, initial: &[&str], required: bool) -> Self {
         let value: Vec<String> = initial
             .iter()
             .map(std::string::ToString::to_string)
@@ -138,9 +148,9 @@ mod tests {
 
     fn form() -> Form {
         Form::default()
-            .field("name", &[], true)
-            .field("plan", &["free"], true)
-            .field("notes", &[], false)
+            .required_field("name", &[])
+            .required_field("plan", &["free"])
+            .field("notes", &[])
     }
 
     #[test]

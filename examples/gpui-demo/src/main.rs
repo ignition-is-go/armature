@@ -29,7 +29,7 @@ use armature_core::text_field::{self, Kind as FieldKind, TextField};
 use armature_core::toast::{self, Toast, Toaster};
 use armature_core::toggle::{self, Toggle};
 use armature_core::toolbar::{self, Toolbar};
-use armature_core::transfer_list::{self, TransferList};
+use armature_core::transfer_list::{self, Side, TransferList};
 use armature_core::tree::tree_from_paths;
 use armature_core::tree_view::{self, TreeView};
 use armature_core::virtual_list::{self, VirtualList};
@@ -970,14 +970,14 @@ impl Demo {
 
     fn transfer_list_section(&self, cx: &App) -> Div {
         let lists = self.permissions.read(cx).primitive();
-        let column = |kind, chosen: bool| {
+        let column = |kind, side: Side| {
             boxed(part(&self.permissions, kind, None, cx))
                 .w(px(96.))
                 .min_h(px(110.))
                 .p_1()
                 .children(
                     lists
-                        .list(chosen)
+                        .list(side)
                         .iter()
                         .map(|key| row(&self.permissions, transfer_list::Part::Option, key, cx)),
                 )
@@ -999,7 +999,7 @@ impl Demo {
                     .flex()
                     .gap_2()
                     .items_center()
-                    .child(column(transfer_list::Part::Available, false))
+                    .child(column(transfer_list::Part::Available, Side::Available))
                     .child(
                         div()
                             .flex()
@@ -1008,7 +1008,7 @@ impl Demo {
                             .child(mover(transfer_list::Part::Add, "→"))
                             .child(mover(transfer_list::Part::Remove, "←")),
                     )
-                    .child(column(transfer_list::Part::Chosen, true)),
+                    .child(column(transfer_list::Part::Chosen, Side::Chosen)),
             )
     }
 }

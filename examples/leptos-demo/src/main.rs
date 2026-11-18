@@ -35,7 +35,7 @@ use armature_core::toggle::{self, Toggle};
 use armature_core::token_input::{self, TokenInput};
 use armature_core::toolbar::{self, Toolbar};
 use armature_core::tooltip::{self, Tooltip};
-use armature_core::transfer_list::{self, TransferList};
+use armature_core::transfer_list::{self, Side, TransferList};
 use armature_core::tree::tree_from_paths;
 use armature_core::tree_view::{self, TreeView};
 use armature_core::virtual_list::{self, VirtualList};
@@ -340,21 +340,21 @@ fn OutlineRows() -> impl IntoView {
 #[component]
 fn TransferParts() -> impl IntoView {
     let lists = use_primitive::<TransferList>();
-    let column = move |chosen: bool| {
+    let column = move |side: Side| {
         view! {
-            <For each=move || lists.with(|l| l.list(chosen).to_vec()) key=|key| key.clone() let:key>
+            <For each=move || lists.with(|l| l.list(side).to_vec()) key=|key| key.clone() let:key>
                 <Part part=transfer_list::Part::Option item=key.clone()>{key.clone()}</Part>
             </For>
         }
     };
     view! {
         <div class="transfer">
-            <Part part=transfer_list::Part::Available label="Available">{column(false)}</Part>
+            <Part part=transfer_list::Part::Available label="Available">{column(Side::Available)}</Part>
             <div class="transfer-buttons">
                 <Part part=transfer_list::Part::Add label="Add">"→"</Part>
                 <Part part=transfer_list::Part::Remove label="Remove">"←"</Part>
             </div>
-            <Part part=transfer_list::Part::Chosen label="Chosen">{column(true)}</Part>
+            <Part part=transfer_list::Part::Chosen label="Chosen">{column(Side::Chosen)}</Part>
         </div>
     }
 }

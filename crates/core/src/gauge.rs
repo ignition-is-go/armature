@@ -299,17 +299,24 @@ pub struct Separator {
 
 impl Default for Separator {
     fn default() -> Self {
-        Self::new(Orientation::Horizontal, false)
+        Self::new(Orientation::Horizontal)
     }
 }
 
 impl Separator {
     #[must_use]
-    pub const fn new(orientation: Orientation, decorative: bool) -> Self {
+    pub const fn new(orientation: Orientation) -> Self {
         Self {
             orientation,
-            decorative,
+            decorative: false,
         }
+    }
+
+    /// Only for looks: assistive technology passes over it.
+    #[must_use]
+    pub const fn decorative(mut self) -> Self {
+        self.decorative = true;
+        self
     }
 }
 
@@ -416,7 +423,8 @@ mod tests {
             Some(Role::Separator)
         );
         assert_eq!(
-            Separator::new(Orientation::Vertical, true)
+            Separator::new(Orientation::Vertical)
+                .decorative()
                 .semantics(SeparatorPart::Root, None)
                 .role,
             None

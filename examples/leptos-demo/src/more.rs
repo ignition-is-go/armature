@@ -741,8 +741,8 @@ fn FormSection() -> impl IntoView {
     // A form keeps its fields' values together and says what stops a submit.
     let form = StoredValue::new(
         Form::default()
-            .field("name", &[], true)
-            .field("team", &[], false),
+            .required_field("name", &[])
+            .field("team", &[]),
     );
     let outcome = RwSignal::new("Not sent".to_string());
     let name_problem = RwSignal::new(String::new());

@@ -24,10 +24,11 @@ pub struct Collapsible {
 }
 
 impl Collapsible {
+    /// A collapsible that starts open. One from `default` starts closed.
     #[must_use]
-    pub fn new(open: bool) -> Self {
+    pub fn opened() -> Self {
         Self {
-            open,
+            open: true,
             ..Default::default()
         }
     }

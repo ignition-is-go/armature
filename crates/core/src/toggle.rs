@@ -18,9 +18,10 @@ pub struct Toggle {
 }
 
 impl Toggle {
+    /// A toggle that starts on. One from `default` starts off.
     #[must_use]
-    pub const fn new(on: bool) -> Self {
-        Self { on }
+    pub const fn switched_on() -> Self {
+        Self { on: true }
     }
 
     #[must_use]
