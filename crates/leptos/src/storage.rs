@@ -6,25 +6,37 @@ use armature_core::preference::Storage;
 #[derive(Clone, Copy, Debug, Default)]
 pub struct LocalStorage;
 
+// Reads and writes on a browser store. Where the browser refuses, reads find nothing
+// and writes are dropped.
+fn read(store: Option<web_sys::Storage>, key: &str) -> Option<String> {
+    store?.get_item(key).ok()?
+}
+
+fn write(store: Option<web_sys::Storage>, key: &str, value: &str) {
+    if let Some(store) = store {
+        let _ = store.set_item(key, value);
+    }
+}
+
+fn erase(store: Option<web_sys::Storage>, key: &str) {
+    if let Some(store) = store {
+        let _ = store.remove_item(key);
+    }
+}
+
 fn store() -> Option<web_sys::Storage> {
     web_sys::window()?.local_storage().ok()?
 }
 
 impl Storage for LocalStorage {
     fn get(&self, key: &str) -> Option<String> {
-        store()?.get_item(key).ok()?
+        read(store(), key)
     }
-
     fn set(&mut self, key: &str, value: &str) {
-        if let Some(store) = store() {
-            let _ = store.set_item(key, value);
-        }
+        write(store(), key, value);
     }
-
     fn remove(&mut self, key: &str) {
-        if let Some(store) = store() {
-            let _ = store.remove_item(key);
-        }
+        erase(store(), key);
     }
 }
 
@@ -76,17 +88,17 @@ impl Storage for CookieStorage {
     }
 }
 
+/// Whether a media query holds now.
+fn media_matches(query: &str) -> bool {
+    let list = web_sys::window().and_then(|window| window.match_media(query).ok().flatten());
+    list.is_some_and(|list| list.matches())
+}
+
 /// Whether the operating system asks for a dark colour scheme, which is what a
 /// stored choice of `system` resolves to.
 #[must_use]
 pub fn system_prefers_dark() -> bool {
-    let query = web_sys::window().and_then(|window| {
-        window
-            .match_media("(prefers-color-scheme: dark)")
-            .ok()
-            .flatten()
-    });
-    query.is_some_and(|query| query.matches())
+    media_matches("(prefers-color-scheme: dark)")
 }
 
 /// The browser's `sessionStorage`: kept for as long as the tab is open, and not
@@ -100,19 +112,13 @@ fn session() -> Option<web_sys::Storage> {
 
 impl Storage for SessionStorage {
     fn get(&self, key: &str) -> Option<String> {
-        session()?.get_item(key).ok()?
+        read(session(), key)
     }
-
     fn set(&mut self, key: &str, value: &str) {
-        if let Some(store) = session() {
-            let _ = store.set_item(key, value);
-        }
+        write(session(), key, value);
     }
-
     fn remove(&mut self, key: &str) {
-        if let Some(store) = session() {
-            let _ = store.remove_item(key);
-        }
+        erase(session(), key);
     }
 }
 
@@ -120,13 +126,7 @@ impl Storage for SessionStorage {
 /// animations when they have.
 #[must_use]
 pub fn prefers_reduced_motion() -> bool {
-    let query = web_sys::window().and_then(|window| {
-        window
-            .match_media("(prefers-reduced-motion: reduce)")
-            .ok()
-            .flatten()
-    });
-    query.is_some_and(|query| query.matches())
+    media_matches("(prefers-reduced-motion: reduce)")
 }
 
 /// Whether the person last used the keyboard or a pointer. The page's root element
