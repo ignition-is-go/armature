@@ -220,7 +220,7 @@ impl ImageCropper {
         allowed
     }
 
-    fn limits(&self) -> ResizeLimits {
+    const fn limits(&self) -> ResizeLimits {
         ResizeLimits {
             min: self.min,
             max: None,

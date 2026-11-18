@@ -201,10 +201,6 @@ impl Primitive for Select {
                 ..
             } if self.open => self.dismiss(),
             Input::Press {
-                part: Part::Trigger,
-                ..
-            } => self.show(),
-            Input::Press {
                 part: Part::Option,
                 item,
                 ..
@@ -241,7 +237,11 @@ impl Primitive for Select {
             Input::Key { key, mods, now_ms } if self.open => {
                 self.on_open_key(key, mods, now_ms, gate)
             }
-            Input::Key {
+            Input::Press {
+                part: Part::Trigger,
+                ..
+            }
+            | Input::Key {
                 key: Key::Enter | Key::Space | Key::ArrowDown | Key::ArrowUp,
                 ..
             } => self.show(),

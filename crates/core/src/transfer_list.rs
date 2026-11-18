@@ -81,7 +81,7 @@ impl TransferList {
     fn move_to(
         &mut self,
         to: usize,
-        keys: Vec<String>,
+        keys: &[String],
         source: Source,
         reason: Reason,
         gate: Gate,
@@ -133,7 +133,7 @@ impl TransferList {
         gate: Gate,
     ) -> Reaction<Part> {
         let to = usize::from(part == Part::Add);
-        self.move_to(to, self.selected.clone(), source, reason, gate)
+        self.move_to(to, &self.selected.clone(), source, reason, gate)
             .unwrap_or_else(Reaction::handled)
     }
 
@@ -380,13 +380,7 @@ impl Primitive for TransferList {
         if self.side_of(key).is_none() {
             return Err(ActError::UnknownItem(key.to_string()));
         }
-        match self.move_to(
-            to,
-            vec![key.to_string()],
-            Source::Agent,
-            Reason::Action,
-            gate,
-        ) {
+        match self.move_to(to, &[key.to_string()], Source::Agent, Reason::Action, gate) {
             Some(_) => Ok(()),
             None => Err(ActError::Refused),
         }

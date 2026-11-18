@@ -239,7 +239,7 @@ impl TreeView {
     }
 
     /// The depth allowed at `slot`, as near to `wanted` as the rows around it permit.
-    fn depth_at(&self, others: &[Row], slot: usize, start: usize, sideways: f64) -> usize {
+    fn depth_at(others: &[Row], slot: usize, start: usize, sideways: f64) -> usize {
         let above = slot
             .checked_sub(1)
             .and_then(|at| others.get(at))
@@ -305,7 +305,7 @@ impl TreeView {
             k if k == shallower => (slot, -TREE_INDENT),
             _ => return Reaction::default(),
         };
-        let depth = self.depth_at(&others, slot, depth, sideways);
+        let depth = Self::depth_at(&others, slot, depth, sideways);
         if self.relocate(&current, slot, depth, Source::User, gate) {
             let label = self.label(&current);
             self.focused = Some(current.clone());
@@ -582,7 +582,7 @@ impl Primitive for TreeView {
                 } else {
                     total.x
                 };
-                self.landing = Some((before, self.depth_at(&others, before, start, sideways)));
+                self.landing = Some((before, Self::depth_at(&others, before, start, sideways)));
                 Reaction::handled()
             }
             PointerPhase::Up => {

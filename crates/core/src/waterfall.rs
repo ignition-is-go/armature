@@ -237,7 +237,7 @@ impl Primitive for Waterfall {
                 role: Some(Role::Tree),
                 ..Default::default()
             },
-            (Part::Axis, _) => Semantics::default(),
+            (Part::Axis, _) | (Part::Bar, Some(_)) => Semantics::default(),
             (Part::Row, Some(row)) => Semantics {
                 role: Some(Role::TreeItem),
                 level: Some(row.level.cast::<u32>()),
@@ -251,7 +251,6 @@ impl Primitive for Waterfall {
                 active: self.focused.as_deref() == Some(row.key.as_str()),
                 ..Default::default()
             },
-            (Part::Bar, Some(_)) => Semantics::default(),
             (Part::Row, None) => Semantics {
                 role: Some(Role::TreeItem),
                 hidden: item.is_some(),

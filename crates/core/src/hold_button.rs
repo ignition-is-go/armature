@@ -57,7 +57,7 @@ impl HoldButton {
         }
     }
 
-    fn confirm(&self, source: Source, reason: Reason, gate: Gate) -> bool {
+    fn confirm(source: Source, reason: Reason, gate: Gate) -> bool {
         gate(&ValueChange {
             value: vec![CONFIRMED.to_string()],
             source,
@@ -105,13 +105,13 @@ impl Primitive for HoldButton {
                 ..
             }
             | Input::Press { .. } => {
-                self.confirm(Source::User, Reason::Keyboard, gate);
+                Self::confirm(Source::User, Reason::Keyboard, gate);
                 Reaction::handled()
             }
             Input::Tick { now_ms } => {
                 if self.hold.tick(now_ms) {
                     self.pressed = None;
-                    self.confirm(Source::User, Reason::Press, gate);
+                    Self::confirm(Source::User, Reason::Press, gate);
                 }
                 Reaction::default()
             }
@@ -166,7 +166,7 @@ impl Primitive for HoldButton {
                 valid: ACTIONS,
             });
         }
-        if self.confirm(Source::Agent, Reason::Action, gate) {
+        if Self::confirm(Source::Agent, Reason::Action, gate) {
             Ok(())
         } else {
             Err(ActError::Refused)

@@ -49,7 +49,7 @@ impl Toolbar {
     }
 
     /// Tells the owner a button was pressed. The owner's answer is whether it acted.
-    fn press(&self, key: &str, source: Source, reason: Reason, gate: Gate) -> bool {
+    fn press(key: &str, source: Source, reason: Reason, gate: Gate) -> bool {
         gate(&ValueChange {
             value: vec![key.to_string()],
             source,
@@ -128,7 +128,7 @@ impl Primitive for Toolbar {
                 item: Some(key), ..
             } if self.items.is_enabled(&key) => {
                 self.focused = Some(key.clone());
-                self.press(&key, Source::User, Reason::Press, gate);
+                Self::press(&key, Source::User, Reason::Press, gate);
                 Reaction::item(Part::Button, true, Some(key))
             }
             Input::Key {
@@ -138,7 +138,7 @@ impl Primitive for Toolbar {
                 let Some(key) = self.tab_stop().map(str::to_string) else {
                     return Reaction::default();
                 };
-                self.press(&key, Source::User, Reason::Keyboard, gate);
+                Self::press(&key, Source::User, Reason::Keyboard, gate);
                 Reaction::handled()
             }
             Input::Key { key, .. } => {
@@ -198,7 +198,7 @@ impl Primitive for Toolbar {
         if found.disabled {
             return Err(ActError::Disabled(key.to_string()));
         }
-        if self.press(key, Source::Agent, Reason::Action, gate) {
+        if Self::press(key, Source::Agent, Reason::Action, gate) {
             Ok(())
         } else {
             Err(ActError::Refused)

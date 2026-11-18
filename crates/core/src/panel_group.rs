@@ -307,7 +307,8 @@ impl Primitive for PanelGroup {
                 Reaction::default()
             }
             Input::Key { key, mods, .. }
-                if !mods.ctrl && !mods.alt && self.focused.saturating_add(1) < self.sizes.len() =>
+                if !(mods.ctrl || mods.alt)
+                    && self.divider(Some(&self.focused.to_string())).is_some() =>
             {
                 let step = if mods.shift {
                     self.opts.large_step

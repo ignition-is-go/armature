@@ -378,8 +378,7 @@ impl Primitive for Menu {
             (Part::Item, Some(entry)) => {
                 let on_show = self.open && entry.parent.as_ref() == self.path.last();
                 let (role, checked) = match entry.kind {
-                    Kind::Action => (Role::MenuItem, None),
-                    Kind::Submenu => (Role::MenuItem, None),
+                    Kind::Action | Kind::Submenu => (Role::MenuItem, None),
                     Kind::Checkbox => (Role::MenuItemCheckbox, Some(self.is_on(&entry.key))),
                     Kind::Radio(_) => (Role::MenuItemRadio, Some(self.is_on(&entry.key))),
                 };
@@ -456,6 +455,10 @@ impl Primitive for Menu {
                 Input::Press {
                     part: Part::Trigger,
                     ..
+                }
+                | Input::Key {
+                    key: Key::Enter | Key::Space | Key::ArrowDown,
+                    ..
                 },
                 false,
             ) => self.open_at(false),
@@ -469,13 +472,6 @@ impl Primitive for Menu {
                 self.close();
                 Reaction::handled()
             }
-            (
-                Input::Key {
-                    key: Key::Enter | Key::Space | Key::ArrowDown,
-                    ..
-                },
-                false,
-            ) => self.open_at(false),
             (
                 Input::Key {
                     key: Key::ArrowUp, ..
@@ -557,8 +553,7 @@ impl Primitive for Menu {
                             .choose(&key, Source::User, Reason::Keyboard, gate)
                             .unwrap_or_else(|_| Reaction::handled());
                     }
-                    Key::ArrowLeft if !self.path.is_empty() => return self.back(),
-                    Key::Escape if !self.path.is_empty() => return self.back(),
+                    Key::ArrowLeft | Key::Escape if !self.path.is_empty() => return self.back(),
                     Key::Escape => {
                         self.close();
                         return Reaction::focusing(Part::Trigger);

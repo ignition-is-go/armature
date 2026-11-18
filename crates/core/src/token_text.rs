@@ -260,7 +260,8 @@ pub fn word_boundary(value: &[Segment], offset: usize, forward: bool) -> usize {
     while inside(at) && char_at(at).is_some_and(|ch| ch.is_whitespace() && ch != '\n') {
         at = step(at);
     }
-    if char_at(at) == Some(TOKEN_CHAR) && at != offset {
+    let skipped_space = at != offset;
+    if skipped_space && char_at(at) == Some(TOKEN_CHAR) {
         return at;
     }
     while inside(at) && char_at(at).is_some_and(|ch| !ch.is_whitespace() && ch != TOKEN_CHAR) {

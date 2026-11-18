@@ -67,7 +67,6 @@ impl Options {
     #[must_use]
     pub const fn refusal(&self, dismiss: Dismiss) -> Option<Refusal> {
         match dismiss {
-            Dismiss::ClosePress | Dismiss::TriggerPress | Dismiss::Controller => None,
             Dismiss::OutsidePress
                 if !(self.is_modal() || self.dismiss_on_backdrop && self.dismissible) =>
             {

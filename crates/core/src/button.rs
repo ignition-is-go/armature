@@ -57,7 +57,7 @@ impl Button {
         self.pending
     }
 
-    fn press(&self, source: Source, reason: Reason, gate: Gate) -> bool {
+    fn press(source: Source, reason: Reason, gate: Gate) -> bool {
         gate(&ValueChange {
             value: vec![PRESSED.to_string()],
             source,
@@ -117,7 +117,7 @@ impl Primitive for Button {
                 Reaction::handled().announcing(self.pending_message.clone())
             };
         }
-        self.press(Source::User, reason, gate);
+        Self::press(Source::User, reason, gate);
         Reaction::handled()
     }
 
@@ -154,7 +154,7 @@ impl Primitive for Button {
         if self.disabled || self.pending {
             return Err(ActError::Refused);
         }
-        if self.press(Source::Agent, Reason::Action, gate) {
+        if Self::press(Source::Agent, Reason::Action, gate) {
             Ok(())
         } else {
             Err(ActError::Refused)

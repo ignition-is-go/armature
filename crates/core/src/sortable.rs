@@ -119,15 +119,14 @@ impl Sortable {
                 );
                 Reaction::handled().alerting(message)
             }
-            (Key::Space | Key::Enter, Some(_)) => match self.session.drop() {
-                Some(reorder) => self
-                    .apply(reorder, Source::User, Reason::Keyboard, gate)
-                    .map_or_else(Reaction::handled, |message| {
-                        Reaction::handled().alerting(message)
-                    }),
-                None => Reaction::handled(),
-            },
-            // Tab puts the item back and lets focus move on.
+            (Key::Space | Key::Enter, Some(_)) => {
+                let dropped = self.session.drop();
+                let message = dropped
+                    .and_then(|reorder| self.apply(reorder, Source::User, Reason::Keyboard, gate));
+                message.map_or_else(Reaction::handled, |message| {
+                    Reaction::handled().alerting(message)
+                })
+            } // Tab puts the item back and lets focus move on.
             (Key::Tab, Some(_)) => {
                 self.session.cancel();
                 Reaction::default()

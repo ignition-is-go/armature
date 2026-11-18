@@ -634,9 +634,8 @@ impl Primitive for Outline {
                 else {
                     return Reaction::default();
                 };
-                let total = match event {
-                    DragEvent::Start { total, .. } | DragEvent::Move { total, .. } => total,
-                    _ => return Reaction::default(),
+                let (DragEvent::Start { total, .. } | DragEvent::Move { total, .. }) = event else {
+                    return Reaction::default();
                 };
                 if self.moving.is_none() {
                     self.moving = OutlineMove::grab(&self.rows, &key, self.opts.max_depth);
