@@ -61,19 +61,19 @@ Primitives not listed take their settings through `new(...)` arguments or builde
 | --- | --- |
 | `accordion` | `multiple: bool`, `collapsible: bool`, `findable: bool` |
 | `calendar` | `week_start: u8`, `dir: Dir`, `min: Option<Date>`, `max: Option<Date>`, `mode: Selecting`, `unavailable: Option<fn(Date) -> bool>`, `deselectable: bool`, `months: usize` |
-| `carousel` | `wrap: bool`, `autoplay_ms: Option<u64>`, `dir: Dir`, `per_page: usize`, `orientation: crate::keys::Orientation` |
+| `carousel` | `ends: roving::Ends`, `autoplay_ms: Option<u64>`, `dir: Dir`, `per_page: usize`, `orientation: crate::keys::Orientation` |
 | `combobox` | `multiple: bool`, `custom: bool`, `auto_highlight: bool`, `max_selected: Option<usize>`, `open_on_focus: bool`, `load_more: bool`, `remote: bool`, `read_only: bool` |
 | `dialog` | `modality: Modality` (`Modeless`, `Modal`, `Alert`), `closes: Closes` (`Never`, `By(layers::DismissedBy)`) |
-| `event_list` | `orientation: Orientation`, `dir: Dir`, `wrap: bool`, `feed: bool` |
+| `event_list` | `orientation: Orientation`, `dir: Dir`, `ends: roving::Ends`, `feed: bool` |
 | `file_input` | `multiple: bool`, `accept: Vec<String>`, `max_size: Option<u64>`, `max_files: Option<usize>` |
-| `listbox` | `mode: Mode`, `orientation: Orientation`, `dir: Dir`, `wrap: bool` |
+| `listbox` | `mode: Mode`, `orientation: Orientation`, `dir: Dir`, `ends: roving::Ends` |
 | `navigation_menu` | `hover: bool`, `open_delay_ms: u64`, `close_delay_ms: u64`, `orientation: Orientation`, `dir: Dir` |
 | `panel_group` | `orientation: Orientation`, `dir: Dir`, `min: f64`, `step: f64`, `large_step: f64` |
 | `range_slider` | `range: NumberRange`, `orientation: Orientation`, `dir: Dir`, `large_step: f64`, `min_steps_between: f64` |
 | `rating` | `max: u32`, `halves: bool`, `deselectable: bool`, `dir: Dir`, `read_only: bool` |
 | `resizable` | `orientation: Orientation`, `dir: Dir`, `min: f64`, `max: f64` |
 | `slider` | `range: NumberRange`, `orientation: Orientation`, `dir: Dir`, `large_step: f64` |
-| `tabs` | `orientation: Orientation`, `dir: Dir`, `manual: bool`, `wrap: bool` |
+| `tabs` | `orientation: Orientation`, `dir: Dir`, `manual: bool`, `ends: roving::Ends` |
 | `timeline` | `range: Span`, `grid: f64`, `min_length: f64` |
 | `toggle_group` | `multiple: bool`, `deselectable: bool`, `orientation: Orientation`, `dir: Dir` |
 | `tooltip` | `open_delay_ms: u64`, `close_delay_ms: u64`, `card: bool`, `disabled: bool` |

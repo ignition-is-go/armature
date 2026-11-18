@@ -13,7 +13,7 @@ pub struct Options {
     pub mode: Mode,
     pub orientation: Orientation,
     pub dir: Dir,
-    pub wrap: bool,
+    pub ends: Ends,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -77,11 +77,9 @@ impl Listbox {
             return Reaction::to_item(Part::Option, focus);
         }
         if let Some(nav) = roving::nav_for_key(key, self.opts.orientation, self.opts.dir) {
-            let focus = self.items.step(
-                self.highlighted.as_deref(),
-                nav,
-                Ends::wrapping(self.opts.wrap),
-            );
+            let focus = self
+                .items
+                .step(self.highlighted.as_deref(), nav, self.opts.ends);
             if let Some(key) = &focus {
                 self.highlighted = Some(key.clone());
                 if mods.shift && self.opts.mode == Mode::Multiple {

@@ -20,6 +20,7 @@ use armature_core::primitive::Focusable;
 use armature_core::primitive::{Input, Item, Primitive};
 use armature_core::range_slider::{self, RangeSlider};
 use armature_core::rating::{self, Rating};
+use armature_core::roving::Ends;
 use armature_core::select::Select;
 use armature_core::tabs::{self, Tabs};
 use armature_core::timing::Hold;
@@ -164,7 +165,7 @@ fn tabs_behaviors() {
     // "moves wrap or stop at the ends"
     assert_eq!(key(&mut ltr, Key::ArrowLeft).as_deref(), Some("three"));
     let mut stopping = tabs(tabs::Options {
-        wrap: false,
+        ends: Ends::Stop,
         ..Default::default()
     });
     assert_eq!(key(&mut stopping, Key::ArrowLeft), None);
@@ -245,7 +246,7 @@ fn slider_behaviors() {
 #[test]
 fn listbox_keyboard_behaviors() {
     let mut list = Listbox::new(listbox::Options {
-        wrap: false,
+        ends: Ends::Stop,
         ..Default::default()
     });
     for index in 0..30 {

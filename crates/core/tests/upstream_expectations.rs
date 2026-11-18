@@ -17,6 +17,7 @@ use armature_core::outline::{OutlineMove, depth_at, move_row, slot_at};
 use armature_core::outline::{OutlineRow, Place, depth_range, moved_rows, place_of, subtree_end};
 use armature_core::pagination::{PageItem, page_count, page_range};
 use armature_core::primitive::Primitive;
+use armature_core::roving::Ends;
 use armature_core::selection::{all_toggled, keys_between, range_selection, toggled_keys};
 use armature_core::text_match::{match_ranges, match_segments};
 use armature_core::tree::{CheckStrategy, Checked, Tree, TreeItem};
@@ -2432,15 +2433,24 @@ fn carousel_layouts_a_slide_larger_than_the_viewport_counts() {
     );
     // "stops at the ends, or wraps with loop"
     assert_eq!(
-        (step_page(3, 1, 3, false), step_page(1, -1, 3, false)),
+        (
+            step_page(3, 1, 3, Ends::Stop),
+            step_page(1, -1, 3, Ends::Stop)
+        ),
         (3, 1)
     );
     assert_eq!(
-        (step_page(3, 1, 3, true), step_page(1, -1, 3, true)),
+        (
+            step_page(3, 1, 3, Ends::Wrap),
+            step_page(1, -1, 3, Ends::Wrap)
+        ),
         (1, 3)
     );
     assert_eq!(
-        (step_page(2, 1, 3, false), step_page(1, 1, 1, true)),
+        (
+            step_page(2, 1, 3, Ends::Stop),
+            step_page(1, 1, 1, Ends::Wrap)
+        ),
         (3, 1)
     );
 }

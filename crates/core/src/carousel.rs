@@ -9,6 +9,7 @@ use crate::primitive::{
     Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction,
     Role, Semantics,
 };
+use crate::roving::Ends;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Part {
@@ -28,7 +29,7 @@ pub enum Part {
 #[derive(Clone, Copy, Debug)]
 pub struct Options {
     /// Whether going past the last slide comes round to the first.
-    pub wrap: bool,
+    pub ends: Ends,
     /// How long each slide shows when advancing on its own. `None` never advances.
     pub autoplay_ms: Option<u64>,
     pub dir: Dir,
@@ -48,7 +49,7 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Self {
-            wrap: false,
+            ends: Ends::Stop,
             autoplay_ms: None,
             dir: Dir::Ltr,
             per_page: 1,
@@ -251,7 +252,7 @@ impl Carousel {
             page.saturating_add(1),
             by.signum().cast::<i64>(),
             self.measured.len(),
-            self.opts.wrap,
+            self.opts.ends,
         ))
         .saturating_sub(1);
         self.measured
@@ -276,7 +277,7 @@ impl Carousel {
         let wanted = (now.saturating_add(by.signum().saturating_mul(per_page))).clamp(0, last);
         if wanted != now {
             Some(wanted.cast::<usize>())
-        } else if self.opts.wrap && last > 0 {
+        } else if self.opts.ends == Ends::Wrap && last > 0 {
             Some(if by > 0 { 0 } else { last.cast::<usize>() })
         } else {
             None
@@ -692,7 +693,7 @@ mod tests {
         assert_eq!(carousel.value(), ["three"]);
         assert!(carousel.semantics(Part::Next, None).disabled);
         let mut round = self::carousel(Options {
-            wrap: true,
+            ends: Ends::Wrap,
             ..Default::default()
         });
         press(&mut round, Part::Previous);
@@ -737,7 +738,7 @@ mod tests {
     fn it_advances_on_its_own_and_stops_while_the_pointer_is_on_it() {
         let mut carousel = carousel(Options {
             autoplay_ms: Some(3000),
-            wrap: true,
+            ends: Ends::Wrap,
             ..Default::default()
         });
         assert_eq!(carousel.wake_after(), Some(0));
@@ -851,7 +852,7 @@ mod tests {
             || {
                 Carousel::new(Options {
                     autoplay_ms: Some(1000),
-                    wrap: true,
+                    ends: Ends::Wrap,
                     ..Default::default()
                 })
             },

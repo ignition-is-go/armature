@@ -15,7 +15,7 @@ pub struct Options {
     /// Otherwise a tab shows as soon as focus reaches it.
     pub manual: bool,
     /// Whether the arrows come round from the last tab to the first.
-    pub wrap: bool,
+    pub ends: Ends,
 }
 
 impl Default for Options {
@@ -24,7 +24,7 @@ impl Default for Options {
             orientation: Orientation::Horizontal,
             dir: Dir::Ltr,
             manual: false,
-            wrap: true,
+            ends: Ends::Wrap,
         }
     }
 }
@@ -165,7 +165,7 @@ impl Primitive for Tabs {
             Input::Key { key, .. } => {
                 if let Some(nav) = roving::nav_for_key(key, self.opts.orientation, self.opts.dir) {
                     let from = self.focused.as_deref().or_else(|| self.current());
-                    let focus = self.items.step(from, nav, Ends::wrapping(self.opts.wrap));
+                    let focus = self.items.step(from, nav, self.opts.ends);
                     if let Some(key) = &focus {
                         self.focused = Some(key.clone());
                         if !self.opts.manual {
@@ -357,7 +357,7 @@ mod tests {
     fn with_manual_activation_the_arrows_only_move_focus() {
         let mut tabs = Tabs::new(Options {
             manual: true,
-            wrap: false,
+            ends: Ends::Stop,
             ..Default::default()
         });
         for key in ["one", "two"] {

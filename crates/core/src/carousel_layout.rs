@@ -3,6 +3,7 @@
 //! view. Lengths are along the scrolling axis.
 
 use crate::convert::Cast;
+use crate::roving::Ends;
 
 /// A slide's place along the track.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -172,15 +173,15 @@ pub fn is_slide_in_view(slide: SlideBox, scroll: f64, viewport: f64) -> bool {
 }
 
 /// The page a step of `by` lands on, counting pages from 1. It stops at the ends,
-/// or goes round with `wrap`.
+/// or goes round, as `ends` says.
 #[must_use]
-pub fn step_page(page: usize, by: i64, count: usize, wrap: bool) -> usize {
+pub fn step_page(page: usize, by: i64, count: usize, ends: Ends) -> usize {
     if count <= 1 {
         return page;
     }
     let pages: i64 = count.cast();
     let next = page.cast::<i64>().saturating_add(by);
-    let landed = if wrap {
+    let landed = if ends == Ends::Wrap {
         // Pages count from 1, so the wrap is taken from 0 and put back.
         next.saturating_sub(1).rem_euclid(pages).saturating_add(1)
     } else {

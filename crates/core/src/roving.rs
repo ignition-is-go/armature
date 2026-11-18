@@ -45,20 +45,13 @@ pub const fn nav_for_key(key: Key, orientation: Orientation, dir: Dir) -> Option
 }
 
 /// What a step past the last item, or back past the first, does.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Ends {
     /// Goes round to the other end.
     Wrap,
     /// Stays where it is.
+    #[default]
     Stop,
-}
-
-impl Ends {
-    /// `Wrap` when a setting says to wrap, and `Stop` otherwise.
-    #[must_use]
-    pub const fn wrapping(wrap: bool) -> Self {
-        if wrap { Self::Wrap } else { Self::Stop }
-    }
 }
 
 /// Index to move to, skipping disabled items. `None` means there is nowhere to go.

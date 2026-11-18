@@ -26,7 +26,7 @@ pub struct Options {
     pub orientation: Orientation,
     pub dir: Dir,
     /// Whether the arrows come round from the last event to the first.
-    pub wrap: bool,
+    pub ends: Ends,
     /// Whether the events are a feed that loads more as it is read. `PageDown` and
     /// `PageUp` then move between events from anywhere inside one.
     pub feed: bool,
@@ -37,7 +37,7 @@ impl Default for Options {
         Self {
             orientation: Orientation::Vertical,
             dir: Dir::Ltr,
-            wrap: true,
+            ends: Ends::Wrap,
             feed: false,
         }
     }
@@ -187,8 +187,13 @@ impl Primitive for EventList {
                     return Reaction::default();
                 };
                 // A feed has an end to reach, so paging through it never comes round.
-                let wrap = self.opts.wrap && !matches!(key, Key::PageDown | Key::PageUp);
-                let target = self.events.step(self.tab_stop(), nav, Ends::wrapping(wrap));
+                // A page of events stops at the ends even in a list that wraps.
+                let ends = if matches!(key, Key::PageDown | Key::PageUp) {
+                    Ends::Stop
+                } else {
+                    self.opts.ends
+                };
+                let target = self.events.step(self.tab_stop(), nav, ends);
                 if let Some(key) = &target {
                     self.focused = Some(key.clone());
                 }
