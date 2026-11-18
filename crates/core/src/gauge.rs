@@ -162,6 +162,7 @@ pub enum ProgressPart {
 }
 
 /// How far a task has come. The value is the number, or empty while that is unknown.
+/// A value that is not a number counts as unknown.
 #[derive(Clone, Debug)]
 pub struct Progress {
     value: Option<f64>,
@@ -177,8 +178,12 @@ impl Default for Progress {
 
 impl Progress {
     #[must_use]
-    pub const fn new(value: Option<f64>, min: f64, max: f64) -> Self {
-        Self { value, min, max }
+    pub fn new(value: Option<f64>, min: f64, max: f64) -> Self {
+        Self {
+            value: value.filter(|value| value.is_finite()),
+            min,
+            max,
+        }
     }
 
     #[must_use]
@@ -256,7 +261,11 @@ impl Primitive for Progress {
     }
 
     fn set_value(&mut self, value: Vec<String>) {
-        self.value = value.first().and_then(|text| text.parse().ok());
+        // Something that is not a number says nothing of how far along it is.
+        self.value = value
+            .first()
+            .and_then(|text| text.parse::<f64>().ok())
+            .filter(|value| value.is_finite());
     }
 
     fn snapshot(&self, label: &str) -> Snapshot {
@@ -422,5 +431,16 @@ mod tests {
         crate::testing::assert_conforms(Meter::default, &[]);
         crate::testing::assert_conforms(Progress::default, &[]);
         crate::testing::assert_conforms(Separator::default, &[]);
+    }
+
+    #[test]
+    fn progress_that_is_not_a_number_is_unknown() {
+        let mut progress = Progress::new(Some(f64::NAN), 0.0, 100.0);
+        assert_eq!(progress.state(), ProgressState::Indeterminate);
+        assert_eq!(progress.value_text(), "");
+        assert_eq!(progress.semantics(ProgressPart::Root, None).range, None);
+        progress.set_value(vec!["inf".to_string()]);
+        assert_eq!(progress.state(), ProgressState::Indeterminate);
+        assert_eq!(progress.value(), Vec::<String>::new());
     }
 }
