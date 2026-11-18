@@ -125,8 +125,12 @@ pub struct Announcement {
 }
 
 /// Owns one primitive's state, its parts' focus handles, and its agent registration.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is an independent fact about the component"
+)]
 pub struct Machine<P: Primitive> {
-    machine: P,
+    primitive: P,
     label: SharedString,
     handles: HashMap<PartKey<P>, FocusHandle>,
     /// Where each part was last painted.
@@ -203,7 +207,7 @@ impl<P: Primitive> Machine<P> {
                 move |cx: &App| {
                     let state = this.upgrade()?;
                     let state = state.read(cx);
-                    Some(state.machine.snapshot(&state.label))
+                    Some(state.primitive.snapshot(&state.label))
                 }
             }),
             act: Rc::new({
@@ -211,22 +215,22 @@ impl<P: Primitive> Machine<P> {
                 move |cx: &mut App, action, item| {
                     let state = this.upgrade().ok_or(ActError::Refused)?;
                     state.update(cx, |state, cx| {
-                        let before = state.machine.value();
+                        let before = state.primitive.value();
                         let mut gate = state.gate.take();
-                        let result = state.machine.act(action, item, &mut |change| {
+                        let result = state.primitive.act(action, item, &mut |change| {
                             gate.as_mut().is_none_or(|gate| gate(change, cx))
                         });
                         state.gate = gate;
                         state.remember(before, Source::Agent, cx);
                         // An agent action cannot ask for a scroll, so the part is
                         // brought to wherever the primitive now wants it.
-                        if let Some(offset) = state.machine.wanted_scroll() {
+                        if let Some(offset) = state.primitive.wanted_scroll() {
                             state
                                 .scroll
                                 .set_offset(point(px(0.), px(-(offset.cast::<f32>()))));
                         }
                         cx.notify();
-                        result.map(|()| state.machine.value())
+                        result.map(|()| state.primitive.value())
                     })
                 }
             }),
@@ -241,7 +245,7 @@ impl<P: Primitive> Machine<P> {
             .detach();
 
         Self {
-            machine,
+            primitive: machine,
             label: label.into(),
             handles,
             bounds: HashMap::new(),
@@ -268,6 +272,7 @@ impl<P: Primitive> Machine<P> {
     }
 
     /// Called with each proposed change. Returning `false` cancels it.
+    #[must_use]
     pub fn on_value_change(
         mut self,
         gate: impl FnMut(&ValueChange, &mut App) -> bool + 'static,
@@ -297,6 +302,7 @@ impl<P: Primitive> Machine<P> {
     }
 
     /// Sets what agents may see and do with this component.
+    #[must_use]
     pub fn agent_access(mut self, access: Access, cx: &mut Context<Self>) -> Self {
         self.secret = access.secret;
         agent::registry(cx).set_access(self.registration, access);
@@ -306,9 +312,9 @@ impl<P: Primitive> Machine<P> {
     /// Records a committed change in the shared history.
     fn remember(&self, before: Vec<String>, source: Source, cx: &mut App) {
         // Whatever is open sits in the stack of layers while it is open.
-        let open = self.machine.snapshot("").expanded == Some(true);
+        let open = self.primitive.snapshot("").expanded == Some(true);
         let modal = P::parts().iter().any(|part| {
-            let semantics = self.machine.semantics(*part, None);
+            let semantics = self.primitive.semantics(*part, None);
             semantics.modal && !semantics.hidden
         });
         let id = self.registration.to_string();
@@ -319,7 +325,7 @@ impl<P: Primitive> Machine<P> {
             (false, _) => drop(layers.close(&id)),
             _ => {}
         }
-        let after = self.machine.value();
+        let after = self.primitive.value();
         agent::record(
             self.label.to_string(),
             before,
@@ -332,31 +338,31 @@ impl<P: Primitive> Machine<P> {
 
     /// The primitive itself, for what only it knows, such as a slider's fraction.
     pub const fn primitive(&self) -> &P {
-        &self.machine
+        &self.primitive
     }
 
     pub fn value(&self) -> Vec<String> {
-        self.machine.value()
+        self.primitive.value()
     }
 
     /// Sets the value on the owner's say-so, without asking the gate.
     pub fn set_value(&mut self, value: Vec<String>, cx: &mut Context<Self>) {
-        self.machine.set_value(value);
+        self.primitive.set_value(value);
         cx.notify();
     }
 
     /// The text to show in a part the person types into.
     pub fn text(&self, part: P::Part, item: Option<&str>) -> Option<String> {
-        self.machine.text(part, item)
+        self.primitive.text(part, item)
     }
 
     /// What an agent would see: label, value and items in order.
     pub fn snapshot(&self) -> armature_core::agent::Snapshot {
-        self.machine.snapshot(&self.label)
+        self.primitive.snapshot(&self.label)
     }
 
     pub fn semantics(&self, part: P::Part, item: Option<&str>) -> Semantics {
-        self.machine.semantics(part, item)
+        self.primitive.semantics(part, item)
     }
 
     /// Everything announced so far, oldest first.
@@ -395,7 +401,7 @@ impl<P: Primitive> Machine<P> {
     /// combobox's `status`. Returns whether it is a setting the primitive has.
     pub fn set(&mut self, name: &str, value: &str, cx: &mut Context<Self>) -> bool {
         cx.notify();
-        self.machine.set(name, value)
+        self.primitive.set(name, value)
     }
 
     /// Listens for the primitive's hotkey wherever focus is, and remembers where
@@ -404,7 +410,7 @@ impl<P: Primitive> Machine<P> {
         self.hotkey_watch = Some(cx.observe_keystrokes(move |state, event, window, cx| {
             let pressed = key_from_keystroke(&event.keystroke);
             let mods = modifiers(event.keystroke.modifiers);
-            let keys = state.machine.hotkeys();
+            let keys = state.primitive.hotkeys();
             let Some(shortcut) = keys
                 .into_iter()
                 .find(|shortcut| pressed.is_some_and(|key| shortcut.matches(key, mods)))
@@ -462,7 +468,8 @@ impl<P: Primitive> Machine<P> {
             .iter()
             .find(|((p, item), _)| {
                 *p == part
-                    && self.machine.semantics(part, item.as_deref()).focusable == Focusable::TabStop
+                    && self.primitive.semantics(part, item.as_deref()).focusable
+                        == Focusable::TabStop
             })
             .map(|(_, handle)| handle.clone())
     }
@@ -470,7 +477,7 @@ impl<P: Primitive> Machine<P> {
     /// Where the caret sits in a part the person types into, counted in characters.
     /// Draw it there; GPUI has no text field to do so.
     pub fn caret(&self, part: P::Part, item: Option<&str>) -> usize {
-        let text = self.machine.text(part, item).unwrap_or_default();
+        let text = self.primitive.text(part, item).unwrap_or_default();
         let end = text.chars().count();
         self.edits
             .get(&(part, item.map(str::to_string)))
@@ -516,7 +523,10 @@ impl<P: Primitive> Machine<P> {
 
         // GPUI has no text field element, so the edit is applied here.
         let slot = (part, item.clone());
-        let text = self.machine.text(part, item.as_deref()).unwrap_or_default();
+        let text = self
+            .primitive
+            .text(part, item.as_deref())
+            .unwrap_or_default();
         let mut field = self
             .edits
             .remove(&slot)
@@ -549,7 +559,12 @@ impl<P: Primitive> Machine<P> {
             );
             // The primitive may have cleaned what was typed, such as dropping a letter
             // from a code.
-            field.set_text(&self.machine.text(part, item.as_deref()).unwrap_or_default());
+            field.set_text(
+                &self
+                    .primitive
+                    .text(part, item.as_deref())
+                    .unwrap_or_default(),
+            );
         }
         self.edits.insert(slot, field);
         cx.notify();
@@ -558,9 +573,9 @@ impl<P: Primitive> Machine<P> {
 
     /// Keeps Tab among this primitive's own parts while one of them is a shown modal.
     /// The part that opens the modal sits outside it, so it is left out.
-    fn trap_tab(&mut self, backwards: bool, window: &mut Window, cx: &mut Context<Self>) -> bool {
+    fn trap_tab(&self, backwards: bool, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let shown_modal = P::parts().iter().copied().find(|part| {
-            let semantics = self.machine.semantics(*part, None);
+            let semantics = self.primitive.semantics(*part, None);
             semantics.modal && !semantics.hidden
         });
         let Some(modal) = shown_modal else {
@@ -571,14 +586,15 @@ impl<P: Primitive> Machine<P> {
             .filter(|part| P::relations(**part).controls != Some(modal))
             .flat_map(|part| self.handles.iter().filter(move |((p, _), _)| p == part))
             .filter(|((part, item), _)| {
-                let semantics = self.machine.semantics(*part, item.as_deref());
+                let semantics = self.primitive.semantics(*part, item.as_deref());
                 !semantics.hidden && semantics.focusable == Focusable::TabStop
             })
             .map(|(_, handle)| handle)
             .collect();
         let current = stops.iter().position(|handle| handle.is_focused(window));
-        if let Some(next) = armature_core::layers::trapped_focus(current, stops.len(), backwards) {
-            stops[next].clone().focus(window, cx);
+        let next = armature_core::layers::trapped_focus(current, stops.len(), backwards);
+        if let Some(stop) = next.and_then(|next| stops.get(next)) {
+            (*stop).clone().focus(window, cx);
         }
         true
     }
@@ -607,7 +623,7 @@ impl<P: Primitive> Machine<P> {
                 part: *part,
                 item: item.clone(),
             };
-            self.machine.send(landed, &mut |_| true);
+            self.primitive.send(landed, &mut |_| true);
         }
         self.run(window, cx, |machine, _, gate| machine.send(input, gate))
             .handled
@@ -699,7 +715,7 @@ impl<P: Primitive> Machine<P> {
         ) -> Reaction<P::Part>,
     ) -> Reaction<P::Part> {
         self.watch_blur(window, cx);
-        let before = self.machine.value();
+        let before = self.primitive.value();
         let mut gate = self.gate.take();
         let bounds = &self.bounds;
         let measure = |part: P::Part, item: Option<&str>| {
@@ -712,7 +728,7 @@ impl<P: Primitive> Machine<P> {
                 height: number(bounds.size.height),
             })
         };
-        let reaction = step(&mut self.machine, &measure, &mut |change| {
+        let reaction = step(&mut self.primitive, &measure, &mut |change| {
             gate.as_mut().is_none_or(|gate| gate(change, cx))
         });
         self.gate = gate;
@@ -763,7 +779,7 @@ impl<P: Primitive> Machine<P> {
                 }
                 Effect::ScrollTo { offset } => {
                     let along = px(-((*offset).cast::<f32>()));
-                    let across = self.machine.scroll_axis() == Orientation::Horizontal;
+                    let across = self.primitive.scroll_axis() == Orientation::Horizontal;
                     self.scroll.set_offset(if across {
                         point(along, px(0.))
                     } else {
@@ -808,6 +824,10 @@ impl<P: Primitive> Machine<P> {
 
 /// One part of a primitive as an unstyled `div` carrying the part's semantics, focus
 /// handle and event wiring. Style it and give it children like any other `div`.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one block of wiring for each kind of input a part can take"
+)]
 pub fn part<K: PartOf>(
     state: &Entity<Machine<K::Primitive>>,
     part: K,
@@ -826,7 +846,7 @@ pub fn part<K: PartOf>(
 
     if let Some(role) = semantics.role {
         el = el.role(accessibility_role(role));
-        if item.is_none() && machine.machine.named_part() == Some(part) {
+        if item.is_none() && machine.primitive.named_part() == Some(part) {
             el = el.aria_label(machine.label.clone());
         }
     }
@@ -906,7 +926,8 @@ pub fn part<K: PartOf>(
                                     .filter(|_| K::Primitive::hovers(other))?;
                                 let own = state.bounds.get(&(other, item.clone()));
                                 let bounds = own.or_else(|| state.bounds.get(&(other, None)))?;
-                                let shown = !state.machine.semantics(other, item.as_deref()).hidden;
+                                let shown =
+                                    !state.primitive.semantics(other, item.as_deref()).hidden;
                                 shown.then(|| core_rect(*bounds))
                             })
                     })
@@ -971,7 +992,7 @@ pub fn part<K: PartOf>(
     }
     let scrolls = K::Primitive::scrolls(part);
     if scrolls {
-        el = if machine.machine.scroll_axis() == Orientation::Horizontal {
+        el = if machine.primitive.scroll_axis() == Orientation::Horizontal {
             el.overflow_x_scroll().track_scroll(&machine.scroll)
         } else {
             el.overflow_y_scroll().track_scroll(&machine.scroll)
@@ -987,7 +1008,7 @@ pub fn part<K: PartOf>(
             };
             let taken = state.update(cx, |state, cx| {
                 // The wheel goes to a part that asks for it now, and scrolls otherwise.
-                if !state.machine.wheels(part) {
+                if !state.primitive.wheels(part) {
                     return false;
                 }
                 let input = Input::Wheel {
@@ -1117,7 +1138,7 @@ pub fn part<K: PartOf>(
         None => Layout::Inline,
         // A popup that belongs to an item sits against that item's own anchor.
         Some(placement) => machine
-            .machine
+            .primitive
             .popup_point()
             // A popup called up at a point, as a context menu is, sits against it.
             .map(|at| {
@@ -1161,19 +1182,19 @@ pub fn part<K: PartOf>(
                 // A primitive that lays itself out from where its parts are drawn
                 // hears of it when one of them moves.
                 remeasure = state.bounds.insert(key.clone(), bounds) != Some(bounds)
-                    && state.machine.measures();
+                    && state.primitive.measures();
                 let relinked =
                     node.is_some_and(|node| state.nodes.insert(key.clone(), node) != Some(node));
-                listen = state.hotkey_watch.is_none() && !state.machine.hotkeys().is_empty();
+                listen = state.hotkey_watch.is_none() && !state.primitive.hotkeys().is_empty();
                 // A value set from outside may have left a timer to start.
                 if !state.waking
-                    && let Some(delay) = state.machine.wake_after()
+                    && let Some(delay) = state.primitive.wake_after()
                 {
                     state.waking = true;
-                    wake = Some(state.now_ms() + delay);
+                    wake = Some(state.now_ms().saturating_add(delay));
                 }
                 // Scrolling is read off the handle each frame.
-                let across = state.machine.scroll_axis() == Orientation::Horizontal;
+                let across = state.primitive.scroll_axis() == Orientation::Horizontal;
                 let (offset, max, length) = if across {
                     (
                         state.scroll.offset().x,
@@ -1335,6 +1356,10 @@ enum Layout {
 }
 
 /// GPUI flips a floating part to the other side of its anchor when it would overflow.
+#[expect(
+    clippy::arithmetic_side_effects,
+    reason = "lengths on screen, added as the toolkit's own pixel type"
+)]
 fn floating(side: Side, align: Align, gap: f64, anchor: Bounds<Pixels>) -> Layout {
     let gap = px(gap.cast::<f32>());
     let (corner, x) = match (side, align) {
@@ -1707,7 +1732,7 @@ mod tests {
         Element::write_a11y_info(&part, &mut node);
         assert_eq!(node.labelled_by(), [accesskit::NodeId(7)]);
         assert_eq!(node.controls(), [accesskit::NodeId(8)]);
-        assert!(node.described_by().is_empty());
+        assert_eq!(node.described_by().len(), 0);
     }
 
     #[test]

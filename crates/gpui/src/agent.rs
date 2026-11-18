@@ -68,6 +68,10 @@ pub fn snapshot(cx: &App) -> Vec<(String, Snapshot)> {
 }
 
 /// Runs one action and returns the component's value afterwards.
+///
+/// # Errors
+///
+/// When no component has that ref, or it refuses the action.
 pub fn act(
     cx: &mut App,
     reference: &str,
@@ -95,17 +99,18 @@ pub fn history(cx: &App) -> Vec<Entry> {
         .unwrap_or_default()
 }
 
-/// Answers one JSON request with one JSON response. The methods are `snapshot`,
-/// `query` (with `text`), `act` (with `ref`, `action` and `item`), `run` (with
-/// `steps`), `history` and `tools`. A `run` over this channel has nobody to ask, so a
-/// step that needs a person's approval is refused.
+/// Answers one JSON request with one JSON response.
+///
+/// The methods are `snapshot`, `query` (with `text`), `act` (with `ref`, `action` and
+/// `item`), `run` (with `steps`), `history` and `tools`. A `run` over this channel has
+/// nobody to ask, so a step that needs a person's approval is refused.
 pub fn handle(request: &str, cx: &mut App) -> String {
     let failure = |error: String| json!({ "ok": false, "error": error });
     let request = match serde_json::from_str::<Value>(request) {
         Ok(request) => request,
         Err(error) => return failure(format!("invalid JSON: {error}")).to_string(),
     };
-    let text = |key: &str| request[key].as_str();
+    let text = |key: &str| request.get(key).and_then(Value::as_str);
     let response = match text("method") {
         Some("snapshot") => {
             let components: Vec<Value> = snapshot(cx).iter().map(component).collect();
@@ -126,8 +131,9 @@ pub fn handle(request: &str, cx: &mut App) -> String {
             _ => failure("act needs \"ref\" and \"action\"".into()),
         },
         Some("run") => {
-            let steps: Vec<Step> = request["steps"]
-                .as_array()
+            let steps: Vec<Step> = request
+                .get("steps")
+                .and_then(Value::as_array)
                 .into_iter()
                 .flatten()
                 .map(|step| Step {
@@ -220,6 +226,10 @@ type Request = (String, Sender<String>);
 /// Lets an agent outside the process reach the bridge over a Unix socket that only
 /// this user can open. Each line sent is a request for [`handle`]; each gets one
 /// line back.
+///
+/// # Errors
+///
+/// When the socket cannot be made at `path`.
 #[cfg(unix)]
 pub fn serve(path: impl AsRef<Path>, cx: &mut App) -> io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
@@ -240,7 +250,7 @@ pub fn serve(path: impl AsRef<Path>, cx: &mut App) -> io::Result<()> {
         for stream in listener.incoming().flatten() {
             let requests = requests.clone();
             std::thread::spawn(move || {
-                let _ = converse(stream, requests);
+                let _ = converse(stream, &requests);
             });
         }
     });
@@ -257,7 +267,7 @@ pub fn serve(path: impl AsRef<Path>, cx: &mut App) -> io::Result<()> {
 #[cfg(unix)]
 fn converse(
     stream: std::os::unix::net::UnixStream,
-    requests: UnboundedSender<Request>,
+    requests: &UnboundedSender<Request>,
 ) -> io::Result<()> {
     let mut writer = stream.try_clone()?;
     for line in BufReader::new(stream).lines() {
