@@ -254,6 +254,141 @@ impl Combobox {
     }
 }
 
+impl Combobox {
+    /// Text typed into the field: the list opens, narrows to what matches, and says how
+    /// many results there are.
+    fn on_typed(&mut self, value: String, gate: Gate) -> Reaction<Part> {
+        // Deleting all the text of a single choice clears it. Escape can
+        // still bring it back.
+        if value.is_empty() && !self.opts.multiple && !self.opts.custom {
+            let was = self.selected.first().cloned();
+            if was.is_some() && self.commit(Vec::new(), Source::User, Reason::Text, gate) {
+                self.deleted = was;
+            }
+        }
+        self.text = value;
+        self.open = true;
+        if self.opts.remote {
+            match self.requests.begin(&self.text) {
+                Some(request) => {
+                    self.loading = Loading::Loading;
+                    gate(&ValueChange {
+                        value: vec![format!("load:{request}:{}", self.text)],
+                        source: Source::User,
+                        reason: Reason::Action,
+                    });
+                }
+                None => self.loading = Loading::Idle,
+            }
+        }
+        let results = self.results();
+        let first = results
+            .iter()
+            .find(|key| self.items.is_enabled(key))
+            .map(std::string::ToString::to_string);
+        let message = match results.len() {
+            _ if self.loading == Loading::Loading => "Loading".to_string(),
+            0 => "No results".to_string(),
+            1 => "1 result".to_string(),
+            count => format!("{count} results"),
+        };
+        self.active = if self.opts.auto_highlight {
+            first
+        } else {
+            None
+        };
+        Reaction::handled().announcing(message)
+    }
+
+    /// A key in the text field: stepping through the list, choosing, completing, and
+    /// the three things Escape does in turn.
+    fn on_key(&mut self, key: Key, mods: crate::keys::Modifiers, gate: Gate) -> Reaction<Part> {
+        match key {
+            Key::Enter | Key::Space if self.on_clear => self.send(
+                Input::Press {
+                    part: Part::Clear,
+                    item: None,
+                    mods,
+                },
+                gate,
+            ),
+            Key::ArrowDown if !mods.alt || !self.open => {
+                let reaction = self.step(Nav::Next);
+                // The end of what is loaded is where more is asked for.
+                if self.opts.load_more
+                    && std::mem::take(&mut self.at_end)
+                    && self.loading != Loading::Loading
+                {
+                    gate(&ValueChange {
+                        value: vec![format!("more:{}", self.text)],
+                        source: Source::User,
+                        reason: Reason::Action,
+                    });
+                }
+                reaction
+            }
+            // Tab takes the suggested completion, then moves on as usual.
+            Key::Tab if self.open && self.completion().is_some() => {
+                let typed = self.text.to_lowercase();
+                let first = self
+                    .items
+                    .iter()
+                    .find(|item| !item.disabled && item.label.to_lowercase().starts_with(&typed))
+                    .map(|item| item.key.clone());
+                if let Some(key) = first {
+                    self.choose(&key, Source::User, Reason::Keyboard, gate);
+                }
+                Reaction::default()
+            }
+            Key::ArrowUp => self.step(Nav::Prev),
+            Key::Enter if self.open => match self.active.clone() {
+                Some(key) => {
+                    self.choose(&key, Source::User, Reason::Keyboard, gate);
+                    Reaction::handled()
+                }
+                None if self.opts.custom => {
+                    self.settle(gate);
+                    Reaction::handled()
+                }
+                None => Reaction::default(),
+            },
+            // Escape brings back a value that deleting the text took away.
+            Key::Escape if self.deleted.is_some() => {
+                let back = self.deleted.take().unwrap_or_default();
+                if self.commit(vec![back.clone()], Source::User, Reason::Keyboard, gate) {
+                    self.text = self.label(&back);
+                }
+                self.open = false;
+                self.active = None;
+                Reaction::handled()
+            }
+            // Escape closes the list first, and only then clears the field.
+            Key::Escape if self.open => {
+                self.open = false;
+                self.active = None;
+                Reaction::handled()
+            }
+            Key::Escape if !self.text.is_empty() => {
+                if self.opts.multiple
+                    || self.commit(Vec::new(), Source::User, Reason::Keyboard, gate)
+                {
+                    self.text.clear();
+                }
+                Reaction::handled()
+            }
+            Key::Backspace
+                if self.opts.multiple && self.text.is_empty() && !self.selected.is_empty() =>
+            {
+                let mut next = self.selected.clone();
+                next.pop();
+                self.commit(next, Source::User, Reason::Keyboard, gate);
+                Reaction::handled()
+            }
+            _ => Reaction::default(),
+        }
+    }
+}
+
 impl PartOf for Part {
     type Primitive = Combobox;
 }
@@ -405,11 +540,6 @@ impl Primitive for Combobox {
             },
         }
     }
-
-    #[expect(
-        clippy::too_many_lines,
-        reason = "one arm for each input the primitive answers"
-    )]
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
         if self.opts.read_only && !matches!(input, Input::Focus { .. } | Input::Blur { .. }) {
             return Reaction::default();
@@ -426,48 +556,7 @@ impl Primitive for Combobox {
                 part: Part::Input,
                 value,
                 ..
-            } => {
-                // Deleting all the text of a single choice clears it. Escape can
-                // still bring it back.
-                if value.is_empty() && !self.opts.multiple && !self.opts.custom {
-                    let was = self.selected.first().cloned();
-                    if was.is_some() && self.commit(Vec::new(), Source::User, Reason::Text, gate) {
-                        self.deleted = was;
-                    }
-                }
-                self.text = value;
-                self.open = true;
-                if self.opts.remote {
-                    match self.requests.begin(&self.text) {
-                        Some(request) => {
-                            self.loading = Loading::Loading;
-                            gate(&ValueChange {
-                                value: vec![format!("load:{request}:{}", self.text)],
-                                source: Source::User,
-                                reason: Reason::Action,
-                            });
-                        }
-                        None => self.loading = Loading::Idle,
-                    }
-                }
-                let results = self.results();
-                let first = results
-                    .iter()
-                    .find(|key| self.items.is_enabled(key))
-                    .map(std::string::ToString::to_string);
-                let message = match results.len() {
-                    _ if self.loading == Loading::Loading => "Loading".to_string(),
-                    0 => "No results".to_string(),
-                    1 => "1 result".to_string(),
-                    count => format!("{count} results"),
-                };
-                self.active = if self.opts.auto_highlight {
-                    first
-                } else {
-                    None
-                };
-                Reaction::handled().announcing(message)
-            }
+            } => self.on_typed(value, gate),
             Input::Press {
                 part: Part::Input, ..
             } => {
@@ -504,105 +593,7 @@ impl Primitive for Combobox {
                 }
                 Reaction::focusing(Part::Input)
             }
-            Input::Key {
-                key: Key::Enter | Key::Space,
-                mods,
-                ..
-            } if self.on_clear => self.send(
-                Input::Press {
-                    part: Part::Clear,
-                    item: None,
-                    mods,
-                },
-                gate,
-            ),
-            Input::Key {
-                key: Key::ArrowDown,
-                mods,
-                ..
-            } if !mods.alt || !self.open => {
-                let reaction = self.step(Nav::Next);
-                // The end of what is loaded is where more is asked for.
-                if self.opts.load_more
-                    && std::mem::take(&mut self.at_end)
-                    && self.loading != Loading::Loading
-                {
-                    gate(&ValueChange {
-                        value: vec![format!("more:{}", self.text)],
-                        source: Source::User,
-                        reason: Reason::Action,
-                    });
-                }
-                reaction
-            }
-            // Tab takes the suggested completion, then moves on as usual.
-            Input::Key { key: Key::Tab, .. } if self.open && self.completion().is_some() => {
-                let typed = self.text.to_lowercase();
-                let first = self
-                    .items
-                    .iter()
-                    .find(|item| !item.disabled && item.label.to_lowercase().starts_with(&typed))
-                    .map(|item| item.key.clone());
-                if let Some(key) = first {
-                    self.choose(&key, Source::User, Reason::Keyboard, gate);
-                }
-                Reaction::default()
-            }
-            Input::Key {
-                key: Key::ArrowUp, ..
-            } => self.step(Nav::Prev),
-            Input::Key {
-                key: Key::Enter, ..
-            } if self.open => match self.active.clone() {
-                Some(key) => {
-                    self.choose(&key, Source::User, Reason::Keyboard, gate);
-                    Reaction::handled()
-                }
-                None if self.opts.custom => {
-                    self.settle(gate);
-                    Reaction::handled()
-                }
-                None => Reaction::default(),
-            },
-            // Escape brings back a value that deleting the text took away.
-            Input::Key {
-                key: Key::Escape, ..
-            } if self.deleted.is_some() => {
-                let back = self.deleted.take().unwrap_or_default();
-                if self.commit(vec![back.clone()], Source::User, Reason::Keyboard, gate) {
-                    self.text = self.label(&back);
-                }
-                self.open = false;
-                self.active = None;
-                Reaction::handled()
-            }
-            // Escape closes the list first, and only then clears the field.
-            Input::Key {
-                key: Key::Escape, ..
-            } if self.open => {
-                self.open = false;
-                self.active = None;
-                Reaction::handled()
-            }
-            Input::Key {
-                key: Key::Escape, ..
-            } if !self.text.is_empty() => {
-                if self.opts.multiple
-                    || self.commit(Vec::new(), Source::User, Reason::Keyboard, gate)
-                {
-                    self.text.clear();
-                }
-                Reaction::handled()
-            }
-            Input::Key {
-                key: Key::Backspace,
-                ..
-            } if self.opts.multiple && self.text.is_empty() && !self.selected.is_empty() => {
-                let mut next = self.selected.clone();
-                next.pop();
-                self.commit(next, Source::User, Reason::Keyboard, gate);
-                Reaction::handled()
-            }
+            Input::Key { key, mods, .. } => self.on_key(key, mods, gate),
             Input::PressOutside | Input::WindowBlur | Input::Blur { .. } => {
                 self.settle(gate);
                 Reaction::default()
