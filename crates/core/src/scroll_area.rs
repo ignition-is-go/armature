@@ -17,8 +17,6 @@ pub enum Part {
     Thumb,
 }
 
-/// The shortest the grip gets, however long the content.
-const MIN_THUMB: f64 = 16.0;
 /// How long after the last movement the scrollbar still counts as in use.
 const IDLE_MS: u64 = 1000;
 
@@ -88,12 +86,13 @@ impl ScrollArea {
         if !self.overflows() {
             return (0.0, track);
         }
-        let length = (track * self.viewport / self.content).clamp(MIN_THUMB.min(track), track);
-        let travel = self.content - self.viewport;
-        (
-            (track - length) * (self.offset / travel).clamp(0.0, 1.0),
-            length,
-        )
+        let metrics = crate::scroll_model::AxisMetrics {
+            position: self.offset,
+            client: self.viewport,
+            scroll: self.content,
+        };
+        let (length, offset) = crate::scroll_model::thumb_geometry(metrics, track);
+        (offset, length)
     }
 
     /// The scroll position that puts the grip's start at `at` on the track.

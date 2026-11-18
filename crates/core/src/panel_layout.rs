@@ -381,3 +381,100 @@ pub fn toggle_target(panels: &[PanelConstraints], handle: usize) -> Option<usize
         .into_iter()
         .find(|index| panels.get(*index).is_some_and(|panel| panel.collapsible))
 }
+
+/// The key a group's layouts are stored under, for an id the owner gives it.
+pub fn storage_key(save_id: &str) -> String {
+    format!("armature-panels:{save_id}")
+}
+
+/// Reads stored layouts: a JSON object from each set of panel ids, joined by
+/// commas, to its sizes. Anything else reads as nothing stored.
+fn stored_entries(stored: &str) -> Vec<(String, Vec<f64>)> {
+    let mut entries = Vec::new();
+    let mut rest = stored
+        .trim()
+        .strip_prefix('{')
+        .and_then(|rest| rest.strip_suffix('}'))
+        .unwrap_or_default()
+        .trim();
+    while let Some(after) = rest.strip_prefix('"') {
+        // The key, with `\"` and `\\` unescaped.
+        let mut key = String::new();
+        let mut chars = after.char_indices();
+        let end = loop {
+            match chars.next() {
+                Some((_, '\\')) => key.extend(chars.next().map(|(_, ch)| ch)),
+                Some((at, '"')) => break at,
+                Some((_, ch)) => key.push(ch),
+                None => return Vec::new(),
+            }
+        };
+        let Some(list) = after[end + 1..]
+            .trim_start()
+            .strip_prefix(':')
+            .map(str::trim_start)
+            .and_then(|list| list.strip_prefix('['))
+        else {
+            return Vec::new();
+        };
+        let Some(close) = list.find(']') else {
+            return Vec::new();
+        };
+        let sizes: Option<Vec<f64>> = list[..close]
+            .split(',')
+            .filter(|size| !size.trim().is_empty())
+            .map(|size| {
+                size.trim()
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|size| size.is_finite())
+            })
+            .collect();
+        let Some(sizes) = sizes else {
+            return Vec::new();
+        };
+        entries.push((key, sizes));
+        rest = list[close + 1..]
+            .trim_start()
+            .strip_prefix(',')
+            .unwrap_or(&list[close + 1..])
+            .trim_start();
+    }
+    if rest.is_empty() { entries } else { Vec::new() }
+}
+
+/// The layout saved for exactly this set of panels, from what was stored. Each
+/// set of panels keeps its own, so adding or removing one does not lose the rest.
+pub fn load_layout(stored: &str, ids: &[&str]) -> Option<Vec<f64>> {
+    let wanted = ids.join(",");
+    stored_entries(stored)
+        .into_iter()
+        .find(|(key, sizes)| *key == wanted && sizes.len() == ids.len())
+        .map(|(_, sizes)| sizes)
+}
+
+/// What to store after saving a layout for this set of panels, keeping the
+/// layouts already stored for other sets. Sizes are rounded to a thousandth.
+pub fn save_layout(stored: &str, ids: &[&str], layout: &[f64]) -> String {
+    let wanted = ids.join(",");
+    let mut entries: Vec<(String, Vec<f64>)> = stored_entries(stored)
+        .into_iter()
+        .filter(|(key, _)| *key != wanted)
+        .collect();
+    entries.push((
+        wanted,
+        layout
+            .iter()
+            .map(|size| (size * 1000.0).round() / 1000.0)
+            .collect(),
+    ));
+    let written: Vec<String> = entries
+        .iter()
+        .map(|(key, sizes)| {
+            let key = key.replace('\\', "\\\\").replace('"', "\\\"");
+            let sizes: Vec<String> = sizes.iter().map(f64::to_string).collect();
+            format!("\"{key}\":[{}]", sizes.join(","))
+        })
+        .collect();
+    format!("{{{}}}", written.join(","))
+}

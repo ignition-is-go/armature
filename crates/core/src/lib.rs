@@ -71,6 +71,7 @@ pub mod roving;
 pub mod safe_area;
 pub mod scroll;
 pub mod scroll_area;
+pub mod scroll_model;
 pub mod select;
 pub mod selection;
 pub mod sheet;

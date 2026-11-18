@@ -2151,3 +2151,240 @@ fn carousel_layouts() {
         (3, 1)
     );
 }
+
+// resizable.test.ts, "saved layouts"
+#[test]
+fn saved_panel_layouts() {
+    use armature_core::panel_layout::{load_layout, save_layout};
+    // "each set of panels keeps its own layout"
+    let stored = save_layout("", &["a", "b"], &[25.0, 75.0]);
+    let stored = save_layout(&stored, &["a", "b", "c"], &[20.0, 60.0, 20.0]);
+    assert_eq!(load_layout(&stored, &["a", "b"]), Some(vec![25.0, 75.0]));
+    assert_eq!(
+        load_layout(&stored, &["a", "b", "c"]),
+        Some(vec![20.0, 60.0, 20.0])
+    );
+    assert_eq!(load_layout(&stored, &["a", "c"]), None);
+    // Saving again for a set replaces only that set, and sizes are rounded.
+    let stored = save_layout(&stored, &["a", "b"], &[33.33349, 66.66651]);
+    assert_eq!(
+        load_layout(&stored, &["a", "b"]),
+        Some(vec![33.333, 66.667])
+    );
+    assert_eq!(
+        load_layout(&stored, &["a", "b", "c"]),
+        Some(vec![20.0, 60.0, 20.0])
+    );
+    // "broken or blocked storage loads nothing"
+    assert_eq!(load_layout("{", &["a"]), None);
+    assert_eq!(load_layout("", &["a"]), None);
+    assert_eq!(load_layout("{\"a\":[\"x\"]}", &["a"]), None);
+    assert_eq!(
+        load_layout(&save_layout("{", &["a"], &[100.0]), &["a"]),
+        Some(vec![100.0])
+    );
+}
+
+// scroll-area.test.ts: geometry, edges, scrollbar visibility, sticking to the end
+#[test]
+fn scroll_area_model() {
+    use armature_core::keys::Key;
+    use armature_core::scroll_model::*;
+    let list = AxisMetrics {
+        position: 0.0,
+        client: 200.0,
+        scroll: 1000.0,
+    };
+    let at = |position| AxisMetrics { position, ..list };
+    // thumb
+    assert_eq!(thumb_geometry(list, 200.0), (40.0, 0.0));
+    assert_eq!(
+        (
+            thumb_geometry(at(400.0), 200.0).1,
+            thumb_geometry(at(800.0), 200.0).1
+        ),
+        (80.0, 160.0)
+    );
+    let long = AxisMetrics {
+        position: 99_800.0,
+        client: 200.0,
+        scroll: 100_000.0,
+    };
+    assert_eq!(
+        thumb_geometry(long, 200.0),
+        (MIN_THUMB_SIZE, 200.0 - MIN_THUMB_SIZE)
+    );
+    assert_eq!(
+        (
+            thumb_geometry(at(-50.0), 200.0).1,
+            thumb_geometry(at(900.0), 200.0).1
+        ),
+        (0.0, 160.0)
+    );
+    assert_eq!(thumb_geometry(list, 0.0), (0.0, 0.0));
+    assert_eq!(
+        thumb_geometry(
+            AxisMetrics {
+                position: 0.0,
+                client: 0.0,
+                scroll: 0.0
+            },
+            200.0
+        ),
+        (0.0, 0.0)
+    );
+    // dragging and pressing the track
+    assert_eq!(dragged_position(0.0, 80.0, list, 200.0), 400.0);
+    assert_eq!(dragged_position(400.0, -1000.0, list, 200.0), 0.0);
+    assert_eq!(dragged_position(400.0, 1000.0, list, 200.0), 800.0);
+    let full = AxisMetrics {
+        position: 0.0,
+        client: 200.0,
+        scroll: 200.0,
+    };
+    assert_eq!(
+        (
+            dragged_position(0.0, 50.0, full, 200.0),
+            position_at(50.0, full, 200.0)
+        ),
+        (0.0, 0.0)
+    );
+    assert_eq!(
+        (
+            position_at(100.0, list, 200.0),
+            position_at(0.0, list, 200.0),
+            position_at(200.0, list, 200.0)
+        ),
+        (400.0, 0.0, 800.0)
+    );
+    assert_eq!(
+        (
+            page_direction(10.0, 40.0, 80.0),
+            page_direction(150.0, 40.0, 80.0),
+            page_direction(100.0, 40.0, 80.0)
+        ),
+        (-1, 1, 0)
+    );
+    assert_eq!(page_length(200.0), 175.0);
+    // edges
+    assert!(edges_of(at(0.6)).at_start);
+    assert!(edges_of(at(799.4)).at_end);
+    assert!(!edges_of(at(798.0)).at_end);
+    assert_eq!(
+        edges_of(at(200.0)),
+        Edges {
+            before: 200.0,
+            after: 600.0,
+            at_start: false,
+            at_end: false,
+            progress: 0.25
+        }
+    );
+    let fits = AxisMetrics {
+        position: 0.0,
+        client: 200.0,
+        scroll: 200.4,
+    };
+    assert!(!overflows(fits) && overflows(list));
+    assert_eq!(
+        edges_of(fits),
+        Edges {
+            before: 0.0,
+            after: 0.0,
+            at_start: true,
+            at_end: true,
+            progress: 0.0
+        }
+    );
+    // "a Firefox wheel in lines or pages scrolls as far as one in pixels"
+    assert_eq!(
+        (
+            wheel_pixels(3.0, 1, 16.0, 200.0),
+            wheel_pixels(1.0, 2, 16.0, 200.0),
+            wheel_pixels(53.0, 0, 16.0, 200.0)
+        ),
+        (48.0, 200.0, 53.0)
+    );
+    // scrollbar visibility
+    assert!(scrollbar_shown(
+        ScrollbarType::Always,
+        false,
+        false,
+        false,
+        false
+    ));
+    assert!(scrollbar_shown(
+        ScrollbarType::Auto,
+        true,
+        false,
+        false,
+        false
+    ));
+    assert!(!scrollbar_shown(
+        ScrollbarType::Auto,
+        false,
+        false,
+        false,
+        false
+    ));
+    assert!(!scrollbar_shown(
+        ScrollbarType::Scroll,
+        true,
+        false,
+        false,
+        false
+    ));
+    assert!(!scrollbar_shown(
+        ScrollbarType::Scroll,
+        true,
+        true,
+        false,
+        false
+    ));
+    assert!(scrollbar_shown(
+        ScrollbarType::Scroll,
+        true,
+        false,
+        true,
+        false
+    ));
+    assert!(scrollbar_shown(
+        ScrollbarType::Scroll,
+        true,
+        false,
+        false,
+        true
+    ));
+    assert!(scrollbar_shown(
+        ScrollbarType::Hover,
+        true,
+        true,
+        false,
+        false
+    ));
+    assert!(!scrollbar_shown(
+        ScrollbarType::Hover,
+        false,
+        true,
+        false,
+        false
+    ));
+    // sticking to the end
+    assert!(!follows_end(true, -40.0, 40.0));
+    assert!(
+        follows_end(true, 0.0, 300.0)
+            && follows_end(true, 120.0, 0.0)
+            && follows_end(true, -100.0, 0.0)
+    );
+    assert!(follows_end(false, 30.0, 0.5));
+    assert!(!follows_end(false, 30.0, 20.0) && !follows_end(false, -100.0, 0.0));
+    assert!(
+        scrolls_toward_start(Key::PageUp, false, false)
+            && scrolls_toward_start(Key::ArrowUp, false, false)
+    );
+    assert!(
+        scrolls_toward_start(Key::Space, true, false)
+            && !scrolls_toward_start(Key::Space, false, false)
+    );
+    assert!(!scrolls_toward_start(Key::ArrowUp, false, true));
+}
