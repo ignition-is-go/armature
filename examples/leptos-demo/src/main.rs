@@ -730,15 +730,15 @@ fn PopoverSection() -> impl IntoView {
     view! {
         <Section title="Popover">
             <div class="fade">
-            <Root machine=Popover::default() label="Share">
-                <Part part=popover::Part::Trigger>"Share"</Part>
-                <Part part=popover::Part::Content>
-                    <Part part=popover::Part::Arrow />
-                    <Part part=popover::Part::Title>"Share this page"</Part>
-                    <Part part=popover::Part::Description>"Anyone with the link can view."</Part>
-                    <Part part=popover::Part::Close label="Close">"×"</Part>
-                </Part>
-            </Root>
+                <Root machine=Popover::default() label="Share">
+                    <Part part=popover::Part::Trigger>"Share"</Part>
+                    <Part part=popover::Part::Content>
+                        <Part part=popover::Part::Arrow />
+                        <Part part=popover::Part::Title>"Share this page"</Part>
+                        <Part part=popover::Part::Description>"Anyone with the link can view."</Part>
+                        <Part part=popover::Part::Close label="Close">"×"</Part>
+                    </Part>
+                </Root>
             </div>
         </Section>
     }
