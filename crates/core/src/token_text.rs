@@ -17,6 +17,9 @@ pub struct Token {
     /// Tells this token from another with the same content. Empty until
     /// `normalize` gives it one.
     pub id: String,
+    /// Still loading, as an attached file is while it uploads. Not written by
+    /// `to_text`.
+    pub pending: bool,
 }
 
 impl Token {
@@ -26,6 +29,7 @@ impl Token {
             value: value.into(),
             label: label.into(),
             id: String::new(),
+            pending: false,
         }
     }
 
