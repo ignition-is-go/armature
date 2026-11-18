@@ -35,8 +35,8 @@ impl Accept {
 
 const ACTIONS: &[&str] = &["set", "clear"];
 
-/// A one-time code of a fixed number of digits. Anything that is not a digit is
-/// dropped, so a pasted "123 456" or "123-456" works.
+/// A one-time code of a fixed number of characters, digits unless `accepting` says
+/// otherwise. Anything else is dropped, so a pasted "123 456" or "123-456" works.
 #[derive(Clone, Debug)]
 pub struct OtpInput {
     length: usize,
@@ -89,7 +89,7 @@ impl OtpInput {
     /// The furthest the caret goes: the empty cell after the code, or the last
     /// character once the code is full.
     fn end(&self) -> usize {
-        self.code.chars().count().min(self.length.saturating_sub(1))
+        self.entered().min(self.length.saturating_sub(1))
     }
 
     fn commit(&mut self, code: String, source: Source, reason: Reason, gate: Gate) -> bool {
@@ -107,22 +107,27 @@ impl OtpInput {
         allowed
     }
 
-    #[must_use]
-    pub const fn is_complete(&self) -> bool {
-        self.code.len() == self.length
+    /// How many characters have been entered.
+    fn entered(&self) -> usize {
+        self.code.chars().count()
     }
 
-    /// One entry per cell: the digit in it, if any.
+    #[must_use]
+    pub fn is_complete(&self) -> bool {
+        self.entered() == self.length
+    }
+
+    /// One entry per cell: the character in it, if any.
     #[must_use]
     pub fn cells(&self) -> Vec<Option<char>> {
         let mut digits = self.code.chars();
         (0..self.length).map(|_| digits.next()).collect()
     }
 
-    /// The cell the next digit goes into, for showing a caret.
+    /// The cell the next character goes into, for showing a caret.
     #[must_use]
     pub fn next_cell(&self) -> Option<usize> {
-        (!self.is_complete()).then_some(self.code.len())
+        (!self.is_complete()).then_some(self.entered())
     }
 
     fn cleaned(&self, text: &str) -> String {
@@ -132,20 +137,10 @@ impl OtpInput {
             .collect()
     }
 
+    /// Takes text as the code, keeping only the characters a code is made of.
     fn set(&mut self, text: &str, source: Source, reason: Reason, gate: Gate) -> bool {
         let code = self.cleaned(text);
-        if code == self.code {
-            return true;
-        }
-        let allowed = gate(&ValueChange {
-            value: vec![code.clone()],
-            source,
-            reason,
-        });
-        if allowed {
-            self.code = code;
-        }
-        allowed
+        self.commit(code, source, reason, gate)
     }
 }
 
@@ -386,5 +381,15 @@ mod tests {
     #[test]
     fn it_conforms() {
         crate::testing::assert_conforms(OtpInput::default, &[]);
+    }
+
+    #[test]
+    fn a_code_of_wider_characters_is_counted_in_characters() {
+        let mut otp = OtpInput::new(2).accepting(Accept::Custom(|ch| ch == 'é'));
+        otp.set_value(vec!["é".into()]);
+        assert!(!otp.is_complete());
+        assert_eq!(otp.next_cell(), Some(1));
+        otp.set_value(vec!["éé".into()]);
+        assert!(otp.is_complete());
     }
 }
