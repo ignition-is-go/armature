@@ -5,7 +5,7 @@ use crate::agent::{ActError, Snapshot, SnapshotItem};
 use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::convert::Cast;
 use crate::drag::{Drag, DragEvent};
-use crate::keys::{Dir, Key};
+use crate::keys::{Dir, Direction, Key};
 use crate::primitive::{
     Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction,
     Role, Semantics,
@@ -191,6 +191,13 @@ pub fn move_row(
     landing(moved_rows(rows, key, before, depth.clamp(min, max))?, key)
 }
 
+/// Which way a row's depth changes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Level {
+    In,
+    Out,
+}
+
 /// A row picked up to be moved with the keyboard or a drag. The rows are shown as
 /// they would be if it were dropped now; dropping reports where it landed, and
 /// forgetting the move puts everything back.
@@ -281,59 +288,60 @@ impl OutlineMove {
 
     /// Moves it up one row on screen. Each of these returns whether anything moved.
     pub fn move_up(&mut self, shown: &dyn Fn(&str) -> bool) -> bool {
-        self.step(false, shown)
+        self.step(Direction::Backward, shown)
     }
 
     /// Moves it down one row on screen.
     pub fn move_down(&mut self, shown: &dyn Fn(&str) -> bool) -> bool {
-        self.step(true, shown)
+        self.step(Direction::Forward, shown)
     }
 
     /// Moves it above every other row on screen.
     pub fn move_to_top(&mut self, shown: &dyn Fn(&str) -> bool) -> bool {
-        self.move_to_end(false, shown)
+        self.move_to_end(Direction::Backward, shown)
     }
 
     /// Moves it below every other row on screen.
     pub fn move_to_bottom(&mut self, shown: &dyn Fn(&str) -> bool) -> bool {
-        self.move_to_end(true, shown)
+        self.move_to_end(Direction::Forward, shown)
     }
 
     /// Takes it in a level, if the row above allows.
     pub fn indent(&mut self, shown: &dyn Fn(&str) -> bool) -> bool {
-        self.change_depth(true, shown)
+        self.change_depth(Level::In, shown)
     }
 
     /// Takes it out a level, if the row below allows.
     pub fn outdent(&mut self, shown: &dyn Fn(&str) -> bool) -> bool {
-        self.change_depth(false, shown)
+        self.change_depth(Level::Out, shown)
     }
 
     /// Moves it up or down by one row on screen, keeping the depth aimed for.
-    fn step(&mut self, down: bool, shown: &dyn Fn(&str) -> bool) -> bool {
+    fn step(&mut self, direction: Direction, shown: &dyn Fn(&str) -> bool) -> bool {
         let (_, slot) = self.others(shown);
-        let to = if down {
-            slot.saturating_add(1)
-        } else {
-            slot.saturating_sub(1)
+        let to = match direction {
+            Direction::Forward => slot.saturating_add(1),
+            Direction::Backward => slot.saturating_sub(1),
         };
         self.place(to, self.aim, shown)
     }
 
     /// Moves it to the top or the bottom of the rows on screen.
-    fn move_to_end(&mut self, last: bool, shown: &dyn Fn(&str) -> bool) -> bool {
-        let to = if last { usize::MAX } else { 0 };
+    fn move_to_end(&mut self, direction: Direction, shown: &dyn Fn(&str) -> bool) -> bool {
+        let to = match direction {
+            Direction::Forward => usize::MAX,
+            Direction::Backward => 0,
+        };
         self.place(to, self.aim, shown)
     }
 
     /// Takes it in a level or out one, as far as the rows around it allow.
-    fn change_depth(&mut self, inward: bool, shown: &dyn Fn(&str) -> bool) -> bool {
+    fn change_depth(&mut self, level: Level, shown: &dyn Fn(&str) -> bool) -> bool {
         let (_, slot) = self.others(shown);
         let depth = row_depth(&self.rows, self.at());
-        let wanted = if inward {
-            depth.saturating_add(1)
-        } else {
-            depth.saturating_sub(1)
+        let wanted = match level {
+            Level::In => depth.saturating_add(1),
+            Level::Out => depth.saturating_sub(1),
         };
         let moved = self.place(slot, wanted, shown);
         if moved {

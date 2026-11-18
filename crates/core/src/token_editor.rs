@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use crate::agent::{ActError, Snapshot, SnapshotItem};
 use crate::change::{Gate, Reason, Source, ValueChange};
-use crate::keys::{Dir, Direction, Key};
+use crate::keys::{Dir, Direction, Key, Modifiers};
 use crate::primitive::{
     Effect, Focusable, Input, Item, Outcome, PartOf, Primitive, Reaction, Role, Semantics,
 };
@@ -333,11 +333,10 @@ impl TokenEditor {
 
     /// Undoes the last edit, or redoes the last one undone. Returns whether there
     /// was one and the owner allowed it.
-    fn step_history(&mut self, undo: bool, source: Source, gate: Gate) -> bool {
-        let (from, to) = if undo {
-            (&mut self.undone, &mut self.redone)
-        } else {
-            (&mut self.redone, &mut self.undone)
+    fn step_history(&mut self, step: History, source: Source, gate: Gate) -> bool {
+        let (from, to) = match step {
+            History::Undo => (&mut self.undone, &mut self.redone),
+            History::Redo => (&mut self.redone, &mut self.undone),
         };
         let Some(past) = from.last() else {
             return false;
@@ -363,11 +362,34 @@ impl TokenEditor {
     }
 }
 
+/// Which way through the edit history to step.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum History {
+    Undo,
+    Redo,
+}
+
+/// How far a caret key moves or deletes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Unit {
+    Character,
+    Word,
+}
+
+/// What moving the caret does to the selection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Selecting {
+    /// Drops it.
+    Collapse,
+    /// Keeps its other end where it is, as Shift does.
+    Extend,
+}
+
 // Keys.
 impl TokenEditor {
     /// A key held with Ctrl, or Cmd on a Mac: select all, copy, cut, undo, redo.
     /// `None` for a key that is not one of these.
-    fn on_command(&mut self, key: Key, shift: bool, gate: Gate) -> Option<Reaction<Part>> {
+    fn on_command(&mut self, key: Key, mods: Modifiers, gate: Gate) -> Option<Reaction<Part>> {
         let Key::Char(letter) = key else {
             return None;
         };
@@ -394,11 +416,16 @@ impl TokenEditor {
                 _ => Reaction::handled(),
             },
             'z' if may_edit => {
-                self.step_history(!shift, Source::User, gate);
+                let step = if mods.shift {
+                    History::Redo
+                } else {
+                    History::Undo
+                };
+                self.step_history(step, Source::User, gate);
                 Reaction::handled()
             }
             'y' if may_edit => {
-                self.step_history(false, Source::User, gate);
+                self.step_history(History::Redo, Source::User, gate);
                 Reaction::handled()
             }
             _ => return None,
@@ -406,53 +433,67 @@ impl TokenEditor {
         Some(reaction)
     }
 
-    fn on_key(&mut self, key: Key, by_word: bool, shift: bool, gate: Gate) -> Reaction<Part> {
+    fn on_key(&mut self, key: Key, mods: Modifiers, gate: Gate) -> Reaction<Part> {
+        let unit = if mods.ctrl || mods.alt {
+            Unit::Word
+        } else {
+            Unit::Character
+        };
+        let selecting = if mods.shift {
+            Selecting::Extend
+        } else {
+            Selecting::Collapse
+        };
         if let Some(direction) = self.opts.dir.along(key) {
-            self.move_caret(direction, by_word, shift);
+            self.move_caret(direction, unit, selecting);
             return Reaction::handled();
         }
         match key {
-            Key::Home => self.move_caret_to(self.line_start(), shift),
-            Key::End => self.move_caret_to(self.line_end(), shift),
+            Key::Home => self.move_caret_to(self.line_start(), selecting),
+            Key::End => self.move_caret_to(self.line_end(), selecting),
             _ if self.opts.read_only => return Reaction::default(),
-            Key::Backspace => self.delete_back(by_word, gate),
-            Key::Char(ch) if !by_word => self.insert_text(&ch.to_string(), gate),
+            Key::Backspace => self.delete_back(unit, gate),
+            Key::Char(ch) if unit == Unit::Character => self.insert_text(&ch.to_string(), gate),
             Key::Space => self.insert_text(" ", gate),
-            Key::Enter if self.opts.lines == Lines::Many || shift => self.insert_text("\n", gate),
+            Key::Enter if self.opts.lines == Lines::Many || mods.shift => {
+                self.insert_text("\n", gate);
+            }
             _ => return Reaction::default(),
         }
         Reaction::handled()
     }
 
-    /// Moves the caret. With Shift the other end of the selection stays where it
-    /// is; without, the selection is dropped.
-    fn move_caret_to(&mut self, caret: usize, shift: bool) {
-        self.anchor = if shift {
-            self.anchor.or(Some(self.caret))
-        } else {
-            None
+    /// Moves the caret, keeping the other end of the selection where it is or
+    /// dropping the selection.
+    fn move_caret_to(&mut self, caret: usize, selecting: Selecting) {
+        self.anchor = match selecting {
+            Selecting::Extend => self.anchor.or(Some(self.caret)),
+            Selecting::Collapse => None,
         };
         self.caret = caret;
     }
 
     /// An arrow key: one step, or one word. A plain arrow with something selected
     /// only collapses the selection, to the side the arrow points at.
-    fn move_caret(&mut self, direction: Direction, by_word: bool, shift: bool) {
-        let to = match (self.selection(), direction) {
-            (Some(selected), Direction::Forward) if !shift && !by_word => selected.end,
-            (Some(selected), Direction::Backward) if !shift && !by_word => selected.start,
-            _ if by_word => word_boundary(&self.value, self.caret, direction),
-            (_, Direction::Forward) => (self.caret.saturating_add(1)).min(self.length()),
-            (_, Direction::Backward) => self.caret.saturating_sub(1),
+    fn move_caret(&mut self, direction: Direction, unit: Unit, selecting: Selecting) {
+        let collapsing = (unit, selecting) == (Unit::Character, Selecting::Collapse);
+        let to = match (self.selection(), direction, unit) {
+            (Some(selected), Direction::Forward, _) if collapsing => selected.end,
+            (Some(selected), Direction::Backward, _) if collapsing => selected.start,
+            (_, _, Unit::Word) => word_boundary(&self.value, self.caret, direction),
+            (_, Direction::Forward, Unit::Character) => {
+                (self.caret.saturating_add(1)).min(self.length())
+            }
+            (_, Direction::Backward, Unit::Character) => self.caret.saturating_sub(1),
         };
-        self.move_caret_to(to, shift);
+        self.move_caret_to(to, selecting);
     }
 
     /// Backspace: the selection, or else the word or the one step before the caret.
-    fn delete_back(&mut self, by_word: bool, gate: Gate) {
+    fn delete_back(&mut self, unit: Unit, gate: Gate) {
         let range = match self.selection() {
             Some(selected) => selected,
-            None if by_word => {
+            None if unit == Unit::Word => {
                 word_boundary(&self.value, self.caret, Direction::Backward)..self.caret
             }
             None => self.caret.saturating_sub(1)..self.caret,
@@ -509,11 +550,11 @@ impl Primitive for TokenEditor {
         match input {
             Input::Key { key, mods, .. } => {
                 let command = if mods.ctrl {
-                    self.on_command(key, mods.shift, gate)
+                    self.on_command(key, mods, gate)
                 } else {
                     None
                 };
-                command.unwrap_or_else(|| self.on_key(key, mods.ctrl || mods.alt, mods.shift, gate))
+                command.unwrap_or_else(|| self.on_key(key, mods, gate))
             }
             Input::Paste { text } if !self.opts.read_only => {
                 self.insert_text(&text, gate);
@@ -525,7 +566,7 @@ impl Primitive for TokenEditor {
                 ..
             } => {
                 if let Some((at, _)) = self.token(&id) {
-                    self.move_caret_to(at.saturating_add(1), false);
+                    self.move_caret_to(at.saturating_add(1), Selecting::Collapse);
                 }
                 Reaction::focusing(Part::Root)
             }
@@ -567,8 +608,12 @@ impl Primitive for TokenEditor {
         let written = |action: &'static str| item.ok_or(ActError::MissingItem { action });
         let allowed = match action {
             // With nothing to undo or redo there is nothing to refuse.
-            "undo" => self.undone.is_empty() || self.step_history(true, Source::Agent, gate),
-            "redo" => self.redone.is_empty() || self.step_history(false, Source::Agent, gate),
+            "undo" => {
+                self.undone.is_empty() || self.step_history(History::Undo, Source::Agent, gate)
+            }
+            "redo" => {
+                self.redone.is_empty() || self.step_history(History::Redo, Source::Agent, gate)
+            }
             "clear" => self.delete(0..self.length(), Cause::AGENT, gate),
             // Both take the written form, so an agent can add tokens as links.
             "set" => self.replace(
