@@ -172,6 +172,57 @@ fn prefixed(menu: &str, entry: &str) -> String {
     }
 }
 
+impl Menubar {
+    /// The entry an item key names inside its menu.
+    fn entry_of(key: &str) -> Option<String> {
+        Self::split(key).1.map(str::to_string)
+    }
+
+    /// The keys that move forward and back along the bar, for its reading direction.
+    fn sideways_keys(&self) -> (Key, Key) {
+        if self.dir == Dir::Rtl {
+            (Key::ArrowLeft, Key::ArrowRight)
+        } else {
+            (Key::ArrowRight, Key::ArrowLeft)
+        }
+    }
+
+    /// A key with every menu closed: moving along the bar, or opening the focused menu.
+    fn on_key_on_the_bar(&mut self, key: Key, gate: Gate) -> Reaction<Part> {
+        let (forward, back) = self.sideways_keys();
+        match key {
+            key if key == forward || key == back => {
+                self.focused = self.neighbour(key == forward);
+                Reaction::item(Part::Trigger, true, Some(self.key_at(self.focused)))
+            }
+            _ if self.menus.is_empty() => Reaction::default(),
+            Key::Enter | Key::Space | Key::ArrowDown => {
+                self.open_menu_at(self.focused, false, gate)
+            }
+            Key::ArrowUp => self.open_menu_at(self.focused, true, gate),
+            _ => Reaction::default(),
+        }
+    }
+
+    /// A key with a menu open goes to that menu. A sideways arrow the menu had no use
+    /// for moves to the next menu.
+    fn on_key_in_a_menu(
+        &mut self,
+        at: usize,
+        input: Input<menu::Part>,
+        key: Key,
+        gate: Gate,
+    ) -> Reaction<Part> {
+        let (forward, back) = self.sideways_keys();
+        let reaction = self.forward(at, input, gate);
+        if !reaction.handled && reaction.focus.is_none() && (key == forward || key == back) {
+            let next = self.neighbour(key == forward);
+            return self.open_menu_at(next, false, gate);
+        }
+        reaction
+    }
+}
+
 impl PartOf for Part {
     type Primitive = Menubar;
 }
@@ -261,16 +312,7 @@ impl Primitive for Menubar {
         }
     }
 
-    #[expect(
-        clippy::too_many_lines,
-        reason = "one arm for each input the primitive answers"
-    )]
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
-        let (forward, back) = if self.dir == Dir::Rtl {
-            (Key::ArrowLeft, Key::ArrowRight)
-        } else {
-            (Key::ArrowRight, Key::ArrowLeft)
-        };
         match (input, self.open) {
             (
                 Input::Focus {
@@ -319,16 +361,12 @@ impl Primitive for Menubar {
                 },
                 Some(at),
             ) => {
-                let entry = Self::split(&key).1.map(str::to_string);
-                self.forward(
-                    at,
-                    Input::Press {
-                        part: menu::Part::Item,
-                        item: entry,
-                        mods,
-                    },
-                    gate,
-                )
+                let press = Input::Press {
+                    part: menu::Part::Item,
+                    item: Self::entry_of(&key),
+                    mods,
+                };
+                self.forward(at, press, gate)
             }
             (
                 Input::Hover {
@@ -339,44 +377,17 @@ impl Primitive for Menubar {
                 },
                 Some(at),
             ) => {
-                let entry = Self::split(&key).1.map(str::to_string);
-                self.forward(
-                    at,
-                    Input::Hover {
-                        part: menu::Part::Item,
-                        item: entry,
-                        inside,
-                        now_ms,
-                    },
-                    gate,
-                )
+                let hover = Input::Hover {
+                    part: menu::Part::Item,
+                    item: Self::entry_of(&key),
+                    inside,
+                    now_ms,
+                };
+                self.forward(at, hover, gate)
             }
-            (Input::Key { key, .. }, None) if key == forward || key == back => {
-                self.focused = self.neighbour(key == forward);
-                Reaction::item(Part::Trigger, true, Some(self.key_at(self.focused)))
-            }
-            (
-                Input::Key {
-                    key: Key::Enter | Key::Space | Key::ArrowDown,
-                    ..
-                },
-                None,
-            ) if !self.menus.is_empty() => self.open_menu_at(self.focused, false, gate),
-            (
-                Input::Key {
-                    key: Key::ArrowUp, ..
-                },
-                None,
-            ) if !self.menus.is_empty() => self.open_menu_at(self.focused, true, gate),
+            (Input::Key { key, .. }, None) => self.on_key_on_the_bar(key, gate),
             (Input::Key { key, mods, now_ms }, Some(at)) => {
-                let reaction = self.forward(at, Input::Key { key, mods, now_ms }, gate);
-                // A sideways arrow the menu had no use for moves to the next menu.
-                if !reaction.handled && reaction.focus.is_none() && (key == forward || key == back)
-                {
-                    let next = self.neighbour(key == forward);
-                    return self.open_menu_at(next, false, gate);
-                }
-                reaction
+                self.on_key_in_a_menu(at, Input::Key { key, mods, now_ms }, key, gate)
             }
             (Input::PressOutside | Input::WindowBlur | Input::Blur { .. }, Some(at)) => {
                 self.close_menu(at);
