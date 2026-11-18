@@ -963,36 +963,23 @@ fn number_input_behaviors() {
     }
     assert_eq!(small.value(), ["0.3"]);
     // "typing follows the value only while it's a number within the bounds"
-    let mut typed = NumberInput::new(NumberRange::new(0.0, 10.0, 1.0), 5.0);
-    typed.send(
-        Input::Text {
+    let type_text = |input: &mut NumberInput, text: &str| {
+        let input_text = Input::Text {
             part: Part::Input,
             item: None,
-            value: "abc".into(),
-        },
-        &mut |_| true,
-    );
+            value: text.into(),
+        };
+        input.send(input_text, &mut |_| true);
+    };
+    let mut typed = NumberInput::new(NumberRange::new(0.0, 10.0, 1.0), 5.0);
+    type_text(&mut typed, "abc");
     key(&mut typed, Key::Enter);
     assert_eq!(typed.number(), 5.0);
-    typed.send(
-        Input::Text {
-            part: Part::Input,
-            item: None,
-            value: "50".into(),
-        },
-        &mut |_| true,
-    );
+    type_text(&mut typed, "50");
     key(&mut typed, Key::Enter);
     assert_eq!(typed.number(), 10.0, "Enter clamps what was typed");
     // "a controller step leaves nothing for the next blur to commit", and a blur commits what was typed
-    typed.send(
-        Input::Text {
-            part: Part::Input,
-            item: None,
-            value: "3".into(),
-        },
-        &mut |_| true,
-    );
+    type_text(&mut typed, "3");
     typed.send(
         Input::Blur {
             part: Part::Input,
