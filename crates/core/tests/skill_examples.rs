@@ -111,6 +111,7 @@ fn the_details_the_skill_states() {
     use armature_core::number_input::NumberInput;
     use armature_core::selection::Mode;
 
+    // The names the skill uses must exist: this stops compiling if one goes.
     let _ = (
         Dir::Ltr,
         Dir::Rtl,
