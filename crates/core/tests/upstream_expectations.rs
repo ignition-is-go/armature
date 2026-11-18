@@ -2827,14 +2827,7 @@ fn popup_placement_keeps_to_the_part_of_the_page() {
         width: 200.0,
         height: 300.0,
     };
-    let options = PlaceOptions {
-        side: PlaceSide::Bottom,
-        align: PlaceAlign::Start,
-        side_offset: 4.0,
-        align_offset: 0.0,
-        collision_padding: 8.0,
-        rtl: false,
-    };
+    let options = below_start();
     // "keeps to the part of the page a pinch zoom shows"
     let zoomed = Rect::new(640.0, 200.0, 640.0, 400.0);
     let shown = compute_placement(Rect::new(1100.0, 300.0, 80.0, 30.0), size, zoomed, options);
