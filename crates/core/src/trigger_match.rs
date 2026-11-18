@@ -175,10 +175,19 @@ pub fn find_trigger_match(
     {
         for (at, rule) in rules.iter().enumerate() {
             let trigger: Vec<char> = rule.trigger.chars().collect();
-            if trigger.is_empty() || !source[index..].starts_with(&trigger) {
+            if trigger.is_empty()
+                || !source
+                    .get(index..)
+                    .unwrap_or_default()
+                    .starts_with(&trigger)
+            {
                 continue;
             }
-            let query: String = raw[index.saturating_add(trigger.len())..].iter().collect();
+            let query: String = raw
+                .get(index.saturating_add(trigger.len())..)
+                .unwrap_or_default()
+                .iter()
+                .collect();
             if is_valid_query(&normalize_trigger_text(&query), rule)
                 && is_at_boundary(&source, index, offset, rule.boundary)
             {

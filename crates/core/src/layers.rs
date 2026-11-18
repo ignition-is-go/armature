@@ -93,7 +93,10 @@ impl LayerStack {
     pub fn is_inert(&self, id: &str) -> bool {
         match self.layers.iter().position(|layer| layer.id == id) {
             Some(at) if self.layers[at].persistent => false,
-            Some(at) => self.layers[at.saturating_add(1)..]
+            Some(at) => self
+                .layers
+                .get(at.saturating_add(1)..)
+                .unwrap_or_default()
                 .iter()
                 .any(|layer| layer.modal),
             None => self.layers.iter().any(|layer| layer.modal),

@@ -455,7 +455,7 @@ impl Reader<'_> {
             match chars.next()? {
                 (_, '\\') => text.push(chars.next()?.1),
                 (end, '"') => {
-                    self.rest = &self.rest[end.saturating_add(1)..];
+                    self.rest = self.rest.get(end.saturating_add(1)..).unwrap_or_default();
                     return Some(text);
                 }
                 (_, ch) => text.push(ch),
@@ -469,7 +469,10 @@ impl Reader<'_> {
             return None;
         }
         let end = self.rest.find(']')?;
-        let (list, rest) = (&self.rest[..end], &self.rest[end.saturating_add(1)..]);
+        let (list, rest) = (
+            self.rest.get(..end).unwrap_or_default(),
+            self.rest.get(end.saturating_add(1)..).unwrap_or_default(),
+        );
         self.rest = rest;
         list.split(',')
             .map(str::trim)

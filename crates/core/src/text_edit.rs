@@ -132,8 +132,14 @@ pub fn text_diff(before: &str, after: &str) -> (usize, String, String) {
         .count();
     (
         start,
-        old[start..old.len().saturating_sub(end)].iter().collect(),
-        new[start..new.len().saturating_sub(end)].iter().collect(),
+        old.get(start..old.len().saturating_sub(end))
+            .unwrap_or_default()
+            .iter()
+            .collect(),
+        new.get(start..new.len().saturating_sub(end))
+            .unwrap_or_default()
+            .iter()
+            .collect(),
     )
 }
 

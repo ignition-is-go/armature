@@ -98,7 +98,10 @@ impl TriggerMenu {
             .collect();
         let found = find_trigger_match(&self.text, 0, &rules)?;
         let (start, written) = self.text.char_indices().nth(found.start)?;
-        let typed = &self.text[start.saturating_add(written.len_utf8())..];
+        let typed = self
+            .text
+            .get(start.saturating_add(written.len_utf8())..)
+            .unwrap_or_default();
         (self.dismissed != Some(start)).then_some((start, self.triggers[found.rule], typed))
     }
 
@@ -151,7 +154,11 @@ impl TriggerMenu {
         else {
             return false;
         };
-        let text = format!("{}{trigger}{} ", &self.text[..start], item.label);
+        let text = format!(
+            "{}{trigger}{} ",
+            self.text.get(..start).unwrap_or_default(),
+            item.label
+        );
         let done = self.write(text, source, reason, gate);
         if done {
             self.active = None;

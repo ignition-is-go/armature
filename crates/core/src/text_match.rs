@@ -45,7 +45,7 @@ pub fn fuzzy_score(query: &str, text: &str) -> Option<u32> {
         (from..haystack
             .len()
             .saturating_sub(needle.len().saturating_sub(1)))
-            .find(|at| haystack[*at..].starts_with(&needle))
+            .find(|at| haystack.get(*at..).unwrap_or_default().starts_with(&needle))
     };
     let coverage = ((needle.len().saturating_mul(90))
         .checked_div(haystack.len().max(1))
@@ -94,7 +94,7 @@ pub fn match_segments<'a>(text: &'a str, ranges: &[Range<usize>]) -> Vec<Segment
     for range in ranges {
         if range.start > cursor {
             segments.push(Segment {
-                text: &text[cursor..range.start],
+                text: text.get(cursor..range.start).unwrap_or_default(),
                 matched: false,
             });
         }
@@ -106,7 +106,7 @@ pub fn match_segments<'a>(text: &'a str, ranges: &[Range<usize>]) -> Vec<Segment
     }
     if cursor < text.len() {
         segments.push(Segment {
-            text: &text[cursor..],
+            text: text.get(cursor..).unwrap_or_default(),
             matched: false,
         });
     }
@@ -126,7 +126,7 @@ fn substring(query: &[char], chars: &[(usize, char)]) -> Option<Vec<usize>> {
     let matches_at = |start: &usize| {
         query
             .iter()
-            .zip(&chars[*start..])
+            .zip(chars.get(*start..).unwrap_or_default())
             .all(|(q, (_, c))| same(*q, *c))
     };
     let at_word =
@@ -143,7 +143,11 @@ fn subsequence(query: &[char], chars: &[(usize, char)]) -> Option<Vec<usize>> {
     let mut matched = Vec::with_capacity(query.len());
     let mut from = 0;
     for q in query {
-        let offset = chars[from..].iter().position(|(_, c)| same(*q, *c))?;
+        let offset = chars
+            .get(from..)
+            .unwrap_or_default()
+            .iter()
+            .position(|(_, c)| same(*q, *c))?;
         matched.push(from.saturating_add(offset));
         from = from.saturating_add(offset.saturating_add(1));
     }

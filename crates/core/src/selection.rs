@@ -34,7 +34,9 @@ pub fn propose(
         && let (Some(a), Some(b)) = (anchor.and_then(position), position(key))
     {
         let (lo, hi) = (a.min(b), a.max(b));
-        return order[lo..=hi]
+        return order
+            .get(lo..=hi)
+            .unwrap_or_default()
             .iter()
             .map(std::string::ToString::to_string)
             .collect();
@@ -73,14 +75,19 @@ pub fn toggle_all(mode: Mode, selected: &[String], order: &[&str]) -> Vec<String
 /// `most`, the rest are counted: `Small, Medium and 2 more`.
 #[must_use]
 pub fn format_labels(labels: &[&str], most: usize) -> String {
-    let shown = &labels[..labels.len().min(most.max(1))];
+    let shown = labels
+        .get(..labels.len().min(most.max(1)))
+        .unwrap_or_default();
     let rest = labels.len().saturating_sub(shown.len());
     match (shown, rest) {
         ([], _) => String::new(),
         (shown, 0) if shown.len() == 1 => shown[0].to_string(),
         (shown, 0) => format!(
             "{} and {}",
-            shown[..shown.len().saturating_sub(1)].join(", "),
+            shown
+                .get(..shown.len().saturating_sub(1))
+                .unwrap_or_default()
+                .join(", "),
             shown[shown.len().saturating_sub(1)]
         ),
         (shown, rest) => format!("{} and {rest} more", shown.join(", ")),
@@ -93,7 +100,9 @@ pub fn format_labels(labels: &[&str], most: usize) -> String {
 pub fn keys_between(order: &[&str], from: &str, to: &str) -> Vec<String> {
     let at = |key: &str| order.iter().position(|entry| *entry == key);
     match (at(from), at(to)) {
-        (Some(a), Some(b)) => order[a.min(b)..=a.max(b)]
+        (Some(a), Some(b)) => order
+            .get(a.min(b)..=a.max(b))
+            .unwrap_or_default()
             .iter()
             .map(std::string::ToString::to_string)
             .collect(),

@@ -20,7 +20,8 @@ pub struct Place {
 #[must_use]
 pub fn subtree_end(rows: &[OutlineRow], index: usize) -> usize {
     let depth = rows[index].depth;
-    rows[index.saturating_add(1)..]
+    rows.get(index.saturating_add(1)..)
+        .unwrap_or_default()
         .iter()
         .position(|row| row.depth <= depth)
         .map_or(rows.len(), |offset| {
@@ -32,9 +33,15 @@ pub fn subtree_end(rows: &[OutlineRow], index: usize) -> usize {
 #[must_use]
 pub fn place_of(rows: &[OutlineRow], index: usize) -> Place {
     let depth = rows[index].depth;
-    let parent = rows[..index].iter().rposition(|row| row.depth < depth);
+    let parent = rows
+        .get(..index)
+        .unwrap_or_default()
+        .iter()
+        .rposition(|row| row.depth < depth);
     let first = parent.map_or(0, |parent| parent.saturating_add(1));
-    let position = rows[first..index]
+    let position = rows
+        .get(first..index)
+        .unwrap_or_default()
         .iter()
         .filter(|row| row.depth == depth)
         .count();
@@ -71,7 +78,8 @@ pub fn moved_rows(
     let end = subtree_end(rows, from);
     let was = rows[from].depth;
     let block: Vec<OutlineRow> = if depth >= was {
-        rows[from..end]
+        rows.get(from..end)
+            .unwrap_or_default()
             .iter()
             .map(|row| OutlineRow {
                 key: row.key.clone(),
@@ -79,7 +87,8 @@ pub fn moved_rows(
             })
             .collect()
     } else {
-        rows[from..end]
+        rows.get(from..end)
+            .unwrap_or_default()
             .iter()
             .map(|row| OutlineRow {
                 key: row.key.clone(),
@@ -87,7 +96,13 @@ pub fn moved_rows(
             })
             .collect()
     };
-    let mut rest: Vec<OutlineRow> = rows[..from].iter().chain(&rows[end..]).cloned().collect();
+    let mut rest: Vec<OutlineRow> = rows
+        .get(..from)
+        .unwrap_or_default()
+        .iter()
+        .chain(rows.get(end..).unwrap_or_default())
+        .cloned()
+        .collect();
     let at = match before {
         None => rest.len(),
         Some(before) => rest.iter().position(|row| row.key == before)?,
@@ -125,7 +140,7 @@ fn landing(rows: Vec<OutlineRow>, key: &str) -> Option<Landing> {
 /// The deepest a row can go so that the deepest row under it stays within
 /// `max_depth`.
 fn block_max_depth(rows: &[OutlineRow], from: usize, max_depth: Option<usize>) -> Option<usize> {
-    let block = &rows[from..subtree_end(rows, from)];
+    let block = rows.get(from..subtree_end(rows, from)).unwrap_or_default();
     let below = block
         .iter()
         .map(|row| row.depth)
@@ -148,7 +163,12 @@ pub fn move_row(
 ) -> Option<Landing> {
     let from = rows.iter().position(|row| row.key == key)?;
     let end = subtree_end(rows, from);
-    let rest: Vec<&OutlineRow> = rows[..from].iter().chain(&rows[end..]).collect();
+    let rest: Vec<&OutlineRow> = rows
+        .get(..from)
+        .unwrap_or_default()
+        .iter()
+        .chain(rows.get(end..).unwrap_or_default())
+        .collect();
     let at = match before {
         None => rest.len(),
         Some(before) => rest.iter().position(|row| row.key == before)?,
@@ -182,7 +202,9 @@ impl OutlineMove {
     #[must_use]
     pub fn grab(rows: &[OutlineRow], key: &str, max_depth: Option<usize>) -> Option<Self> {
         let at = rows.iter().position(|row| row.key == key)?;
-        let keys = rows[at..subtree_end(rows, at)]
+        let keys = rows
+            .get(at..subtree_end(rows, at))
+            .unwrap_or_default()
             .iter()
             .map(|row| row.key.clone())
             .collect();
@@ -217,7 +239,13 @@ impl OutlineMove {
     /// The other rows on screen, and how many of them come before the moved row.
     fn others(&self, shown: &dyn Fn(&str) -> bool) -> (Vec<&OutlineRow>, usize) {
         let other = |row: &&OutlineRow| !self.keys.contains(&row.key) && shown(&row.key);
-        let slot = self.rows[..self.at()].iter().filter(other).count();
+        let slot = self
+            .rows
+            .get(..self.at())
+            .unwrap_or_default()
+            .iter()
+            .filter(other)
+            .count();
         (self.rows.iter().filter(other).collect(), slot)
     }
 

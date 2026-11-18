@@ -25,8 +25,8 @@ pub fn to_locale(tag: &str) -> Option<String> {
         match part.len() {
             // A script, such as Latn.
             4 if part.chars().all(|c| c.is_ascii_alphabetic()) => {
-                locale.push_str(&part[..1].to_ascii_uppercase());
-                locale.push_str(&part[1..].to_ascii_lowercase());
+                locale.push_str(&part.get(..1).unwrap_or_default().to_ascii_uppercase());
+                locale.push_str(&part.get(1..).unwrap_or_default().to_ascii_lowercase());
             }
             // A region, such as US.
             2 => locale.push_str(&part.to_ascii_uppercase()),

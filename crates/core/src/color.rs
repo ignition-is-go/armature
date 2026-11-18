@@ -43,13 +43,13 @@ impl Rgb {
         let channel = |digits: &str| u8::from_str_radix(digits, 16).ok();
         match hex.len() {
             3 => {
-                let double = |i: usize| channel(&hex[i..=i].repeat(2));
+                let double = |i: usize| channel(&hex.get(i..=i).unwrap_or_default().repeat(2));
                 Some(Self::new(double(0)?, double(1)?, double(2)?))
             }
             6 => Some(Self::new(
-                channel(&hex[0..2])?,
-                channel(&hex[2..4])?,
-                channel(&hex[4..6])?,
+                channel(hex.get(0..2).unwrap_or_default())?,
+                channel(hex.get(2..4).unwrap_or_default())?,
+                channel(hex.get(4..6).unwrap_or_default())?,
             )),
             _ => None,
         }
@@ -384,8 +384,9 @@ impl Rgb {
     pub fn read_alpha(text: &str) -> Option<(Self, f64)> {
         let text = text.trim();
         if let Some(hex) = text.strip_prefix('#').filter(|hex| hex.len() == 8) {
-            let alpha = f64::from(u8::from_str_radix(&hex[6..], 16).ok()?) / 255.0;
-            return Some((Self::from_hex(&text[..7])?, alpha));
+            let alpha =
+                f64::from(u8::from_str_radix(hex.get(6..).unwrap_or_default(), 16).ok()?) / 255.0;
+            return Some((Self::from_hex(text.get(..7).unwrap_or_default())?, alpha));
         }
         let alpha = match text.rsplit_once('/') {
             Some((_, alpha)) => {

@@ -170,7 +170,9 @@ impl Toaster {
     /// The notifications on show, oldest first.
     #[must_use]
     pub fn visible(&self) -> &[Toast] {
-        &self.toasts[..self.toasts.len().min(self.limit)]
+        self.toasts
+            .get(..self.toasts.len().min(self.limit))
+            .unwrap_or_default()
     }
 
     /// How far a notification being dragged has moved sideways.

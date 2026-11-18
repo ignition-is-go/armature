@@ -355,7 +355,7 @@ pub fn slot_target(
     depth: usize,
     tree: &Tree,
 ) -> (Option<String>, usize) {
-    let above = &rows[..slot.min(rows.len())];
+    let above = rows.get(..slot.min(rows.len())).unwrap_or_default();
     // The parent is the nearest row above that is one level shallower.
     let parent = above
         .iter()

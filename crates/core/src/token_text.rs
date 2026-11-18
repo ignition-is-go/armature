@@ -279,7 +279,9 @@ pub fn word_boundary(value: &[Segment], offset: usize, forward: bool) -> usize {
 pub fn line_boundary(value: &[Segment], offset: usize, forward: bool) -> usize {
     let text: Vec<char> = offset_text(value).chars().collect();
     if !forward {
-        let start = text[..offset.min(text.len())]
+        let start = text
+            .get(..offset.min(text.len()))
+            .unwrap_or_default()
             .iter()
             .rposition(|ch| *ch == '\n')
             .map_or(0, |at| at.saturating_add(1));
@@ -325,7 +327,8 @@ fn unescaped(text: &str) -> String {
 }
 
 fn trailing_slashes(text: &str) -> &str {
-    &text[text.trim_end_matches('\\').len()..]
+    text.get(text.trim_end_matches('\\').len()..)
+        .unwrap_or_default()
 }
 
 /// The value as plain text: text as it is, and each token as a link,
@@ -434,12 +437,18 @@ pub fn from_text(text: &str) -> Vec<Segment> {
         else {
             break;
         };
-        let slashes = chars[index..bracket]
+        let slashes = chars
+            .get(index..bracket)
+            .unwrap_or_default()
             .iter()
             .rev()
             .take_while(|ch| **ch == '\\')
             .count();
-        plain.extend(&chars[index..bracket.saturating_sub(slashes)]);
+        plain.extend(
+            chars
+                .get(index..bracket.saturating_sub(slashes))
+                .unwrap_or_default(),
+        );
         plain.push_str(&"\\".repeat(slashes / 2));
         let link = if slashes % 2 == 1 {
             None
@@ -455,7 +464,7 @@ pub fn from_text(text: &str) -> Vec<Segment> {
             index = bracket.saturating_add(2);
         }
     }
-    plain.extend(&chars[index.min(chars.len())..]);
+    plain.extend(chars.get(index.min(chars.len())..).unwrap_or_default());
     value.push(Segment::Text(plain));
     normalize(value)
 }
