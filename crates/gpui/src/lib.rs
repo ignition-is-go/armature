@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use armature_core::agent::{Access, ActError, Target};
 use armature_core::change::ValueChange;
 use armature_core::geometry::{Point as CorePoint, Rect};
-use armature_core::keys::{Key, Modifiers, Orientation};
+use armature_core::keys::{Direction, Key, Modifiers, Orientation};
 use armature_core::layers::{Layer, LayerStack};
 use armature_core::popup::{Align, Side};
 use armature_core::primitive::{
@@ -561,7 +561,12 @@ impl<P: Primitive> Machine<P> {
                 return self.dispatch(Input::Paste { text }, window, cx);
             }
         }
-        if keystroke.key == "tab" && self.trap_tab(keystroke.modifiers.shift, window, cx) {
+        let direction = if keystroke.modifiers.shift {
+            Direction::Backward
+        } else {
+            Direction::Forward
+        };
+        if keystroke.key == "tab" && self.trap_tab(direction, window, cx) {
             return true;
         }
         let now_ms = self.now_ms();
@@ -585,7 +590,7 @@ impl<P: Primitive> Machine<P> {
 
     /// Keeps Tab among this primitive's own parts while one of them is a shown modal.
     /// The part that opens the modal sits outside it, so it is left out.
-    fn trap_tab(&self, backwards: bool, window: &mut Window, cx: &mut Context<Self>) -> bool {
+    fn trap_tab(&self, direction: Direction, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let shown_modal = P::parts().iter().copied().find(|part| {
             let semantics = self.primitive.semantics(*part, None);
             semantics.modal && !semantics.hidden
@@ -604,7 +609,7 @@ impl<P: Primitive> Machine<P> {
             .map(|(_, handle)| handle)
             .collect();
         let current = stops.iter().position(|handle| handle.is_focused(window));
-        let next = armature_core::layers::trapped_focus(current, stops.len(), backwards);
+        let next = armature_core::layers::trapped_focus(current, stops.len(), direction);
         if let Some(stop) = next.and_then(|next| stops.get(next)) {
             (*stop).clone().focus(window, cx);
         }

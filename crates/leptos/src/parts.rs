@@ -7,7 +7,7 @@ use std::time::Duration;
 use armature_core::agent::{Access, ActError, Target};
 use armature_core::change::{Source, ValueChange};
 use armature_core::geometry::Point;
-use armature_core::keys::{Key, Modifiers, Orientation};
+use armature_core::keys::{Direction, Key, Modifiers, Orientation};
 use armature_core::layers::{Layer, LayerStack, trapped_focus};
 use armature_core::popup::{self, Placement, Rect, Side, Size};
 use armature_core::presence::Presence;
@@ -371,7 +371,7 @@ fn announce(message: &str, assertive: bool) {
 
 /// Moves focus to the next tabbable element inside a modal part, wrapping at the ends
 /// so Tab never leaves it.
-fn trap_tab(container: &HtmlElement, backwards: bool) {
+fn trap_tab(container: &HtmlElement, direction: Direction) {
     let tabbable = "a[href], button, input, select, textarea, [tabindex]:not([tabindex=\"-1\"])";
     let Ok(nodes) = container.query_selector_all(tabbable) else {
         return;
@@ -386,7 +386,7 @@ fn trap_tab(container: &HtmlElement, backwards: bool) {
             .as_ref()
             .is_some_and(|active| active.is_same_node(Some(stop)))
     });
-    let next = trapped_focus(current, stops.len(), backwards);
+    let next = trapped_focus(current, stops.len(), direction);
     if let Some(stop) = next.and_then(|next| stops.get(next)) {
         let _ = stop.focus();
     }
@@ -1119,7 +1119,14 @@ fn keydown_handler<P: Primitive + Send + Sync>(
             && semantics.get_untracked().modal
             && let Some(container) = element.get_untracked()
         {
-            trap_tab(&container, ev.shift_key());
+            trap_tab(
+                &container,
+                if ev.shift_key() {
+                    Direction::Backward
+                } else {
+                    Direction::Forward
+                },
+            );
             ev.prevent_default();
             ev.stop_propagation();
             return;

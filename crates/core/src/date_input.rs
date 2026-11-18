@@ -2,7 +2,7 @@ use crate::agent::{ActError, Snapshot};
 use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::convert::Cast;
 use crate::date::{Date, days_in_month};
-use crate::keys::Key;
+use crate::keys::{Dir, Direction, Key};
 use crate::primitive::{
     Focusable, Input, Item, PartOf, Primitive, Reaction, Role, Semantics, ValueRange,
 };
@@ -310,12 +310,12 @@ impl DateInput {
         true
     }
 
-    fn neighbour(&self, forward: bool) -> Option<Segment> {
+    fn neighbour(&self, direction: Direction) -> Option<Segment> {
         let segments = self.segments();
         let at = segments
             .iter()
             .position(|segment| *segment == self.focused)?;
-        if forward {
+        if direction == Direction::Forward {
             segments.get(at.saturating_add(1)).copied()
         } else {
             at.checked_sub(1).and_then(|at| segments.get(at).copied())
@@ -334,14 +334,22 @@ impl DateInput {
     /// moving to the piece beside it.
     fn on_key(&mut self, key: Key, gate: Gate) -> Reaction<Part> {
         let segment = self.focused;
+        // The pieces of a date read left to right in every language.
+        if let Some(direction) = Dir::Ltr.along(key) {
+            return self.move_beside(direction);
+        }
         match key {
             Key::ArrowUp | Key::ArrowDown => {
-                let next = self.stepped(segment, key == Key::ArrowUp);
+                let direction = if key == Key::ArrowUp {
+                    Direction::Forward
+                } else {
+                    Direction::Backward
+                };
+                let next = self.stepped(segment, direction);
                 self.typed.clear();
                 self.put(segment, Some(next), Source::User, Reason::Keyboard, gate);
                 Reaction::handled()
             }
-            Key::ArrowRight | Key::ArrowLeft => self.move_beside(key == Key::ArrowRight),
             Key::Backspace => {
                 self.typed.clear();
                 self.put(segment, None, Source::User, Reason::Keyboard, gate);
@@ -357,28 +365,28 @@ impl DateInput {
                 self.typed_digit(segment, digit, gate)
             }
             // A separator typed out of habit moves on, as it would in plain text.
-            Key::Char('/' | '-' | '.' | ':') => self.move_beside(true),
+            Key::Char('/' | '-' | '.' | ':') => self.move_beside(Direction::Forward),
             _ => Reaction::default(),
         }
     }
 
     /// What a piece holds after one step up or down. Stepping wraps round, and an
     /// empty piece starts at an end.
-    fn stepped(&self, segment: Segment, up: bool) -> u32 {
+    fn stepped(&self, segment: Segment, direction: Direction) -> u32 {
         let (min, max) = self.limits(segment);
-        match (self.get(segment), up) {
-            (None, true) => min,
-            (None, false) => max,
-            (Some(now), true) if now >= max => min,
-            (Some(now), true) => now.saturating_add(1),
-            (Some(now), false) if now <= min => max,
-            (Some(now), false) => now.saturating_sub(1),
+        match (self.get(segment), direction) {
+            (None, Direction::Forward) => min,
+            (None, Direction::Backward) => max,
+            (Some(now), Direction::Forward) if now >= max => min,
+            (Some(now), Direction::Forward) => now.saturating_add(1),
+            (Some(now), Direction::Backward) if now <= min => max,
+            (Some(now), Direction::Backward) => now.saturating_sub(1),
         }
     }
 
     /// Moves to the piece after or before the focused one, if there is one.
-    fn move_beside(&mut self, forward: bool) -> Reaction<Part> {
-        self.neighbour(forward)
+    fn move_beside(&mut self, direction: Direction) -> Reaction<Part> {
+        self.neighbour(direction)
             .map_or_else(Reaction::handled, |next| self.move_to(next))
     }
 
@@ -398,7 +406,7 @@ impl DateInput {
             (false, false) => None,
         };
         self.put(segment, stored, Source::User, Reason::Text, gate);
-        match (full, self.neighbour(true)) {
+        match (full, self.neighbour(Direction::Forward)) {
             (true, Some(next)) => self.move_to(next),
             (true, None) => {
                 self.typed.clear();

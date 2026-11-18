@@ -2,6 +2,7 @@
 //! them. Sizes are percentages of the space and always add up to a hundred.
 
 use crate::convert::Cast;
+use crate::keys::Direction;
 use crate::number::read_number;
 
 const EPSILON: f64 = 1e-6;
@@ -148,8 +149,8 @@ fn is_locked(locked: &[bool], handle: usize) -> bool {
 }
 
 /// The panels a handle can take from, nearest first. It stops at a locked handle.
-fn shrinkable(count: usize, handle: usize, forward: bool, locked: &[bool]) -> Vec<usize> {
-    if forward {
+fn shrinkable(count: usize, handle: usize, direction: Direction, locked: &[bool]) -> Vec<usize> {
+    if direction == Direction::Forward {
         (handle.saturating_add(1)..count)
             .take_while(|index| {
                 *index == handle.saturating_add(1) || !is_locked(locked, index.saturating_sub(1))
@@ -181,13 +182,12 @@ pub fn resize_at(
     if delta.abs() < EPSILON || layout.len() < 2 || handle >= layout.len().saturating_sub(1) {
         return None;
     }
-    let forward = delta > 0.0;
-    let pivot = if forward {
-        handle
+    let (pivot, direction) = if delta > 0.0 {
+        (handle, Direction::Forward)
     } else {
-        handle.saturating_add(1)
+        (handle.saturating_add(1), Direction::Backward)
     };
-    let shrinking = shrinkable(layout.len(), handle, forward, locked);
+    let shrinking = shrinkable(layout.len(), handle, direction, locked);
     let start = size_at(layout, pivot);
     let room = limits_at(panels, pivot).max - start;
     let capacity: f64 = shrinking

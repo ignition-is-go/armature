@@ -3,6 +3,7 @@
 //! view. Lengths are along the scrolling axis.
 
 use crate::convert::Cast;
+use crate::keys::Direction;
 use crate::roving::Ends;
 
 /// A slide's place along the track.
@@ -307,7 +308,7 @@ pub struct LoopAt {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Heading {
     pub page: usize,
-    pub forward: bool,
+    pub direction: Direction,
 }
 
 /// A change to which slide the track starts at, and how far the scroll position
@@ -372,7 +373,7 @@ pub fn loop_rotation(
             };
             let target =
                 page_of(&boxes, page, view.align, view.snapport, view.padding_start).position;
-            let lies_ahead = if heading.forward {
+            let lies_ahead = if heading.direction == Direction::Forward {
                 target >= position - 0.5
             } else {
                 target <= position + 0.5

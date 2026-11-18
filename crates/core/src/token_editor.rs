@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use crate::agent::{ActError, Snapshot, SnapshotItem};
 use crate::change::{Gate, Reason, Source, ValueChange};
-use crate::keys::{Dir, Key};
+use crate::keys::{Dir, Direction, Key};
 use crate::primitive::{
     Effect, Focusable, Input, Item, PartOf, Primitive, Reaction, Role, Semantics,
 };
@@ -398,13 +398,11 @@ impl TokenEditor {
     }
 
     fn on_key(&mut self, key: Key, by_word: bool, shift: bool, gate: Gate) -> Reaction<Part> {
-        let (back, forward) = if self.opts.dir == Dir::Rtl {
-            (Key::ArrowRight, Key::ArrowLeft)
-        } else {
-            (Key::ArrowLeft, Key::ArrowRight)
-        };
+        if let Some(direction) = self.opts.dir.along(key) {
+            self.move_caret(direction, by_word, shift);
+            return Reaction::handled();
+        }
         match key {
-            key if key == back || key == forward => self.move_caret(key == forward, by_word, shift),
             Key::Home => self.move_caret_to(self.line_start(), shift),
             Key::End => self.move_caret_to(self.line_end(), shift),
             _ if self.opts.read_only => return Reaction::default(),
@@ -430,18 +428,13 @@ impl TokenEditor {
 
     /// An arrow key: one step, or one word. A plain arrow with something selected
     /// only collapses the selection, to the side the arrow points at.
-    fn move_caret(&mut self, ahead: bool, by_word: bool, shift: bool) {
-        let to = match self.selection() {
-            Some(selected) if !shift && !by_word => {
-                if ahead {
-                    selected.end
-                } else {
-                    selected.start
-                }
-            }
-            _ if by_word => word_boundary(&self.value, self.caret, ahead),
-            _ if ahead => (self.caret.saturating_add(1)).min(self.length()),
-            _ => self.caret.saturating_sub(1),
+    fn move_caret(&mut self, direction: Direction, by_word: bool, shift: bool) {
+        let to = match (self.selection(), direction) {
+            (Some(selected), Direction::Forward) if !shift && !by_word => selected.end,
+            (Some(selected), Direction::Backward) if !shift && !by_word => selected.start,
+            _ if by_word => word_boundary(&self.value, self.caret, direction),
+            (_, Direction::Forward) => (self.caret.saturating_add(1)).min(self.length()),
+            (_, Direction::Backward) => self.caret.saturating_sub(1),
         };
         self.move_caret_to(to, shift);
     }
@@ -450,7 +443,9 @@ impl TokenEditor {
     fn delete_back(&mut self, by_word: bool, gate: Gate) {
         let range = match self.selection() {
             Some(selected) => selected,
-            None if by_word => word_boundary(&self.value, self.caret, false)..self.caret,
+            None if by_word => {
+                word_boundary(&self.value, self.caret, Direction::Backward)..self.caret
+            }
             None => self.caret.saturating_sub(1)..self.caret,
         };
         self.delete(range, Cause::TYPED, gate);

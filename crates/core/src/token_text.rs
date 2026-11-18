@@ -5,6 +5,8 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use crate::keys::Direction;
+
 /// Something set into text as one unit: a mention, a file, a command.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Token {
@@ -230,7 +232,8 @@ pub fn removed_tokens(before: &[Segment], after: &[Segment]) -> Vec<Token> {
 /// Where deleting or moving by a word from `offset` ends. It stops at a token,
 /// and takes just the token when one is next.
 #[must_use]
-pub fn word_boundary(value: &[Segment], offset: usize, forward: bool) -> usize {
+pub fn word_boundary(value: &[Segment], offset: usize, direction: Direction) -> usize {
+    let forward = direction == Direction::Forward;
     let text: Vec<char> = offset_text(value).chars().collect();
     let char_at = |index: usize| {
         if forward {
@@ -277,9 +280,9 @@ pub fn word_boundary(value: &[Segment], offset: usize, forward: bool) -> usize {
 /// Where deleting or moving to the end of the line from `offset` ends. At the
 /// edge of a line already, it takes the line break.
 #[must_use]
-pub fn line_boundary(value: &[Segment], offset: usize, forward: bool) -> usize {
+pub fn line_boundary(value: &[Segment], offset: usize, direction: Direction) -> usize {
     let text: Vec<char> = offset_text(value).chars().collect();
-    if !forward {
+    if direction == Direction::Backward {
         let start = text
             .get(..offset.min(text.len()))
             .unwrap_or_default()

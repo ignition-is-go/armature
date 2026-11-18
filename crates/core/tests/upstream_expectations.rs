@@ -12,6 +12,7 @@ use armature_core::gauge::{Meter, MeterPart};
 use armature_core::gesture::{
     DECELERATION, VelocityTracker, dim_amount, expand_amount, project_distance, rubber_band,
 };
+use armature_core::keys::Direction;
 use armature_core::number::{NumberRange, decimals_of, wrap};
 use armature_core::outline::{OutlineMove, depth_at, move_row, slot_at};
 use armature_core::outline::{OutlineRow, Place, depth_range, moved_rows, place_of, subtree_end};
@@ -1298,16 +1299,16 @@ fn token_text_model_word_deletion_stops_at_tokens_and_removes() {
     use armature_core::token_text::*;
     // "word deletion stops at tokens, and removes just the token when it's next"
     let value = normalize(vec!["one ".into(), alice().into(), "two three".into()]);
-    assert_eq!(word_boundary(&value, 14, false), 9);
-    assert_eq!(word_boundary(&value, 8, false), 5);
-    assert_eq!(word_boundary(&value, 5, false), 4);
-    assert_eq!(word_boundary(&value, 4, false), 0);
-    assert_eq!(word_boundary(&value, 4, true), 5);
+    assert_eq!(word_boundary(&value, 14, Direction::Backward), 9);
+    assert_eq!(word_boundary(&value, 8, Direction::Backward), 5);
+    assert_eq!(word_boundary(&value, 5, Direction::Backward), 4);
+    assert_eq!(word_boundary(&value, 4, Direction::Backward), 0);
+    assert_eq!(word_boundary(&value, 4, Direction::Forward), 5);
     // "line deletion goes to the start of the line"
     let value = normalize(vec!["one\ntwo".into()]);
-    assert_eq!(line_boundary(&value, 7, false), 4);
-    assert_eq!(line_boundary(&value, 4, false), 3);
-    assert_eq!(line_boundary(&value, 0, true), 3);
+    assert_eq!(line_boundary(&value, 7, Direction::Backward), 4);
+    assert_eq!(line_boundary(&value, 4, Direction::Backward), 3);
+    assert_eq!(line_boundary(&value, 0, Direction::Forward), 3);
     // "tokens are written as links and labels as text"
     let value = normalize(vec![
         "Summarize ".into(),
@@ -2219,7 +2220,7 @@ fn carousel_layouts_a_step_past_the_end_rotates_only() {
     let forward_to = |page| {
         Some(Heading {
             page,
-            forward: true,
+            direction: Direction::Forward,
         })
     };
     // "a step past the end rotates only when the next page doesn't lie ahead"
@@ -2271,7 +2272,7 @@ fn carousel_layouts_a_track_too_short_to_rotate_gives() {
             at(0.0, 0),
             Some(Heading {
                 page: 1,
-                forward: false
+                direction: Direction::Backward
             }),
             false
         ),
@@ -2578,7 +2579,7 @@ fn scroll_area_model_dragging_and_pressing_the_track() {
             page_direction(150.0, 40.0, 80.0),
             page_direction(100.0, 40.0, 80.0)
         ),
-        (Some(PageTowards::Start), Some(PageTowards::End), None)
+        (Some(Direction::Backward), Some(Direction::Forward), None)
     );
     assert_eq!(page_length(200.0), 175.0);
 }

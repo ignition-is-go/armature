@@ -3,7 +3,7 @@
 //! how long the thumb is and where it sits, what a drag or a press on the track scrolls
 //! to, how near the ends the content is, and when a scrollbar shows.
 
-use crate::keys::Key;
+use crate::keys::{Direction, Key};
 
 /// One axis of a scrolling area, in pixels.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -107,21 +107,14 @@ pub fn position_at(point: f64, metrics: AxisMetrics, track: f64) -> f64 {
     ((point - size / 2.0) / travel).clamp(0.0, 1.0) * max_scroll(metrics)
 }
 
-/// Which way a press on the track pages.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PageTowards {
-    Start,
-    End,
-}
-
 /// Which way a press on the track pages: towards the start before the thumb,
 /// towards the end after it, and nowhere on it.
 #[must_use]
-pub fn page_direction(point: f64, thumb_size: f64, thumb_offset: f64) -> Option<PageTowards> {
+pub fn page_direction(point: f64, thumb_size: f64, thumb_offset: f64) -> Option<Direction> {
     if point < thumb_offset {
-        Some(PageTowards::Start)
+        Some(Direction::Backward)
     } else if point > thumb_offset + thumb_size {
-        Some(PageTowards::End)
+        Some(Direction::Forward)
     } else {
         None
     }

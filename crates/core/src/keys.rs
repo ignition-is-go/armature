@@ -57,3 +57,23 @@ pub enum Dir {
     Ltr,
     Rtl,
 }
+
+impl Dir {
+    /// Which way along a row a sideways arrow moves in this reading direction.
+    /// `None` for any other key.
+    #[must_use]
+    pub const fn along(self, key: Key) -> Option<Direction> {
+        match (key, self) {
+            (Key::ArrowRight, Self::Ltr) | (Key::ArrowLeft, Self::Rtl) => Some(Direction::Forward),
+            (Key::ArrowLeft, Self::Ltr) | (Key::ArrowRight, Self::Rtl) => Some(Direction::Backward),
+            _ => None,
+        }
+    }
+}
+
+/// Which way along a sequence: toward its start or toward its end.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Direction {
+    Backward,
+    Forward,
+}

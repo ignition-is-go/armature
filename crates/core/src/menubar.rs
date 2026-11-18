@@ -1,6 +1,6 @@
 use crate::agent::{ActError, Snapshot, SnapshotItem};
 use crate::change::{Gate, ValueChange};
-use crate::keys::{Dir, Key, Modifiers};
+use crate::keys::{Dir, Direction, Key, Modifiers};
 use crate::menu::{self, Entry, Landing, Menu};
 use crate::popup::{Align, Placement, Side};
 use crate::primitive::{
@@ -173,8 +173,11 @@ impl Menubar {
         )
     }
 
-    fn neighbour(&self, forward: bool) -> usize {
-        let nav = if forward { Nav::Next } else { Nav::Prev };
+    fn neighbour(&self, direction: Direction) -> usize {
+        let nav = match direction {
+            Direction::Forward => Nav::Next,
+            Direction::Backward => Nav::Prev,
+        };
         roving::step(
             &vec![true; self.menus.len()],
             Some(self.focused),
@@ -200,23 +203,13 @@ impl Menubar {
         Self::split(key).1.map(str::to_string)
     }
 
-    /// The keys that move forward and back along the bar, for its reading direction.
-    fn sideways_keys(&self) -> (Key, Key) {
-        if self.dir == Dir::Rtl {
-            (Key::ArrowLeft, Key::ArrowRight)
-        } else {
-            (Key::ArrowRight, Key::ArrowLeft)
-        }
-    }
-
     /// A key with every menu closed: moving along the bar, or opening the focused menu.
     fn on_key_on_the_bar(&mut self, key: Key, gate: Gate) -> Reaction<Part> {
-        let (forward, back) = self.sideways_keys();
+        if let Some(direction) = self.dir.along(key) {
+            self.focused = self.neighbour(direction);
+            return Reaction::to_item(Part::Trigger, Some(self.key_at(self.focused)));
+        }
         match key {
-            key if key == forward || key == back => {
-                self.focused = self.neighbour(key == forward);
-                Reaction::to_item(Part::Trigger, Some(self.key_at(self.focused)))
-            }
             _ if self.menus.is_empty() => Reaction::default(),
             Key::Enter | Key::Space | Key::ArrowDown => {
                 self.open_menu_at(self.focused, Landing::First, gate)
@@ -235,13 +228,14 @@ impl Menubar {
         key: Key,
         gate: Gate,
     ) -> Reaction<Part> {
-        let (forward, back) = self.sideways_keys();
         let reaction = self.forward(at, input, gate);
-        if !reaction.handled && reaction.focus.is_none() && (key == forward || key == back) {
-            let next = self.neighbour(key == forward);
-            return self.open_menu_at(next, Landing::First, gate);
+        match self.dir.along(key) {
+            Some(direction) if !reaction.handled && reaction.focus.is_none() => {
+                let next = self.neighbour(direction);
+                self.open_menu_at(next, Landing::First, gate)
+            }
+            _ => reaction,
         }
-        reaction
     }
 }
 

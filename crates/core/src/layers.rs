@@ -1,6 +1,8 @@
 //! The stack of floating layers on screen: popups, menus, dialogs. It decides which
 //! layer Escape or an outside press dismisses, and which layers a modal makes inert.
 
+use crate::keys::Direction;
+
 /// Which of a person's own gestures close a layer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DismissedBy {
@@ -193,17 +195,17 @@ impl LayerStack {
 /// The element Tab moves to inside a modal layer that traps focus: it wraps at both
 /// ends. `count` is how many tabbable elements the layer has.
 #[must_use]
-pub fn trapped_focus(current: Option<usize>, count: usize, backwards: bool) -> Option<usize> {
+pub fn trapped_focus(current: Option<usize>, count: usize, direction: Direction) -> Option<usize> {
     if count == 0 {
         return None;
     }
-    Some(match (current, backwards) {
-        (None, false) => 0,
-        (None, true) => count.saturating_sub(1),
-        (Some(at), false) => (at.saturating_add(1))
+    Some(match (current, direction) {
+        (None, Direction::Forward) => 0,
+        (None, Direction::Backward) => count.saturating_sub(1),
+        (Some(at), Direction::Forward) => (at.saturating_add(1))
             .checked_rem(count)
             .unwrap_or_default(),
-        (Some(at), true) => ((at.saturating_add(count)).saturating_sub(1))
+        (Some(at), Direction::Backward) => ((at.saturating_add(count)).saturating_sub(1))
             .checked_rem(count)
             .unwrap_or_default(),
     })
@@ -265,10 +267,10 @@ mod tests {
 
     #[test]
     fn trapped_focus_wraps_at_both_ends() {
-        assert_eq!(trapped_focus(Some(2), 3, false), Some(0));
-        assert_eq!(trapped_focus(Some(0), 3, true), Some(2));
-        assert_eq!(trapped_focus(None, 3, true), Some(2));
-        assert_eq!(trapped_focus(None, 0, false), None);
+        assert_eq!(trapped_focus(Some(2), 3, Direction::Forward), Some(0));
+        assert_eq!(trapped_focus(Some(0), 3, Direction::Backward), Some(2));
+        assert_eq!(trapped_focus(None, 3, Direction::Backward), Some(2));
+        assert_eq!(trapped_focus(None, 0, Direction::Forward), None);
     }
 
     #[test]
