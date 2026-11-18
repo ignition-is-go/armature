@@ -191,7 +191,7 @@ impl Primitive for Listbox {
                 labelled_by: Some(Part::GroupLabel),
                 ..Default::default()
             },
-            _ => Default::default(),
+            _ => crate::primitive::Relations::default(),
         }
     }
 

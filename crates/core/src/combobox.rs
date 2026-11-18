@@ -35,6 +35,10 @@ pub enum Loading {
 }
 
 #[derive(Clone, Copy, Debug, Default)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is an independent setting"
+)]
 pub struct Options {
     pub multiple: bool,
     /// Whether text that matches no option is a value in its own right, as in a
@@ -402,6 +406,10 @@ impl Primitive for Combobox {
         }
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one arm for each input the primitive answers"
+    )]
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
         if self.opts.read_only && !matches!(input, Input::Focus { .. } | Input::Blur { .. }) {
             return Reaction::default();

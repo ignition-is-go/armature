@@ -181,7 +181,7 @@ pub fn compute_placement(
             viewport.x + padding,
             viewport.x + viewport.width - size.width - padding,
         );
-        at.0 = if x == at.0 {
+        at.0 = if (x - at.0).abs() < f64::EPSILON {
             x
         } else {
             held(x, anchor.x - size.width, anchor.x + anchor.width)
@@ -192,7 +192,7 @@ pub fn compute_placement(
             viewport.y + padding,
             viewport.y + viewport.height - size.height - padding,
         );
-        at.1 = if y == at.1 {
+        at.1 = if (y - at.1).abs() < f64::EPSILON {
             y
         } else {
             held(y, anchor.y - size.height, anchor.y + anchor.height)

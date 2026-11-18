@@ -39,8 +39,8 @@ pub struct DatePicker {
 impl Default for DatePicker {
     fn default() -> Self {
         Self::new(
-            Default::default(),
-            Date::new(2026, 1, 1).expect("a real date"),
+            calendar::Options::default(),
+            Date::new(2026, 1, 1).unwrap_or(Date::FIRST),
         )
     }
 }
@@ -198,7 +198,7 @@ impl Primitive for DatePicker {
                         .send(
                             Input::Key {
                                 key: Key::Home,
-                                mods: Default::default(),
+                                mods: crate::keys::Modifiers::default(),
                                 now_ms: 0,
                             },
                             &mut |_| true,

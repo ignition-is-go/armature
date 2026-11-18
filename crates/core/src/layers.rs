@@ -2,6 +2,10 @@
 //! layer Escape or an outside press dismisses, and which layers a modal makes inert.
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is an independent setting"
+)]
 pub struct Layer {
     pub id: String,
     /// Blocks interaction with everything beneath it.

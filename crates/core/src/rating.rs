@@ -83,7 +83,7 @@ impl Rating {
     fn set(&mut self, value: f64, source: Source, reason: Reason, gate: Gate) -> bool {
         let value =
             ((value / self.step()).round() * self.step()).clamp(0.0, f64::from(self.opts.max));
-        if value == self.value {
+        if (value - self.value).abs() < f64::EPSILON {
             return true;
         }
         let allowed = gate(&ValueChange {
@@ -219,7 +219,7 @@ impl Primitive for Rating {
                 Reaction::default()
             }
             PointerPhase::Down => {
-                let next = if self.opts.deselectable && given == self.value {
+                let next = if self.opts.deselectable && (given - self.value).abs() < f64::EPSILON {
                     0.0
                 } else {
                     given

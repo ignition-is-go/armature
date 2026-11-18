@@ -38,6 +38,10 @@ const ACTIONS: &[&str] = &["set", "clear", "submit", "reveal", "conceal"];
 /// text. Each edit is offered to the gate with `Reason::Text`, and a submit with
 /// `Reason::Keyboard`.
 #[derive(Clone, Debug, Default)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is an independent setting"
+)]
 pub struct TextField {
     kind: Kind,
     text: String,
@@ -72,6 +76,7 @@ impl TextField {
         self
     }
 
+    #[must_use]
     pub fn validate(mut self, check: fn(&str) -> Option<String>) -> Self {
         self.validate = Some(check);
         self

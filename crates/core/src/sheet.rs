@@ -45,6 +45,10 @@ const ACTIONS: &[&str] = &["open", "close", "snap"];
 /// dismisses it. The value is the index of the height it rests at, or empty when
 /// closed.
 #[derive(Clone, Debug)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is an independent setting"
+)]
 pub struct Sheet {
     /// The heights it can rest at, lowest first.
     detents: Vec<f64>,
@@ -287,6 +291,10 @@ impl Primitive for Sheet {
         }
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one arm for each input the primitive answers"
+    )]
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
         let last = self.detents.len().saturating_sub(1);
         match (input, self.at) {
@@ -316,8 +324,9 @@ impl Primitive for Sheet {
             // Scrolling carries the sheet. Each movement puts the settling off again.
             (Input::Scrolled { offset, now_ms, .. }, Some(at)) => {
                 let moved = self.scrolled.map_or(
-                    offset != self.detents.get(at).copied().unwrap_or_default(),
-                    |(was, _)| was != offset,
+                    (offset - self.detents.get(at).copied().unwrap_or_default()).abs()
+                        > f64::EPSILON,
+                    |(was, _)| (was - offset).abs() > f64::EPSILON,
                 );
                 if !moved {
                     return Reaction::default();

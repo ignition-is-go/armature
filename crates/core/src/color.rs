@@ -79,9 +79,9 @@ impl Rgb {
         let range = max - min;
         let hue = if range == 0.0 {
             0.0
-        } else if max == r {
+        } else if (max - r).abs() < f64::EPSILON {
             60.0 * ((g - b) / range).rem_euclid(6.0)
-        } else if max == g {
+        } else if (max - g).abs() < f64::EPSILON {
             60.0 * ((b - r) / range + 2.0)
         } else {
             60.0 * ((r - g) / range + 4.0)
@@ -103,7 +103,7 @@ impl Rgb {
     pub fn to_hsl(self) -> Hsl {
         let (h, max, min) = self.hue_and_range();
         let l = f64::midpoint(max, min);
-        let s = if max == min {
+        let s = if (max - min).abs() < f64::EPSILON {
             0.0
         } else {
             (max - min) / (1.0 - 2.0f64.mul_add(l, -1.0).abs())
@@ -133,6 +133,10 @@ impl Rgb {
     }
 }
 
+#[expect(
+    clippy::many_single_char_names,
+    reason = "colour channels go by their letters"
+)]
 fn from_hue(h: f64, chroma: f64, floor: f64) -> Rgb {
     let sector = h.rem_euclid(360.0) / 60.0;
     let x = chroma * (1.0 - (sector % 2.0 - 1.0).abs());
@@ -286,6 +290,10 @@ impl Rgb {
     /// Lightness from 0 to 100 and the two colour axes of CIE Lab.
     #[must_use]
     pub fn to_lab(self) -> (f64, f64, f64) {
+        #[expect(
+            clippy::many_single_char_names,
+            reason = "colour channels go by their letters"
+        )]
         let [r, g, b] = [self.r, self.g, self.b].map(|part| to_linear(f64::from(part) / 255.0));
         // To XYZ under D65, then adapted to the D50 white Lab is measured against,
         // with the matrices CSS Color gives.
@@ -344,6 +352,10 @@ impl Rgb {
     /// Lightness from 0 to 1, colourfulness, and hue in degrees, in OKLCH.
     #[must_use]
     pub fn to_oklch(self) -> (f64, f64, f64) {
+        #[expect(
+            clippy::many_single_char_names,
+            reason = "colour channels go by their letters"
+        )]
         let [r, g, b] = [self.r, self.g, self.b].map(|part| to_linear(f64::from(part) / 255.0));
         let l = 0.051_445_992_9_f64
             .mul_add(b, 0.536_332_536_3_f64.mul_add(g, 0.412_221_470_8 * r))

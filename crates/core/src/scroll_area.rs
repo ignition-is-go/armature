@@ -186,7 +186,7 @@ impl Primitive for ScrollArea {
                 now_ms,
                 ..
             } => {
-                let moved = offset != self.offset;
+                let moved = (offset - self.offset).abs() > f64::EPSILON;
                 // At the end before, and the content has grown: follow it down.
                 let was_at_end = self.content - self.viewport - self.offset <= 24.0;
                 let grew = content > self.content && self.content > 0.0;

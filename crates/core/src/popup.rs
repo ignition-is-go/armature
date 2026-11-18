@@ -119,7 +119,7 @@ pub fn arrow_along(
     };
     let wanted = middle - start - size / 2.0;
     let offset = wanted.clamp(padding, (length - size - padding).max(padding));
-    (offset, offset != wanted)
+    (offset, (offset - wanted).abs() > f64::EPSILON)
 }
 
 /// Whether a point lies on the way between a trigger and its popup:

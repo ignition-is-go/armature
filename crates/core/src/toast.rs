@@ -352,6 +352,10 @@ impl Primitive for Toaster {
         }
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one arm for each input the primitive answers"
+    )]
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
         match input {
             Input::Tick { now_ms } => {

@@ -315,6 +315,10 @@ impl Primitive for Canvas {
         }
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one arm for each input the primitive answers"
+    )]
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
         match input {
             Input::Press {
@@ -434,6 +438,10 @@ impl Primitive for Canvas {
         }
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one arm for each input the primitive answers"
+    )]
     fn pointer(
         &mut self,
         pointer: Pointer<Part>,

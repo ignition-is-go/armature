@@ -73,7 +73,7 @@ impl Slider {
 
     fn set(&mut self, value: f64, source: Source, reason: Reason, gate: Gate) -> bool {
         let value = self.opts.range.snap(value);
-        if value == self.value {
+        if (value - self.value).abs() < f64::EPSILON {
             return true;
         }
         let allowed = gate(&ValueChange {

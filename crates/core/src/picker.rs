@@ -202,7 +202,7 @@ impl Primitive for Picker {
                 if !self
                     .scrolled_from
                     .replace(offset)
-                    .is_some_and(|was| was != offset)
+                    .is_some_and(|was| (was - offset).abs() > f64::EPSILON)
                 {
                     return Reaction::default();
                 }

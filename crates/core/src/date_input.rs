@@ -84,6 +84,10 @@ const ACTIONS: &[&str] = &["set", "clear"];
 /// Right move between pieces. The value is the date as `YYYY-MM-DD`, with `THH:MM` when
 /// it carries a time, once every piece holds something.
 #[derive(Clone, Debug)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is an independent setting"
+)]
 pub struct DateInput {
     with_time: bool,
     fields: [Option<u32>; 6],

@@ -17,6 +17,10 @@ pub enum Part {
 }
 
 #[derive(Clone, Copy, Debug)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is an independent setting"
+)]
 pub struct Options {
     pub dismiss_on_backdrop: bool,
     pub dismiss_on_escape: bool,

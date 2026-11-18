@@ -155,6 +155,10 @@ fn inputs<P: Primitive>(items: &[Item]) -> Vec<Input<P::Part>> {
 
 /// Checks a primitive against the rules every primitive must keep. `make` builds a
 /// fresh instance and `items` are registered on it. An empty result means it conforms.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one arm for each input the primitive answers"
+)]
 pub fn check<P: Primitive>(make: impl Fn() -> P, items: &[Item]) -> Vec<Violation> {
     let build = |with_items: bool| {
         let mut primitive = make();

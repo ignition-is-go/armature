@@ -302,11 +302,13 @@ impl<Part> Reaction<Part> {
         }
     }
 
+    #[must_use]
     pub fn with(mut self, effect: Effect) -> Self {
         self.effects.push(effect);
         self
     }
 
+    #[must_use]
     pub fn announcing(self, message: impl Into<String>) -> Self {
         self.with(Effect::Announce {
             message: message.into(),
@@ -316,6 +318,7 @@ impl<Part> Reaction<Part> {
 
     /// Announces at once, interrupting what is being read. For something the person
     /// is in the middle of doing, such as moving an item.
+    #[must_use]
     pub fn alerting(self, message: impl Into<String>) -> Self {
         self.with(Effect::Announce {
             message: message.into(),
@@ -406,6 +409,10 @@ pub enum Focusable {
 /// attributes, a native one to its accessibility tree. A part that is focusable also
 /// reports presses and keys.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is an independent setting"
+)]
 pub struct Semantics {
     pub role: Option<Role>,
     pub selected: Option<bool>,

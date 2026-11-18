@@ -149,6 +149,10 @@ pub enum ScrollbarType {
 }
 
 #[must_use]
+#[expect(
+    clippy::fn_params_excessive_bools,
+    reason = "each flag is an independent fact about the scrollbar"
+)]
 pub fn scrollbar_shown(
     kind: ScrollbarType,
     overflow: bool,

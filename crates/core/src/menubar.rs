@@ -261,6 +261,10 @@ impl Primitive for Menubar {
         }
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one arm for each input the primitive answers"
+    )]
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
         let (forward, back) = if self.dir == Dir::Rtl {
             (Key::ArrowLeft, Key::ArrowRight)

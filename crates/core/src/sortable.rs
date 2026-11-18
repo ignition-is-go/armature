@@ -142,7 +142,8 @@ impl Sortable {
                 ))
             }
             (key, Some(reorder)) => {
-                let Some(nav) = roving::nav_for_key(key, self.orientation, Default::default())
+                let Some(nav) =
+                    roving::nav_for_key(key, self.orientation, crate::keys::Dir::default())
                 else {
                     return Reaction::default();
                 };
@@ -162,7 +163,8 @@ impl Sortable {
                 ))
             }
             (key, None) => {
-                let Some(nav) = roving::nav_for_key(key, self.orientation, Default::default())
+                let Some(nav) =
+                    roving::nav_for_key(key, self.orientation, crate::keys::Dir::default())
                 else {
                     return Reaction::default();
                 };

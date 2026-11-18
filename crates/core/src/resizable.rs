@@ -75,7 +75,7 @@ impl Resizable {
 
     fn set(&mut self, percent: f64, source: Source, reason: Reason, gate: Gate) -> bool {
         let percent = percent.clamp(self.opts.min, self.opts.max);
-        if percent == self.percent {
+        if (percent - self.percent).abs() < f64::EPSILON {
             return true;
         }
         let allowed = gate(&ValueChange {

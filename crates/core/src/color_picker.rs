@@ -88,7 +88,7 @@ impl ColorPicker {
     }
 
     fn set(&mut self, color: Hsv, source: Source, reason: Reason, gate: Gate) -> bool {
-        if color.to_rgb() == self.color.to_rgb() && color.h == self.color.h {
+        if color.to_rgb() == self.color.to_rgb() && (color.h - self.color.h).abs() < f64::EPSILON {
             self.color = color;
             return true;
         }

@@ -182,6 +182,10 @@ impl Primitive for OtpInput {
         }
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one arm for each input the primitive answers"
+    )]
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
         match input {
             Input::Text { value, .. } => {

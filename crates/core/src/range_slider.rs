@@ -105,7 +105,7 @@ impl RangeSlider {
         }
         let (low, high) = self.limits(at);
         let value = self.opts.range.snap(value).clamp(low, high);
-        if value == self.values.get(at).copied().unwrap_or_default() {
+        if (value - self.values.get(at).copied().unwrap_or_default()).abs() < f64::EPSILON {
             return true;
         }
         let mut next = self.values.clone();
@@ -263,8 +263,10 @@ impl Primitive for RangeSlider {
                 let nearest = nearest.map(|first| {
                     let stack = (first..self.values.len())
                         .take_while(|at| {
-                            self.values.get(*at).copied().unwrap_or_default()
-                                == self.values.get(first).copied().unwrap_or_default()
+                            (self.values.get(*at).copied().unwrap_or_default()
+                                - self.values.get(first).copied().unwrap_or_default())
+                            .abs()
+                                < f64::EPSILON
                         })
                         .last()
                         .unwrap_or(first);

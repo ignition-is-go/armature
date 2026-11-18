@@ -68,7 +68,7 @@ impl NumberInput {
     fn set(&mut self, value: f64, source: Source, reason: Reason, gate: Gate) -> bool {
         let value = self.range.snap(value);
         self.draft = None;
-        if value == self.value {
+        if (value - self.value).abs() < f64::EPSILON {
             return true;
         }
         let allowed = gate(&ValueChange {
