@@ -43,23 +43,37 @@ pub fn place(
     align: Align,
     gap: f64,
 ) -> Placed {
-    let below = anchor.y + anchor.height + gap;
-    let above = anchor.y - gap - popup.height;
-    let fits_below = below + popup.height <= viewport.height;
-    let fits_above = above >= 0.0;
-    let side = match side {
-        Side::Bottom if !fits_below && fits_above => Side::Top,
-        Side::Top if !fits_above && fits_below => Side::Bottom,
-        preferred => preferred,
+    use crate::placement::{PlaceAlign, PlaceOptions, PlaceSide, compute_placement};
+    let options = PlaceOptions {
+        side: if side == Side::Bottom {
+            PlaceSide::Bottom
+        } else {
+            PlaceSide::Top
+        },
+        align: if align == Align::Start {
+            PlaceAlign::Start
+        } else {
+            PlaceAlign::End
+        },
+        side_offset: gap,
+        align_offset: 0.0,
+        collision_padding: 0.0,
+        rtl: false,
     };
-    let x = match align {
-        Align::Start => anchor.x,
-        Align::End => anchor.x + anchor.width - popup.width,
-    };
+    let placed = compute_placement(
+        anchor,
+        popup,
+        Rect::new(0.0, 0.0, viewport.width, viewport.height),
+        options,
+    );
     Placed {
-        x: x.min(viewport.width - popup.width).max(0.0),
-        y: if side == Side::Bottom { below } else { above },
-        side,
+        x: placed.x,
+        y: placed.y,
+        side: if placed.side == PlaceSide::Top {
+            Side::Top
+        } else {
+            Side::Bottom
+        },
     }
 }
 
@@ -205,13 +219,14 @@ mod tests {
     }
 
     #[test]
-    fn keeps_the_preferred_side_when_neither_fits() {
+    fn when_neither_side_fits_it_takes_the_one_with_more_room() {
         let tall = Size {
             width: 200.0,
             height: 580.0,
         };
+        // Near the top of the view there is more room below, so it stays below.
         let placed = place(
-            anchor(50.0, 300.0),
+            anchor(50.0, 100.0),
             tall,
             VIEWPORT,
             Side::Bottom,
@@ -219,6 +234,16 @@ mod tests {
             4.0,
         );
         assert_eq!(placed.side, Side::Bottom);
+        // Lower down there is more room above, so it goes there.
+        let placed = place(
+            anchor(50.0, 400.0),
+            tall,
+            VIEWPORT,
+            Side::Bottom,
+            Align::Start,
+            4.0,
+        );
+        assert_eq!(placed.side, Side::Top);
     }
 
     #[test]

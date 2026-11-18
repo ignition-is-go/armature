@@ -55,6 +55,7 @@ pub mod pagination;
 pub mod panel_group;
 pub mod panel_layout;
 pub mod picker;
+pub mod placement;
 pub mod popover;
 pub mod popup;
 pub mod preference;

@@ -2388,3 +2388,154 @@ fn scroll_area_model() {
     );
     assert!(!scrolls_toward_start(Key::ArrowUp, false, true));
 }
+
+// position.test.ts: placement and arrow offset
+#[test]
+fn popup_placement() {
+    use armature_core::geometry::{Rect, Size};
+    use armature_core::placement::*;
+    let viewport = Rect::new(0.0, 0.0, 1000.0, 800.0);
+    let size = Size {
+        width: 200.0,
+        height: 300.0,
+    };
+    let options = PlaceOptions {
+        side: PlaceSide::Bottom,
+        align: PlaceAlign::Start,
+        side_offset: 4.0,
+        align_offset: 0.0,
+        collision_padding: 8.0,
+        rtl: false,
+    };
+    let placed =
+        |anchor: Rect, options: PlaceOptions| compute_placement(anchor, size, viewport, options);
+    // "opens below the anchor, lined up with its start"
+    let below = placed(Rect::new(100.0, 100.0, 80.0, 30.0), options);
+    assert_eq!(
+        (below.x, below.y, below.side),
+        (100.0, 134.0, PlaceSide::Bottom)
+    );
+    // "reports the space left below for sizing"
+    assert_eq!(below.available.height, 800.0 - 8.0 - 134.0);
+    // "flips above when there is no room below"
+    let above = placed(Rect::new(100.0, 700.0, 80.0, 30.0), options);
+    assert_eq!((above.y, above.side), (396.0, PlaceSide::Top));
+    // "stays below when neither side fits but below has more room"
+    let tall = compute_placement(
+        Rect::new(100.0, 300.0, 80.0, 30.0),
+        Size {
+            width: 200.0,
+            height: 700.0,
+        },
+        viewport,
+        options,
+    );
+    assert_eq!(tall.side, PlaceSide::Bottom);
+    // "shifts along the anchor to stay on screen"
+    assert_eq!(
+        placed(Rect::new(950.0, 100.0, 40.0, 30.0), options).x,
+        1000.0 - 200.0 - 8.0
+    );
+    // "submenus flip to the left when there is no room on the right"
+    let submenu = placed(
+        Rect::new(850.0, 100.0, 120.0, 30.0),
+        PlaceOptions {
+            side: PlaceSide::Right,
+            side_offset: 0.0,
+            ..options
+        },
+    );
+    assert_eq!((submenu.x, submenu.side), (650.0, PlaceSide::Left));
+    // "start means the right edge in right-to-left layouts"
+    assert_eq!(
+        placed(
+            Rect::new(500.0, 100.0, 80.0, 30.0),
+            PlaceOptions {
+                rtl: true,
+                ..options
+            }
+        )
+        .x,
+        580.0 - 200.0
+    );
+    // "leaves with an anchor scrolled off screen instead of staying behind at the edge"
+    assert_eq!(
+        placed(Rect::new(-600.0, 100.0, 80.0, 30.0), options).x,
+        -600.0 + 80.0
+    );
+    // "goes inside an anchor bigger than it when neither side has room, like a context area"
+    let inside = placed(Rect::new(0.0, 0.0, 1000.0, 800.0), options);
+    assert_eq!(
+        (inside.x, inside.y, inside.side),
+        (8.0, 800.0 - 300.0 - 8.0, PlaceSide::Bottom)
+    );
+    assert_eq!(inside.available.height, 800.0 - 16.0);
+    // "leaves with a big anchor scrolled off screen"
+    assert_eq!(
+        placed(Rect::new(0.0, -2000.0, 1000.0, 800.0), options).y,
+        -2000.0 + 800.0 + 4.0
+    );
+    // "keeps an alignOffset that takes it past the anchor when it fits"
+    assert_eq!(
+        placed(
+            Rect::new(100.0, 100.0, 80.0, 30.0),
+            PlaceOptions {
+                align_offset: 200.0,
+                ..options
+            }
+        )
+        .x,
+        300.0
+    );
+    // "keeps to the part of the page a pinch zoom shows"
+    let zoomed = Rect::new(640.0, 200.0, 640.0, 400.0);
+    let shown = compute_placement(Rect::new(1100.0, 300.0, 80.0, 30.0), size, zoomed, options);
+    assert_eq!(
+        (shown.x, shown.side),
+        (640.0 + 640.0 - 200.0 - 8.0, PlaceSide::Bottom)
+    );
+    assert_eq!(shown.available.height, 200.0 + 400.0 - 8.0 - 334.0);
+    let flipped = compute_placement(Rect::new(1100.0, 500.0, 80.0, 30.0), size, zoomed, options);
+    assert_eq!(
+        (flipped.y, flipped.side),
+        (500.0 - 4.0 - 300.0, PlaceSide::Top)
+    );
+    // arrow offset
+    let popup = Rect::new(100.0, 200.0, 200.0, 80.0);
+    assert_eq!(
+        arrow_offset(
+            Rect::new(150.0, 150.0, 40.0, 20.0),
+            popup,
+            PlaceSide::Bottom,
+            6.0
+        ),
+        70.0
+    );
+    assert_eq!(
+        arrow_offset(
+            Rect::new(20.0, 220.0, 40.0, 20.0),
+            popup,
+            PlaceSide::Right,
+            6.0
+        ),
+        30.0
+    );
+    assert_eq!(
+        arrow_offset(
+            Rect::new(0.0, 150.0, 20.0, 20.0),
+            popup,
+            PlaceSide::Bottom,
+            6.0
+        ),
+        6.0
+    );
+    assert_eq!(
+        arrow_offset(
+            Rect::new(400.0, 150.0, 20.0, 20.0),
+            popup,
+            PlaceSide::Top,
+            6.0
+        ),
+        194.0
+    );
+}
