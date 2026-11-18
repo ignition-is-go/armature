@@ -942,16 +942,29 @@ fn shortcuts() {
     assert!(!shortcut_allowed(None, None));
 }
 
+/// The rule most of the trigger tests use: an `@` mention.
+fn mention() -> armature_core::trigger_match::TriggerRule {
+    armature_core::trigger_match::TriggerRule::new("@")
+}
+
+/// The match found in `text`, written as trigger, query and where it starts.
+fn found(
+    text: &str,
+    rules: &[armature_core::trigger_match::TriggerRule],
+    offset: usize,
+) -> Option<String> {
+    armature_core::trigger_match::find_trigger_match(text, offset, rules)
+        .map(|m| format!("{}{}@{}", m.trigger, m.query, m.start))
+}
+
+/// The `@` mention found in `text`, if any.
+fn matched(text: &str) -> Option<String> {
+    found(text, &[mention()], 0)
+}
+
 // trigger-match.test.ts
 #[test]
 fn trigger_matching() {
-    use armature_core::trigger_match::*;
-    let mention = || TriggerRule::new("@");
-    let found = |text: &str, rules: &[TriggerRule], offset: usize| {
-        find_trigger_match(text, offset, rules)
-            .map(|m| format!("{}{}@{}", m.trigger, m.query, m.start))
-    };
-    let matched = |text: &str| found(text, &[mention()], 0);
     for (text, expected) in [
         ("@", "@@0"),
         ("@al", "@al@0"),
@@ -976,12 +989,6 @@ fn trigger_matching() {
 #[test]
 fn trigger_matching_the_nearest_trigger_before_the_caret_wins() {
     use armature_core::trigger_match::*;
-    let mention = || TriggerRule::new("@");
-    let found = |text: &str, rules: &[TriggerRule], offset: usize| {
-        find_trigger_match(text, offset, rules)
-            .map(|m| format!("{}{}@{}", m.trigger, m.query, m.start))
-    };
-    let matched = |text: &str| found(text, &[mention()], 0);
     // "the nearest trigger before the caret wins"
     assert_eq!(matched("@ann @bo").as_deref(), Some("@bo@5"));
     // "a full-width trigger an input method committed matches"
@@ -1006,11 +1013,6 @@ fn trigger_matching_the_nearest_trigger_before_the_caret_wins() {
 #[test]
 fn trigger_matching_boundary_line_matches_at_the_start_of() {
     use armature_core::trigger_match::*;
-    let mention = || TriggerRule::new("@");
-    let found = |text: &str, rules: &[TriggerRule], offset: usize| {
-        find_trigger_match(text, offset, rules)
-            .map(|m| format!("{}{}@{}", m.trigger, m.query, m.start))
-    };
     // "boundary line matches at the start of any line"
     let line = TriggerRule {
         boundary: Boundary::Line,
@@ -1039,11 +1041,6 @@ fn trigger_matching_boundary_line_matches_at_the_start_of() {
 #[test]
 fn trigger_matching_spaces_allow_phrases_and_a_number_caps() {
     use armature_core::trigger_match::*;
-    let mention = || TriggerRule::new("@");
-    let found = |text: &str, rules: &[TriggerRule], offset: usize| {
-        find_trigger_match(text, offset, rules)
-            .map(|m| format!("{}{}@{}", m.trigger, m.query, m.start))
-    };
     // "spaces allow phrases, and a number caps the words"
     let phrases = TriggerRule {
         spaces: Spaces::Any,
@@ -1104,12 +1101,6 @@ fn trigger_matching_a_multi_character_trigger_matches() {
 #[test]
 fn trigger_matching_maxlength_ends_a_long_query() {
     use armature_core::trigger_match::*;
-    let mention = || TriggerRule::new("@");
-    let found = |text: &str, rules: &[TriggerRule], offset: usize| {
-        find_trigger_match(text, offset, rules)
-            .map(|m| format!("{}{}@{}", m.trigger, m.query, m.start))
-    };
-    let matched = |text: &str| found(text, &[mention()], 0);
     // "maxLength ends a long query"
     let short = TriggerRule {
         max_length: 3,
@@ -1616,6 +1607,21 @@ fn locale_tags() {
     assert_eq!(to_locale(""), None);
 }
 
+/// A panel with the default limits.
+fn panel() -> armature_core::panel_layout::PanelConstraints {
+    armature_core::panel_layout::PanelConstraints::default()
+}
+
+/// The layout after a drag moves `handle` by `delta`, nothing locked.
+fn moved(
+    layout: &[f64],
+    panels: &[armature_core::panel_layout::PanelConstraints],
+    handle: usize,
+    delta: f64,
+) -> Option<Vec<f64>> {
+    armature_core::panel_layout::resize_at(layout, panels, handle, delta, 0.5, &[])
+}
+
 // resizable.test.ts: sizes, settling, moving a handle, fitting a layout, panels and keys
 #[test]
 fn panel_layouts() {
@@ -1643,7 +1649,6 @@ fn panel_layouts() {
 #[test]
 fn panel_layouts_constraints_keep_collapsed_at_most_the_minimum() {
     use armature_core::panel_layout::*;
-    let panel = PanelConstraints::default;
     // "constraints keep collapsed at most the minimum and the maximum at least the minimum"
     let odd = PanelSizes {
         min_size: Some(PanelSize::Percent(30.0)),
@@ -1705,10 +1710,6 @@ fn panel_layouts_constraints_keep_collapsed_at_most_the_minimum() {
 #[test]
 fn panel_layouts_the_panels_on_either_side_give_and() {
     use armature_core::panel_layout::*;
-    let panel = PanelConstraints::default;
-    let moved = |layout: &[f64], panels: &[PanelConstraints], handle, delta| {
-        resize_at(layout, panels, handle, delta, 0.5, &[])
-    };
     // "the panels on either side give and take the same amount"
     assert_eq!(
         moved(&[30.0, 70.0], &[panel(), panel()], 0, 10.0),
@@ -1741,10 +1742,6 @@ fn panel_layouts_the_panels_on_either_side_give_and() {
 #[test]
 fn panel_layouts_a_panel_at_its_minimum_passes_the() {
     use armature_core::panel_layout::*;
-    let panel = PanelConstraints::default;
-    let moved = |layout: &[f64], panels: &[PanelConstraints], handle, delta| {
-        resize_at(layout, panels, handle, delta, 0.5, &[])
-    };
     // "a panel at its minimum passes the rest on to the next one"
     let three = [
         panel(),
@@ -1794,10 +1791,6 @@ fn panel_layouts_a_panel_at_its_minimum_passes_the() {
 #[test]
 fn panel_layouts_a_handle_s_bounds_stop_at_a() {
     use armature_core::panel_layout::*;
-    let panel = PanelConstraints::default;
-    let moved = |layout: &[f64], panels: &[PanelConstraints], handle, delta| {
-        resize_at(layout, panels, handle, delta, 0.5, &[])
-    };
     let three = [
         panel(),
         PanelConstraints {
@@ -1837,10 +1830,6 @@ fn panel_layouts_a_handle_s_bounds_stop_at_a() {
 #[test]
 fn panel_layouts_a_shrinking_panel_collapses_past_half_the() {
     use armature_core::panel_layout::*;
-    let panel = PanelConstraints::default;
-    let moved = |layout: &[f64], panels: &[PanelConstraints], handle, delta| {
-        resize_at(layout, panels, handle, delta, 0.5, &[])
-    };
     let sidebar = PanelConstraints {
         min: 20.0,
         collapsible: true,
@@ -1883,10 +1872,6 @@ fn panel_layouts_a_shrinking_panel_collapses_past_half_the() {
 #[test]
 fn panel_layouts_a_collapsed_panel_stays_shut_when_its() {
     use armature_core::panel_layout::*;
-    let panel = PanelConstraints::default;
-    let moved = |layout: &[f64], panels: &[PanelConstraints], handle, delta| {
-        resize_at(layout, panels, handle, delta, 0.5, &[])
-    };
     // "a collapsed panel stays shut when its neighbours can't free its minimum"
     let tight = [
         PanelConstraints {
@@ -1937,7 +1922,6 @@ fn panel_layouts_a_collapsed_panel_stays_shut_when_its() {
 #[test]
 fn panel_layouts_every_handle_s_bounds_at_once_work() {
     use armature_core::panel_layout::*;
-    let panel = PanelConstraints::default;
     let sidebar = PanelConstraints {
         min: 20.0,
         collapsible: true,
@@ -2050,7 +2034,6 @@ fn panel_layouts_every_handle_s_bounds_at_once_match() {
 #[test]
 fn panel_layouts_fitting_a_layout() {
     use armature_core::panel_layout::*;
-    let panel = PanelConstraints::default;
     let sidebar = PanelConstraints {
         min: 20.0,
         collapsible: true,
@@ -2093,7 +2076,6 @@ fn panel_layouts_fitting_a_layout() {
 #[test]
 fn panel_layouts_panels_without_a_default_share_what_s() {
     use armature_core::panel_layout::*;
-    let panel = PanelConstraints::default;
     // "panels without a default share what's left evenly"
     assert_eq!(
         initial_layout(&[
@@ -2135,7 +2117,6 @@ fn panel_layouts_panels_without_a_default_share_what_s() {
 #[test]
 fn panel_layouts_resizing_a_panel_goes_through_the_handle() {
     use armature_core::panel_layout::*;
-    let panel = PanelConstraints::default;
     // "resizing a panel goes through the handle after it, or before it for the last"
     let plain = [panel(), panel(), panel()];
     assert_eq!(
@@ -2156,20 +2137,58 @@ fn panel_layouts_resizing_a_panel_goes_through_the_handle() {
     assert_eq!(toggle_target(&[panel(), panel()], 0), None);
 }
 
+/// `count` slides of one size in a row, `gap` apart.
+fn slide_row(count: usize, size: f64, gap: f64) -> Vec<armature_core::carousel_layout::SlideBox> {
+    (0..count)
+        .map(|index| armature_core::carousel_layout::SlideBox {
+            start: index.cast::<f64>() * (size + gap),
+            size,
+        })
+        .collect()
+}
+
+/// Where each page puts the strip.
+fn positions(pages: &[armature_core::carousel_layout::Page]) -> Vec<f64> {
+    pages.iter().map(|page| page.position).collect()
+}
+
+/// The pages of `slides` in a viewport with scroll padding `before` and `after`.
+fn pages_of(
+    slides: &[armature_core::carousel_layout::SlideBox],
+    viewport: f64,
+    before: f64,
+    after: f64,
+    align: armature_core::carousel_layout::Align,
+    per_page: armature_core::carousel_layout::PerPage,
+) -> Vec<armature_core::carousel_layout::Page> {
+    let end = slides.last().map_or(0.0, |last| last.start + last.size);
+    let geometry = armature_core::carousel_layout::Geometry {
+        slides,
+        snapport: viewport - before - after,
+        padding_start: before,
+        max_scroll: (end - viewport).max(0.0),
+    };
+    armature_core::carousel_layout::carousel_pages(&geometry, align, per_page)
+}
+
+/// A 300px viewport over 1500px of slides, one slide to a page, lined up at the start.
+const fn one_slide_view() -> armature_core::carousel_layout::LoopView {
+    use armature_core::carousel_layout::{Align, LoopView, PerPage};
+    LoopView {
+        snapport: 300.0,
+        padding_start: 0.0,
+        max_scroll: 1200.0,
+        align: Align::Start,
+        per_page: PerPage::Count(1),
+    }
+}
+
 // carousel.test.ts: loop, pages, slides in view, stepping
 #[test]
 fn carousel_layouts() {
     use armature_core::carousel_layout::*;
-    let row = |count: usize, size: f64, gap: f64| -> Vec<SlideBox> {
-        (0..count)
-            .map(|index| SlideBox {
-                start: index.cast::<f64>() * (size + gap),
-                size,
-            })
-            .collect()
-    };
     // "reads the track from any rotation, and refuses a layout that isn't one"
-    let track = measure_track(&row(5, 300.0, 10.0), 0).unwrap();
+    let track = measure_track(&slide_row(5, 300.0, 10.0), 0).unwrap();
     assert_eq!(
         track,
         Track {
@@ -2184,31 +2203,16 @@ fn carousel_layouts() {
         [620.0, 930.0, 1240.0, 0.0, 310.0]
     );
     assert_eq!(measure_track(&rotated, 3), Some(track));
-    assert_eq!(measure_track(&row(5, 300.0, 10.0), 3), None);
-    assert_eq!(measure_track(&row(1, 300.0, 0.0), 0), None);
+    assert_eq!(measure_track(&slide_row(5, 300.0, 10.0), 3), None);
+    assert_eq!(measure_track(&slide_row(1, 300.0, 0.0), 0), None);
 }
 
 #[test]
 fn carousel_layouts_pages_keep_their_slides_own_order_wherever() {
     use armature_core::carousel_layout::*;
-    let row = |count: usize, size: f64, gap: f64| -> Vec<SlideBox> {
-        (0..count)
-            .map(|index| SlideBox {
-                start: index.cast::<f64>() * (size + gap),
-                size,
-            })
-            .collect()
-    };
-    let positions = |pages: &[Page]| pages.iter().map(|page| page.position).collect::<Vec<_>>();
-    let view = LoopView {
-        snapport: 300.0,
-        padding_start: 0.0,
-        max_scroll: 1200.0,
-        align: Align::Start,
-        per_page: PerPage::Count(1),
-    };
+    let view = one_slide_view();
     // "pages keep their slides' own order wherever the track starts"
-    let track = measure_track(&row(5, 300.0, 0.0), 0).unwrap();
+    let track = measure_track(&slide_row(5, 300.0, 0.0), 0).unwrap();
     let pages = loop_pages(&track, &view, 3);
     assert_eq!(
         pages.iter().map(|page| page.leader).collect::<Vec<_>>(),
@@ -2231,22 +2235,8 @@ fn carousel_layouts_pages_keep_their_slides_own_order_wherever() {
 #[test]
 fn carousel_layouts_a_step_past_the_end_rotates_only() {
     use armature_core::carousel_layout::*;
-    let row = |count: usize, size: f64, gap: f64| -> Vec<SlideBox> {
-        (0..count)
-            .map(|index| SlideBox {
-                start: index.cast::<f64>() * (size + gap),
-                size,
-            })
-            .collect()
-    };
-    let view = LoopView {
-        snapport: 300.0,
-        padding_start: 0.0,
-        max_scroll: 1200.0,
-        align: Align::Start,
-        per_page: PerPage::Count(1),
-    };
-    let track = measure_track(&row(5, 300.0, 0.0), 0).unwrap();
+    let view = one_slide_view();
+    let track = measure_track(&slide_row(5, 300.0, 0.0), 0).unwrap();
     let at = |position, first| LoopAt { position, first };
     let forward_to = |page| {
         Some(Heading {
@@ -2266,21 +2256,21 @@ fn carousel_layouts_a_step_past_the_end_rotates_only() {
     );
     // "loops seamlessly only with a page's step of room to either side"
     assert!(can_loop(
-        &measure_track(&row(3, 300.0, 0.0), 0).unwrap(),
+        &measure_track(&slide_row(3, 300.0, 0.0), 0).unwrap(),
         &LoopView {
             max_scroll: 600.0,
             ..view
         }
     ));
     assert!(!can_loop(
-        &measure_track(&row(2, 300.0, 0.0), 0).unwrap(),
+        &measure_track(&slide_row(2, 300.0, 0.0), 0).unwrap(),
         &LoopView {
             max_scroll: 300.0,
             ..view
         }
     ));
     assert!(can_loop(
-        &measure_track(&row(5, 100.0, 0.0), 0).unwrap(),
+        &measure_track(&slide_row(5, 100.0, 0.0), 0).unwrap(),
         &LoopView {
             max_scroll: 200.0,
             ..view
@@ -2291,24 +2281,10 @@ fn carousel_layouts_a_step_past_the_end_rotates_only() {
 #[test]
 fn carousel_layouts_a_track_too_short_to_rotate_gives() {
     use armature_core::carousel_layout::*;
-    let view = LoopView {
-        snapport: 300.0,
-        padding_start: 0.0,
-        max_scroll: 1200.0,
-        align: Align::Start,
-        per_page: PerPage::Count(1),
-    };
-    let row = |count: usize, size: f64, gap: f64| -> Vec<SlideBox> {
-        (0..count)
-            .map(|index| SlideBox {
-                start: index.cast::<f64>() * (size + gap),
-                size,
-            })
-            .collect()
-    };
+    let view = one_slide_view();
     let at = |position, first| LoopAt { position, first };
     // "a track too short to rotate gives no rotation"
-    let short = measure_track(&row(2, 100.0, 0.0), 0).unwrap();
+    let short = measure_track(&slide_row(2, 100.0, 0.0), 0).unwrap();
     assert_eq!(
         loop_rotation(
             &short,
@@ -2330,30 +2306,10 @@ fn carousel_layouts_a_track_too_short_to_rotate_gives() {
 #[test]
 fn carousel_layouts_pages() {
     use armature_core::carousel_layout::*;
-    let row = |count: usize, size: f64, gap: f64| -> Vec<SlideBox> {
-        (0..count)
-            .map(|index| SlideBox {
-                start: index.cast::<f64>() * (size + gap),
-                size,
-            })
-            .collect()
-    };
-    let positions = |pages: &[Page]| pages.iter().map(|page| page.position).collect::<Vec<_>>();
     // pages
-    let pages_of =
-        |slides: &[SlideBox], viewport: f64, before: f64, after: f64, align, per_page| {
-            let last = slides[slides.len() - 1];
-            let geometry = Geometry {
-                slides,
-                snapport: viewport - before - after,
-                padding_start: before,
-                max_scroll: (last.start + last.size - viewport).max(0.0),
-            };
-            carousel_pages(&geometry, align, per_page)
-        };
     // "one slide to a viewport makes one page per slide"
     let pages = pages_of(
-        &row(5, 300.0, 0.0),
+        &slide_row(5, 300.0, 0.0),
         300.0,
         0.0,
         0.0,
@@ -2373,29 +2329,9 @@ fn carousel_layouts_pages() {
 #[test]
 fn carousel_layouts_pages_that_can_t_reach_the_start() {
     use armature_core::carousel_layout::*;
-    let row = |count: usize, size: f64, gap: f64| -> Vec<SlideBox> {
-        (0..count)
-            .map(|index| SlideBox {
-                start: index.cast::<f64>() * (size + gap),
-                size,
-            })
-            .collect()
-    };
-    let positions = |pages: &[Page]| pages.iter().map(|page| page.position).collect::<Vec<_>>();
-    let pages_of =
-        |slides: &[SlideBox], viewport: f64, before: f64, after: f64, align, per_page| {
-            let last = slides[slides.len() - 1];
-            let geometry = Geometry {
-                slides,
-                snapport: viewport - before - after,
-                padding_start: before,
-                max_scroll: (last.start + last.size - viewport).max(0.0),
-            };
-            carousel_pages(&geometry, align, per_page)
-        };
     // "pages that can't reach the start merge, like the last slides of a full row"
     let pages = pages_of(
-        &row(5, 100.0, 0.0),
+        &slide_row(5, 100.0, 0.0),
         300.0,
         0.0,
         0.0,
@@ -2406,7 +2342,7 @@ fn carousel_layouts_pages_that_can_t_reach_the_start() {
     assert_eq!(pages[2].slides, [2, 3, 4]);
     // "groups page together and line up at their first slide"
     let pages = pages_of(
-        &row(6, 100.0, 0.0),
+        &slide_row(6, 100.0, 0.0),
         300.0,
         0.0,
         0.0,
@@ -2423,29 +2359,9 @@ fn carousel_layouts_pages_that_can_t_reach_the_start() {
 #[test]
 fn carousel_layouts_auto_fits_as_many_slides_as_the() {
     use armature_core::carousel_layout::*;
-    let row = |count: usize, size: f64, gap: f64| -> Vec<SlideBox> {
-        (0..count)
-            .map(|index| SlideBox {
-                start: index.cast::<f64>() * (size + gap),
-                size,
-            })
-            .collect()
-    };
-    let positions = |pages: &[Page]| pages.iter().map(|page| page.position).collect::<Vec<_>>();
-    let pages_of =
-        |slides: &[SlideBox], viewport: f64, before: f64, after: f64, align, per_page| {
-            let last = slides[slides.len() - 1];
-            let geometry = Geometry {
-                slides,
-                snapport: viewport - before - after,
-                padding_start: before,
-                max_scroll: (last.start + last.size - viewport).max(0.0),
-            };
-            carousel_pages(&geometry, align, per_page)
-        };
     // "auto fits as many slides as the snapport shows"
     assert_eq!(
-        group_slides(&row(7, 100.0, 10.0), 320.0, PerPage::Auto),
+        group_slides(&slide_row(7, 100.0, 10.0), 320.0, PerPage::Auto),
         [vec![0, 1, 2], vec![3, 4, 5], vec![6]]
     );
     let wide = [
@@ -2461,7 +2377,7 @@ fn carousel_layouts_auto_fits_as_many_slides_as_the() {
     assert_eq!(group_slides(&wide, 320.0, PerPage::Auto), [[0], [1]]);
     // "centered pages sit in the middle, with a margin that lines up the browser's snap"
     let pages = pages_of(
-        &row(5, 200.0, 0.0),
+        &slide_row(5, 200.0, 0.0),
         300.0,
         0.0,
         0.0,
@@ -2476,30 +2392,10 @@ fn carousel_layouts_auto_fits_as_many_slides_as_the() {
 #[test]
 fn carousel_layouts_end_alignment_lines_a_page_up_with() {
     use armature_core::carousel_layout::*;
-    let row = |count: usize, size: f64, gap: f64| -> Vec<SlideBox> {
-        (0..count)
-            .map(|index| SlideBox {
-                start: index.cast::<f64>() * (size + gap),
-                size,
-            })
-            .collect()
-    };
-    let positions = |pages: &[Page]| pages.iter().map(|page| page.position).collect::<Vec<_>>();
-    let pages_of =
-        |slides: &[SlideBox], viewport: f64, before: f64, after: f64, align, per_page| {
-            let last = slides[slides.len() - 1];
-            let geometry = Geometry {
-                slides,
-                snapport: viewport - before - after,
-                padding_start: before,
-                max_scroll: (last.start + last.size - viewport).max(0.0),
-            };
-            carousel_pages(&geometry, align, per_page)
-        };
     // "end alignment lines a page up with the viewport's end"
     assert_eq!(
         positions(&pages_of(
-            &row(4, 100.0, 0.0),
+            &slide_row(4, 100.0, 0.0),
             250.0,
             0.0,
             0.0,
@@ -2511,7 +2407,7 @@ fn carousel_layouts_end_alignment_lines_a_page_up_with() {
     // "scroll padding moves where pages line up"
     assert_eq!(
         positions(&pages_of(
-            &row(4, 200.0, 0.0),
+            &slide_row(4, 200.0, 0.0),
             300.0,
             20.0,
             20.0,
@@ -2811,26 +2707,43 @@ fn scroll_area_model_sticking_to_the_end() {
     assert!(!scrolls_toward_start(Key::ArrowUp, false, true));
 }
 
-// position.test.ts: placement and arrow offset
-#[test]
-fn popup_placement() {
-    use armature_core::geometry::*;
-    use armature_core::placement::*;
-    let viewport = Rect::new(0.0, 0.0, 1000.0, 800.0);
-    let size = Size {
+/// A 200 by 300 popup placed against `anchor` in a 1000 by 800 window.
+fn placed(
+    anchor: armature_core::geometry::Rect,
+    options: armature_core::placement::PlaceOptions,
+) -> armature_core::placement::Placement {
+    let size = armature_core::geometry::Size {
         width: 200.0,
         height: 300.0,
     };
-    let options = PlaceOptions {
+    armature_core::placement::compute_placement(anchor, size, window(), options)
+}
+
+/// The 1000 by 800 window the placement tests place popups in.
+const fn window() -> armature_core::geometry::Rect {
+    armature_core::geometry::Rect::new(0.0, 0.0, 1000.0, 800.0)
+}
+
+/// Below the anchor and lined up with its start, 4px from it and 8px from the
+/// window's edges.
+const fn below_start() -> armature_core::placement::PlaceOptions {
+    use armature_core::placement::{PlaceAlign, PlaceOptions, PlaceSide};
+    PlaceOptions {
         side: PlaceSide::Bottom,
         align: PlaceAlign::Start,
         side_offset: 4.0,
         align_offset: 0.0,
         collision_padding: 8.0,
         rtl: false,
-    };
-    let placed =
-        |anchor: Rect, options: PlaceOptions| compute_placement(anchor, size, viewport, options);
+    }
+}
+
+// position.test.ts: placement and arrow offset
+#[test]
+fn popup_placement() {
+    use armature_core::geometry::*;
+    use armature_core::placement::*;
+    let options = below_start();
     // "opens below the anchor, lined up with its start"
     let below = placed(Rect::new(100.0, 100.0, 80.0, 30.0), options);
     assert_eq!(
@@ -2843,21 +2756,7 @@ fn popup_placement() {
 fn popup_placement_reports_the_space_left_below_for_sizing() {
     use armature_core::geometry::*;
     use armature_core::placement::*;
-    let viewport = Rect::new(0.0, 0.0, 1000.0, 800.0);
-    let size = Size {
-        width: 200.0,
-        height: 300.0,
-    };
-    let options = PlaceOptions {
-        side: PlaceSide::Bottom,
-        align: PlaceAlign::Start,
-        side_offset: 4.0,
-        align_offset: 0.0,
-        collision_padding: 8.0,
-        rtl: false,
-    };
-    let placed =
-        |anchor: Rect, options: PlaceOptions| compute_placement(anchor, size, viewport, options);
+    let options = below_start();
     let below = placed(Rect::new(100.0, 100.0, 80.0, 30.0), options);
     // "reports the space left below for sizing"
     assert_eq!(below.available.height, 800.0 - 8.0 - 134.0);
@@ -2871,7 +2770,7 @@ fn popup_placement_reports_the_space_left_below_for_sizing() {
             width: 200.0,
             height: 700.0,
         },
-        viewport,
+        window(),
         options,
     );
     assert_eq!(tall.side, PlaceSide::Bottom);
@@ -2886,21 +2785,7 @@ fn popup_placement_reports_the_space_left_below_for_sizing() {
 fn popup_placement_submenus_flip_to_the_left_when_there() {
     use armature_core::geometry::*;
     use armature_core::placement::*;
-    let viewport = Rect::new(0.0, 0.0, 1000.0, 800.0);
-    let size = Size {
-        width: 200.0,
-        height: 300.0,
-    };
-    let options = PlaceOptions {
-        side: PlaceSide::Bottom,
-        align: PlaceAlign::Start,
-        side_offset: 4.0,
-        align_offset: 0.0,
-        collision_padding: 8.0,
-        rtl: false,
-    };
-    let placed =
-        |anchor: Rect, options: PlaceOptions| compute_placement(anchor, size, viewport, options);
+    let options = below_start();
     // "submenus flip to the left when there is no room on the right"
     let submenu = placed(
         Rect::new(850.0, 100.0, 120.0, 30.0),
@@ -2929,21 +2814,7 @@ fn popup_placement_submenus_flip_to_the_left_when_there() {
 fn popup_placement_leaves_with_an_anchor_scrolled_off_screen() {
     use armature_core::geometry::*;
     use armature_core::placement::*;
-    let viewport = Rect::new(0.0, 0.0, 1000.0, 800.0);
-    let size = Size {
-        width: 200.0,
-        height: 300.0,
-    };
-    let options = PlaceOptions {
-        side: PlaceSide::Bottom,
-        align: PlaceAlign::Start,
-        side_offset: 4.0,
-        align_offset: 0.0,
-        collision_padding: 8.0,
-        rtl: false,
-    };
-    let placed =
-        |anchor: Rect, options: PlaceOptions| compute_placement(anchor, size, viewport, options);
+    let options = below_start();
     // "leaves with an anchor scrolled off screen instead of staying behind at the edge"
     assert_eq!(
         placed(Rect::new(-600.0, 100.0, 80.0, 30.0), options).x,
