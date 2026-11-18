@@ -88,7 +88,8 @@ const fn lowest(panel: &PanelConstraints) -> f64 {
     }
 }
 
-fn is_collapsed(panel: &PanelConstraints, size: f64) -> bool {
+/// Whether a panel that can shut is shut at `size`.
+pub(crate) fn is_collapsed(panel: &PanelConstraints, size: f64) -> bool {
     panel.collapsible && size <= panel.collapsed + EPSILON && panel.collapsed < panel.min
 }
 

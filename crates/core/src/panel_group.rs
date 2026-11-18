@@ -4,7 +4,7 @@ use crate::convert::Cast;
 use crate::keys::{Dir, Key, Orientation};
 use crate::panel_layout::{
     PanelConstraints, PanelSizes, constraints_of, end_delta, fit_layout, handle_bounds, home_delta,
-    initial_layout, resize_at, resize_panel, toggle_target,
+    initial_layout, is_collapsed, resize_at, resize_panel, toggle_target,
 };
 use crate::primitive::{
     Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction,
@@ -164,11 +164,9 @@ impl PanelGroup {
     /// Whether a panel that can shut is shut.
     #[must_use]
     pub fn is_collapsed(&self, panel: usize) -> bool {
-        self.panels.get(panel).is_some_and(|limits| {
-            limits.collapsible
-                && self.size_at(panel) <= limits.collapsed + 1e-6
-                && limits.collapsed < limits.min
-        })
+        self.panels
+            .get(panel)
+            .is_some_and(|limits| is_collapsed(limits, self.size_at(panel)))
     }
 
     /// Each panel's share, in percent.
