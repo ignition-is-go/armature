@@ -213,7 +213,7 @@ mod tests {
     };
 
     fn strings(keys: &[&str]) -> Vec<String> {
-        keys.iter().map(|k| k.to_string()).collect()
+        keys.iter().map(std::string::ToString::to_string).collect()
     }
 
     #[test]
@@ -266,7 +266,10 @@ mod tests {
 
     #[test]
     fn toggling_the_only_selected_item_in_single_mode_clears_it() {
-        assert!(propose(Mode::Single, &strings(&["a"]), Some("a"), "a", CTRL, &ORDER).is_empty());
+        assert_eq!(
+            propose(Mode::Single, &strings(&["a"]), Some("a"), "a", CTRL, &ORDER),
+            [] as [std::string::String; 0]
+        );
         assert_eq!(
             propose(Mode::Single, &strings(&["a"]), Some("a"), "b", CTRL, &ORDER),
             strings(&["b"])
@@ -277,7 +280,10 @@ mod tests {
     fn select_all_fills_then_empties_and_does_nothing_for_a_single_selection() {
         let all = toggle_all(Mode::Multiple, &strings(&["b"]), &ORDER);
         assert_eq!(all, strings(&ORDER));
-        assert!(toggle_all(Mode::Multiple, &all, &ORDER).is_empty());
+        assert_eq!(
+            toggle_all(Mode::Multiple, &all, &ORDER),
+            [] as [std::string::String; 0]
+        );
         assert_eq!(
             toggle_all(Mode::Single, &strings(&["b"]), &ORDER),
             strings(&["b"])

@@ -918,7 +918,7 @@ mod tests {
             alt,
             &mut |_| true,
         );
-        assert!(canvas.selected().is_empty());
+        assert_eq!(canvas.selected().len(), 0);
         assert_eq!(
             canvas.screen_rect("a").unwrap(),
             Rect::new(100.0, 50.0, 100.0, 60.0)
@@ -1019,7 +1019,7 @@ mod tests {
             (10.0, 199.0)
         );
         assert!(key(&mut canvas, Key::Escape, NONE).handled);
-        assert!(canvas.selected().is_empty());
+        assert_eq!(canvas.selected().len(), 0);
     }
 
     #[test]

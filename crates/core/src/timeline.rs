@@ -661,13 +661,12 @@ mod tests {
             }]
         );
         key(&mut timeline, Key::Backspace, false);
-        assert!(timeline.value().is_empty());
+        assert_eq!(timeline.value(), [] as [std::string::String; 0]);
     }
 
     #[test]
     fn it_conforms() {
-        let spans: Vec<Item> = ["span-1"]
-            .iter()
+        let spans: Vec<Item> = std::iter::once(&"span-1")
             .map(|key| Item {
                 key: key.to_string(),
                 label: key.to_string(),

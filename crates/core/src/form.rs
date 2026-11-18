@@ -192,6 +192,6 @@ mod tests {
         assert!(form.is_dirty());
         form.reset();
         assert!(!form.is_dirty());
-        assert!(form.value("name").is_empty());
+        assert_eq!(form.value("name").len(), 0);
     }
 }

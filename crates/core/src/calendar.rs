@@ -529,7 +529,7 @@ mod tests {
             mods: Modifiers::default(),
         };
         calendar.send(press, &mut |_| true);
-        assert!(calendar.value().is_empty());
+        assert_eq!(calendar.value(), [] as [std::string::String; 0]);
         assert!(calendar.semantics(Part::Day, Some("2026-11-05")).disabled);
         assert_eq!(
             calendar.act("select", Some("2026-11-25"), &mut |_| true),
@@ -553,7 +553,7 @@ mod tests {
             &mut |_| true,
         );
         assert_eq!(calendar.month(), (2026, 12));
-        assert!(calendar.value().is_empty());
+        assert_eq!(calendar.value(), [] as [std::string::String; 0]);
     }
 
     #[test]
@@ -568,7 +568,7 @@ mod tests {
         );
         key(&mut calendar, Key::Enter);
         assert_eq!(calendar.month(), (2026, 12));
-        assert!(calendar.value().is_empty());
+        assert_eq!(calendar.value(), [] as [std::string::String; 0]);
         calendar.send(
             Input::Focus {
                 part: Part::Day,

@@ -579,7 +579,7 @@ mod tests {
             sheet,
             PointerPhase::Move,
             Part::Handle,
-            600.0 - rise * 0.9,
+            rise.mul_add(-0.9, 600.0),
             900,
         );
         pointer(sheet, PointerPhase::Move, Part::Handle, 600.0 - rise, 1000);

@@ -605,7 +605,7 @@ mod tests {
                         })
                     });
                 }
-                Default::default()
+                crate::primitive::Reaction::default()
             }
             fn value(&self) -> Vec<String> {
                 self.0.value()

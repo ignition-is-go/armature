@@ -359,7 +359,7 @@ mod tests {
             &mut |_| true,
         );
         assert_eq!(moved.focus_item(), Some("center"));
-        assert!(group.value().is_empty());
+        assert_eq!(group.value(), [] as [std::string::String; 0]);
     }
 
     #[test]

@@ -125,7 +125,7 @@ mod tests {
         let mut view = Viewport::default();
         view.zoom_at(Point::default(), 1000.0);
         assert_eq!(view.zoom, 8.0);
-        view.zoom_at(Point::default(), 0.000001);
+        view.zoom_at(Point::default(), 0.000_001);
         assert_eq!(view.zoom, 0.1);
     }
 

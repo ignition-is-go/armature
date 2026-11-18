@@ -67,7 +67,10 @@ mod tests {
 
     #[test]
     fn a_lasso_in_empty_space_selects_nothing() {
-        assert!(lasso_hits(Point::new(11., 0.), Point::new(19., 10.), &items()).is_empty());
+        assert_eq!(
+            lasso_hits(Point::new(11., 0.), Point::new(19., 10.), &items()),
+            [] as [&str; 0]
+        );
     }
 
     #[test]

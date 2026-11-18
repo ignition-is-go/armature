@@ -111,7 +111,7 @@ fn accordion_behaviors() {
     multiple.act("open_all", None, &mut |_| true).unwrap();
     assert_eq!(multiple.value(), ["a", "b"]);
     multiple.act("close_all", None, &mut |_| true).unwrap();
-    assert!(multiple.value().is_empty());
+    assert_eq!(multiple.value(), [] as [std::string::String; 0]);
 
     // "without collapsible, the open item stays open and says so"
     let mut fixed = accordion(accordion::Options::default());
@@ -961,7 +961,7 @@ fn select_behaviors() {
     let _ = select.act("clear", None, &mut |_| false);
     assert_eq!(select.value(), ["large"]);
     select.act("clear", None, &mut |_| true).unwrap();
-    assert!(select.value().is_empty());
+    assert_eq!(select.value(), [] as [std::string::String; 0]);
 }
 
 // number-input.test.ts
@@ -1070,18 +1070,18 @@ fn combobox_behaviors() {
     };
     let query = |combobox: &Combobox| combobox.text(Part::Input, None).unwrap_or_default();
     // "clearing empties the value and the text"
-    let mut cleared = frameworks(Default::default());
+    let mut cleared = frameworks(combobox::Options::default());
     cleared.act("clear", None, &mut |_| true).unwrap();
     assert!(cleared.value().is_empty() && query(&cleared).is_empty());
     // "a canceled clear keeps the value and its label in the input"
-    let mut kept = frameworks(Default::default());
+    let mut kept = frameworks(combobox::Options::default());
     assert!(kept.act("clear", None, &mut |_| false).is_err());
     assert_eq!(
         (kept.value(), query(&kept)),
         (vec!["astro".to_string()], "Astro".to_string())
     );
     // "Escape after deleting the text brings the value back with the reason escape-key"
-    let mut combobox = frameworks(Default::default());
+    let mut combobox = frameworks(combobox::Options::default());
     let mut reasons = Vec::new();
     combobox.send(
         Input::Text {
@@ -1094,7 +1094,7 @@ fn combobox_behaviors() {
             true
         },
     );
-    assert!(combobox.value().is_empty());
+    assert_eq!(combobox.value(), [] as [std::string::String; 0]);
     combobox.send(
         Input::Key {
             key: Key::Escape,
@@ -1112,15 +1112,15 @@ fn combobox_behaviors() {
     );
     assert_eq!(reasons, [Reason::Text, Reason::Keyboard]);
     // "Escape after clearing keeps the value cleared"
-    let mut combobox = frameworks(Default::default());
+    let mut combobox = frameworks(combobox::Options::default());
     typed(&mut combobox, "", true);
     typed(&mut combobox, "N", true);
     combobox.act("clear", None, &mut |_| true).unwrap();
     typed(&mut combobox, "N", true);
     key(&mut combobox, Key::Escape);
-    assert!(combobox.value().is_empty());
+    assert_eq!(combobox.value(), [] as [std::string::String; 0]);
     // "Escape brings back the value deleted last, not an earlier one"
-    let mut combobox = frameworks(Default::default());
+    let mut combobox = frameworks(combobox::Options::default());
     typed(&mut combobox, "", true);
     combobox.set_value(vec!["next".into()]);
     typed(&mut combobox, "N", true);
@@ -1131,11 +1131,11 @@ fn combobox_behaviors() {
         (vec!["next".to_string()], "Next.js".to_string())
     );
     // "clearing with nothing selected still empties the text"
-    let mut empty = frameworks(Default::default());
+    let mut empty = frameworks(combobox::Options::default());
     empty.set_value(Vec::new());
     typed(&mut empty, "ne", true);
     empty.act("clear", None, &mut |_| true).unwrap();
-    assert!(query(&empty).is_empty());
+    assert_eq!(query(&empty), "");
     // "a read-only combobox ignores clear"
     let mut locked = frameworks(combobox::Options {
         read_only: true,
@@ -1188,7 +1188,7 @@ fn menu_behaviors() {
     assert!(menu.is_open());
     // "a disabled submenu trigger never opens its submenu"
     press(&mut menu, Part::Item, Some("more"), true);
-    assert!(menu.path().is_empty());
+    assert_eq!(menu.path().len(), 0);
     // "choosing the selected radio item keeps a menu open by default"
     press(&mut menu, Part::Item, Some("left"), true);
     press(&mut menu, Part::Item, Some("left"), true);

@@ -340,7 +340,10 @@ mod tests {
     use crate::keys::Modifiers;
 
     fn picker() -> DatePicker {
-        DatePicker::new(Default::default(), Date::new(2026, 11, 17).unwrap())
+        DatePicker::new(
+            calendar::Options::default(),
+            Date::new(2026, 11, 17).unwrap(),
+        )
     }
 
     fn key(picker: &mut DatePicker, key: Key) -> Reaction<Part> {

@@ -660,7 +660,7 @@ mod tests {
         tick(&mut toaster, 6000);
         assert_eq!(ids(&toaster), ["b"]);
         tick(&mut toaster, 9000);
-        assert!(ids(&toaster).is_empty());
+        assert_eq!(ids(&toaster), [] as [&str; 0]);
     }
 
     #[test]
@@ -682,7 +682,7 @@ mod tests {
             "its five seconds began when it came into view"
         );
         tick(&mut toaster, 10_000);
-        assert!(ids(&toaster).is_empty());
+        assert_eq!(ids(&toaster), [] as [&str; 0]);
     }
 
     #[test]
@@ -762,7 +762,7 @@ mod tests {
         drag(&mut toaster, PointerPhase::Down, 0.0);
         drag(&mut toaster, PointerPhase::Move, 90.0);
         drag(&mut toaster, PointerPhase::Up, 90.0);
-        assert!(ids(&toaster).is_empty());
+        assert_eq!(ids(&toaster), [] as [&str; 0]);
     }
 
     #[test]

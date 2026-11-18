@@ -437,8 +437,8 @@ mod tests {
         typed(&mut command, "zzz");
         key(&mut command, Key::ArrowDown);
         key(&mut command, Key::Enter);
-        assert!(command.value().is_empty());
-        assert!(command.snapshot("Commands").items.is_empty());
+        assert_eq!(command.value(), [] as [std::string::String; 0]);
+        assert_eq!(command.snapshot("Commands").items.len(), 0);
     }
 
     #[test]

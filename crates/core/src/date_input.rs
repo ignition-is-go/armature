@@ -632,7 +632,7 @@ mod tests {
             "and the day is pulled back to fit"
         );
         key(&mut input, Key::Backspace);
-        assert!(input.value().is_empty());
+        assert_eq!(input.value(), [] as [std::string::String; 0]);
         assert_eq!(
             input.text(Part::Segment, Some("month")).as_deref(),
             Some("--")
@@ -643,7 +643,7 @@ mod tests {
     fn a_time_makes_it_a_date_and_time() {
         let mut input = DateInput::new(true);
         type_digits(&mut input, "20261102");
-        assert!(input.value().is_empty());
+        assert_eq!(input.value(), [] as [std::string::String; 0]);
         type_digits(&mut input, "1430");
         assert_eq!(input.value(), ["2026-11-02T14:30"]);
         input
@@ -666,7 +666,7 @@ mod tests {
         let earliest = Date::new(2026, 6, 1);
         let mut input = DateInput::default().between(earliest, None);
         type_digits(&mut input, "20260315");
-        assert!(input.value().is_empty());
+        assert_eq!(input.value(), [] as [std::string::String; 0]);
         assert!(input.semantics(Part::Segment, Some("day")).invalid);
         assert_eq!(
             input.text(Part::Segment, Some("month")).as_deref(),

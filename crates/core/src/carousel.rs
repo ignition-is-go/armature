@@ -810,7 +810,7 @@ mod tests {
             part: Part::Viewport,
             item: None,
             at: Point::new(x, 50.0),
-            mods: Default::default(),
+            mods: crate::keys::Modifiers::default(),
             now_ms,
         };
         // The adapter reports the layout as soon as it is drawn, before any drag.

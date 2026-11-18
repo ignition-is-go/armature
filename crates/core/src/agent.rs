@@ -528,12 +528,12 @@ mod tests {
         let cell = Rc::new(RefCell::new(primitive));
         let (seen, acted, set) = (cell.clone(), cell.clone(), cell.clone());
         let target = Target {
-            snapshot: Rc::new(move |_| Some(seen.borrow().snapshot(label))),
-            act: Rc::new(move |_, action, item| {
+            snapshot: Rc::new(move |()| Some(seen.borrow().snapshot(label))),
+            act: Rc::new(move |(), action, item| {
                 acted.borrow_mut().act(action, item, &mut |_| true)?;
                 Ok(acted.borrow().value())
             }),
-            set: Rc::new(move |_, value| set.borrow_mut().set_value(value)),
+            set: Rc::new(move |(), value| set.borrow_mut().set_value(value)),
             access,
         };
         (cell, target)
@@ -573,7 +573,7 @@ mod tests {
             step("fruit", "select", Some("cherry")),
             step("e2", "check", None),
         ];
-        let run = run(|_| registry.clone(), &mut (), &steps, |_, _| true);
+        let run = run(|()| registry.clone(), &mut (), &steps, |_, _| true);
         assert!(run.ok());
         assert_eq!(run.changes[0].after, ["cherry"]);
         assert_eq!(
@@ -594,7 +594,7 @@ mod tests {
             step("Fruit", "explode", None),
             step("Wi-Fi", "check", None),
         ];
-        let run = run(|_| registry.clone(), &mut (), &steps, |_, _| true);
+        let run = run(|()| registry.clone(), &mut (), &steps, |_, _| true);
         let (index, error) = run.failed.unwrap();
         assert_eq!(index, 1);
         assert!(
@@ -614,7 +614,7 @@ mod tests {
         let mut registry = registry();
         registry.register(target("Fruit", fruit(), Access::default()).1);
         let ambiguous = run(
-            |_| registry.clone(),
+            |()| registry.clone(),
             &mut (),
             &[step("Fruit", "clear", None)],
             |_, _| true,
@@ -624,7 +624,7 @@ mod tests {
             "\"Fruit\" names several components; use a ref: e1, e3"
         );
         let missing = run(
-            |_| registry.clone(),
+            |()| registry.clone(),
             &mut (),
             &[step("Veg", "clear", None)],
             |_, _| true,
@@ -649,12 +649,12 @@ mod tests {
             )
             .1,
         );
-        assert!(registry.snapshot(&()).is_empty());
+        assert_eq!(registry.snapshot(&()).len(), 0);
         assert_eq!(
             registry.target("e1").err(),
             Some(Error::UnknownRef("e1".into()))
         );
-        assert!(registry.query(&(), "admin").is_empty());
+        assert_eq!(registry.query(&(), "admin").len(), 0);
     }
 
     #[test]
@@ -670,7 +670,7 @@ mod tests {
         );
         registry.register(secret);
         let run = run(
-            |_| registry.clone(),
+            |()| registry.clone(),
             &mut (),
             &[step("Fruit", "select", Some("apple"))],
             |_, _| true,
@@ -704,7 +704,7 @@ mod tests {
         let steps = [step("Delete", "check", None)];
         let mut asked = Vec::new();
         let refused = run(
-            |_| registry.clone(),
+            |()| registry.clone(),
             &mut (),
             &steps,
             |_, what| {
@@ -716,7 +716,7 @@ mod tests {
         assert_eq!(asked, ["Delete the account"]);
         assert!(!cell.borrow().is_on());
 
-        assert!(run(|_| registry.clone(), &mut (), &steps, |_, _| true).ok());
+        assert!(run(|()| registry.clone(), &mut (), &steps, |_, _| true).ok());
         assert!(cell.borrow().is_on());
     }
 
@@ -739,7 +739,7 @@ mod tests {
     fn staged_values_can_be_looked_at_and_then_put_back() {
         let registry = registry();
         run(
-            |_| registry.clone(),
+            |()| registry.clone(),
             &mut (),
             &[step("Fruit", "select", Some("apple"))],
             |_, _| true,
@@ -773,19 +773,19 @@ mod tests {
         let shared = Rc::new(RefCell::new(registry()));
         let opener = shared.clone();
         let dialog = Target {
-            snapshot: Rc::new(|_: &World| Some(Toggle::default().snapshot("Opener"))),
-            act: Rc::new(move |_, _, _| {
+            snapshot: Rc::new(|(): &World| Some(Toggle::default().snapshot("Opener"))),
+            act: Rc::new(move |(), _, _| {
                 opener
                     .borrow_mut()
                     .register(target("Dialog", Toggle::default(), Access::default()).1);
                 Ok(Vec::new())
             }),
-            set: Rc::new(|_, _| {}),
+            set: Rc::new(|(), _| {}),
             access: Access::default(),
         };
         shared.borrow_mut().register(dialog);
         let run = run(
-            |_| shared.borrow().clone(),
+            |()| shared.borrow().clone(),
             &mut (),
             &[step("Opener", "toggle", None)],
             |_, _| true,
@@ -825,7 +825,7 @@ mod tests {
                 "{}",
                 tool.name
             );
-            assert!(!tool.description.is_empty());
+            assert_ne!(tool.description, "");
         }
     }
 }

@@ -454,7 +454,7 @@ mod tests {
         pointer(&mut input, PointerPhase::Up, Part::Increment, 1600);
         let after = input.send(Input::Tick { now_ms: 5000 }, &mut |_| true);
         assert_eq!(input.number(), 5.0);
-        assert!(after.effects.is_empty());
+        assert_eq!(after.effects.len(), 0);
     }
 
     #[test]

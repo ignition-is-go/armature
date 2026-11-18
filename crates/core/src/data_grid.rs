@@ -382,7 +382,7 @@ mod tests {
         DataGrid::new(
             cells
                 .iter()
-                .map(|row| row.iter().map(|text| text.to_string()).collect())
+                .map(|row| row.iter().map(std::string::ToString::to_string).collect())
                 .collect(),
             Dir::Ltr,
         )

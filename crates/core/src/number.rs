@@ -363,7 +363,7 @@ mod tests {
 
     #[test]
     fn formatting_groups_thousands_and_fixes_decimals() {
-        assert_eq!(format_number(1234567.891, 2), "1,234,567.89");
+        assert_eq!(format_number(1_234_567.891, 2), "1,234,567.89");
         assert_eq!(format_number(-999.0, 0), "-999");
         assert_eq!(format_number(-0.001, 2), "0.00");
     }
@@ -382,7 +382,7 @@ mod tests {
             (decimals_of(1.0), decimals_of(0.25), decimals_of(0.5)),
             (0, 2, 1)
         );
-        assert_eq!(format_grouped(1234567.891, 2), "1,234,567.89");
+        assert_eq!(format_grouped(1_234_567.891, 2), "1,234,567.89");
         assert_eq!(format_grouped(-999.0, 0), "-999");
         assert_eq!(format_grouped(1000.0, 0), "1,000");
         assert_eq!(format_file_size(512), "512 B");

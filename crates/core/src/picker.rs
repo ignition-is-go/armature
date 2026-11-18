@@ -441,7 +441,7 @@ mod tests {
             },
             &mut |_| false,
         );
-        assert!(picker.value().is_empty());
+        assert_eq!(picker.value(), [] as [std::string::String; 0]);
         assert_eq!(
             picker.act("select", Some("4"), &mut |_| true),
             Err(ActError::Disabled("4".into()))

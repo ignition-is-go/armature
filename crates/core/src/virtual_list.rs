@@ -378,7 +378,7 @@ mod tests {
         let mut list = list();
         let within = key(&mut list, Key::ArrowDown);
         assert_eq!(within.focus_item(), Some("1"));
-        assert!(within.effects.is_empty());
+        assert_eq!(within.effects.len(), 0);
         for _ in 0..4 {
             key(&mut list, Key::ArrowDown);
         }

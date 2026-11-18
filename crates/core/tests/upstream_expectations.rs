@@ -461,7 +461,7 @@ fn number_steps_and_scales() {
         [0, 2, 7, 8]
     );
     assert_eq!(
-        NumberRange::new(0.0, 1.0, 0.1).snap(0.30000000000000004),
+        NumberRange::new(0.0, 1.0, 0.1).snap(0.300_000_000_000_000_04),
         0.3
     );
     assert_eq!(NumberRange::new(1.0, 100.0, 5.0).snap(7.0), 6.0);
@@ -491,8 +491,8 @@ fn number_steps_and_scales() {
     assert_eq!(thrice, 0.3);
     assert_eq!(NumberRange::new(0.0, 1.0, 1e-7).nudge(0.0, 1.0), 1e-7);
     let cents = NumberRange::new(f64::NEG_INFINITY, f64::INFINITY, 0.01);
-    assert_eq!(cents.snap(98765432101.23), 98765432101.23);
-    assert_eq!(cents.nudge(98765432101.23, 1.0), 98765432101.24);
+    assert_eq!(cents.snap(98_765_432_101.23), 98_765_432_101.23);
+    assert_eq!(cents.nudge(98_765_432_101.23, 1.0), 98_765_432_101.24);
     assert_eq!(
         [
             wrap(370.0, 0.0, 360.0),
@@ -1182,7 +1182,7 @@ fn token_text_model() {
     assert_eq!(token(&pair[0]).id, "a");
     assert_ne!(token(&pair[1]).id, "a");
     // "a supplied id too large to count past leaves generated ids unique"
-    normalize(vec![
+    let _ = normalize(vec![
         Token::new("file", "x", "x")
             .with_id("t99999999999999999999")
             .into(),
@@ -1252,7 +1252,7 @@ fn token_text_model() {
                     id: String::new(),
                     ..token.clone()
                 }),
-                other => other.clone(),
+                other @ Segment::Text(_) => other.clone(),
             })
             .collect()
     };

@@ -401,7 +401,7 @@ mod tests {
         press(&mut select, Part::Trigger, None);
         key(&mut select, Key::ArrowDown);
         let closed = key(&mut select, Key::Escape);
-        assert!(select.value().is_empty());
+        assert_eq!(select.value(), [] as [std::string::String; 0]);
         assert!(!select.is_open());
         assert_eq!(closed.focus, TO_TRIGGER);
     }
@@ -444,7 +444,7 @@ mod tests {
         press(&mut select, Part::Trigger, None);
         press(&mut select, Part::Option, Some("medium"));
         assert!(select.is_open());
-        assert!(select.value().is_empty());
+        assert_eq!(select.value(), [] as [std::string::String; 0]);
     }
 
     #[test]

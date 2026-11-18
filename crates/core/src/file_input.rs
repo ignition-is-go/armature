@@ -489,7 +489,7 @@ mod tests {
             },
             &mut |_| true,
         );
-        assert!(input.value().is_empty());
+        assert_eq!(input.value(), [] as [std::string::String; 0]);
         assert!(input.semantics(Part::List, None).hidden);
         assert_eq!(
             input.act("browse", None, &mut |_| true),

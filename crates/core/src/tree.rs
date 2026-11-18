@@ -538,7 +538,7 @@ mod tests {
     }
 
     fn set(keys: &[&str]) -> HashSet<String> {
-        keys.iter().map(|k| k.to_string()).collect()
+        keys.iter().map(std::string::ToString::to_string).collect()
     }
 
     #[test]
@@ -695,7 +695,10 @@ mod tests {
             "README.md",
         ]);
         let tree = Tree::new(&items);
-        let expanded: HashSet<String> = ["src", "docs"].iter().map(|k| k.to_string()).collect();
+        let expanded: HashSet<String> = ["src", "docs"]
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect();
         let rows: Vec<Row> = tree
             .visible_rows(&expanded)
             .into_iter()

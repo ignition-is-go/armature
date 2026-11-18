@@ -462,7 +462,7 @@ mod tests {
             key(&mut lb, Key::ArrowDown, NONE).focus_item(),
             Some("cherry")
         );
-        assert!(lb.value().is_empty());
+        assert_eq!(lb.value(), [] as [std::string::String; 0]);
     }
 
     #[test]
@@ -538,7 +538,7 @@ mod tests {
     fn pressing_a_disabled_item_does_nothing() {
         let mut lb = listbox(Mode::Single);
         assert_eq!(press(&mut lb, "banana", &mut |_| true), Reaction::default());
-        assert!(lb.value().is_empty());
+        assert_eq!(lb.value(), [] as [std::string::String; 0]);
     }
 
     #[test]
@@ -549,7 +549,7 @@ mod tests {
             seen.push(change.clone());
             false
         });
-        assert!(lb.value().is_empty());
+        assert_eq!(lb.value(), [] as [std::string::String; 0]);
         assert_eq!(seen[0].value, ["apple"]);
         assert_eq!(seen[0].source, Source::User);
     }

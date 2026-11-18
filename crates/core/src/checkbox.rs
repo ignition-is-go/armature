@@ -548,7 +548,7 @@ mod tests {
         );
         assert_eq!(group.all_state(), CheckState::Checked);
         press(&mut group, GroupPart::All, None);
-        assert!(group.value().is_empty());
+        assert_eq!(group.value(), [] as [std::string::String; 0]);
     }
 
     #[test]

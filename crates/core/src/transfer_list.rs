@@ -467,7 +467,7 @@ mod tests {
         press(&mut lists, Part::Option, Some("read"), NONE);
         press(&mut lists, Part::Option, Some("delete"), SHIFT);
         let moved = press(&mut lists, Part::Add, None, NONE);
-        assert!(lists.list(false).is_empty());
+        assert_eq!(lists.list(false).len(), 0);
         assert_eq!(moved.focus_item(), Some("delete"));
     }
 
@@ -518,7 +518,7 @@ mod tests {
             },
             &mut |_| false,
         );
-        assert!(lists.value().is_empty());
+        assert_eq!(lists.value(), [] as [std::string::String; 0]);
         assert_eq!(
             lists.act("add", Some("delete"), &mut |_| false),
             Err(ActError::Refused)

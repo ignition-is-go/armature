@@ -1706,7 +1706,7 @@ mod tests {
         Element::write_a11y_info(&part, &mut node);
         assert_eq!(node.labelled_by(), [accesskit::NodeId(7)]);
         assert_eq!(node.controls(), [accesskit::NodeId(8)]);
-        assert_eq!(node.described_by(), []);
+        assert!(node.described_by().is_empty());
     }
 
     #[test]

@@ -390,14 +390,14 @@ mod tests {
         });
         press(&mut loose, "shipping");
         press(&mut loose, "shipping");
-        assert!(loose.value().is_empty());
+        assert_eq!(loose.value(), [] as [std::string::String; 0]);
     }
 
     #[test]
     fn disabled_sections_ignore_presses_and_agents() {
         let mut accordion = accordion(Options::default());
         press(&mut accordion, "legal");
-        assert!(accordion.value().is_empty());
+        assert_eq!(accordion.value(), [] as [std::string::String; 0]);
         assert_eq!(
             accordion.act("open", Some("legal"), &mut |_| true),
             Err(ActError::Disabled("legal".into()))

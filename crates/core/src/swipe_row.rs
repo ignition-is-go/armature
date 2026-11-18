@@ -386,7 +386,7 @@ mod tests {
     #[test]
     fn a_swipe_past_halfway_leaves_the_actions_showing() {
         let mut row = row();
-        assert!(swipe(&mut row, 50.0).is_empty());
+        assert_eq!(swipe(&mut row, 50.0), [] as [std::string::String; 0]);
         assert!(row.is_revealed());
         assert_eq!(row.offset(), 80.0);
         assert!(!row.semantics(Part::Action, Some("delete")).hidden);

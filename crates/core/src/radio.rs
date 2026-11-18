@@ -300,7 +300,7 @@ mod tests {
     #[test]
     fn nothing_is_chosen_until_the_person_chooses() {
         let mut radio = radio();
-        assert!(radio.value().is_empty());
+        assert_eq!(radio.value(), [] as [std::string::String; 0]);
         assert_eq!(
             radio.semantics(Part::Option, Some("1")).focusable,
             Focusable::TabStop
@@ -360,6 +360,6 @@ mod tests {
         press(&mut rating);
         assert_eq!(rating.value(), ["2"]);
         press(&mut rating);
-        assert!(rating.value().is_empty());
+        assert_eq!(rating.value(), [] as [std::string::String; 0]);
     }
 }

@@ -343,7 +343,7 @@ mod tests {
             },
             &mut |_| false,
         );
-        assert!(tokens.value().is_empty());
+        assert_eq!(tokens.value(), [] as [std::string::String; 0]);
         assert_eq!(tokens.text(Part::Input, None).as_deref(), Some("nope"));
     }
 
