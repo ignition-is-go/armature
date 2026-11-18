@@ -1,7 +1,7 @@
 use crate::agent::{ActError, Snapshot};
 use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::keys::{Dir, Key, Orientation};
-use crate::number::{NumberRange, read_number};
+use crate::number::read_number;
 use crate::primitive::{
     Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction,
     Role, Semantics, ValueRange,
@@ -67,10 +67,6 @@ impl Resizable {
     #[must_use]
     pub const fn percent(&self) -> f64 {
         self.percent
-    }
-
-    const fn range(&self) -> NumberRange {
-        NumberRange::new(self.opts.min, self.opts.max, 1.0)
     }
 
     fn set(&mut self, percent: f64, source: Source, reason: Reason, gate: Gate) -> bool {
@@ -207,7 +203,7 @@ impl Primitive for Resizable {
 
     fn set_value(&mut self, value: Vec<String>) {
         if let Some(percent) = value.first().and_then(|text| read_number(text)) {
-            self.percent = self.range().clamp(percent);
+            self.percent = percent.clamp(self.opts.min, self.opts.max);
         }
     }
 
