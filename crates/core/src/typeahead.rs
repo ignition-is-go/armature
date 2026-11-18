@@ -1,3 +1,4 @@
+/// How long a pause starts a new search.
 const RESET_MS: u64 = 500;
 
 /// A letter without its case or accent, so "Éditer" is found by typing "e".
@@ -9,6 +10,8 @@ fn folded(text: &str) -> String {
     text.trim().chars().map(fold).collect()
 }
 
+/// Jumping to an item by typing the start of its label. Letters typed within half a
+/// second of each other build one search; a pause starts a new one.
 #[derive(Clone, Debug, Default)]
 pub struct Typeahead {
     buffer: String,
@@ -44,11 +47,11 @@ impl Typeahead {
             (self.buffer.clone(), current.unwrap_or(0))
         };
 
-        let n = items.len();
-        (0..n)
+        let count = items.len();
+        (0..count)
             .map(|offset| {
                 (start.saturating_add(offset))
-                    .checked_rem(n)
+                    .checked_rem(count)
                     .unwrap_or_default()
             })
             .find(|i| {
