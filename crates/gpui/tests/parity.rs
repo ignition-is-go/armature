@@ -2,6 +2,8 @@
 //! trapping, hover timing, scrolling and the clipboard.
 
 use armature_core::convert::Cast;
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::time::Duration;
 
 use armature_core::command::{self, Command};
@@ -42,6 +44,12 @@ impl<P: Primitive> Render for Page<P> {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         (self.draw)(&self.machine, cx)
     }
+}
+
+/// The keys of the entries a menu shows now, at whichever level is open.
+fn shown_entries(menu: &Entity<Machine<Menu>>, cx: &App) -> Vec<String> {
+    let entries = menu.read(cx).primitive().shown();
+    entries.iter().map(|entry| entry.key.clone()).collect()
 }
 
 fn open<P: Primitive, E: IntoElement>(
@@ -598,7 +606,7 @@ fn a_toast_set_from_outside_starts_its_own_clock_and_leaves(cx: &mut TestAppCont
                 )
         },
     );
-    let said = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let said = Rc::new(RefCell::new(Vec::new()));
     cx.update(|_, cx| {
         let said = said.clone();
         cx.subscribe(
@@ -636,7 +644,7 @@ fn a_menu_drills_into_a_submenu_and_back_without_losing_focus(cx: &mut TestAppCo
         Entry::action("share", "Share").of(EntryKind::Submenu),
         Entry::action("email", "Email").inside("share"),
     ];
-    let ran = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let ran = Rc::new(RefCell::new(Vec::new()));
     let heard = ran.clone();
     let (page, cx) = cx.add_window_view(|_, cx| Page {
         machine: cx.new(|cx| {
@@ -648,13 +656,7 @@ fn a_menu_drills_into_a_submenu_and_back_without_losing_focus(cx: &mut TestAppCo
             )
         }),
         draw: Box::new(|menu: &Entity<Machine<Menu>>, cx: &mut App| {
-            let shown: Vec<String> = menu
-                .read(cx)
-                .primitive()
-                .shown()
-                .iter()
-                .map(|entry| entry.key.clone())
-                .collect();
+            let shown = shown_entries(menu, cx);
             menu.update(cx, |m, cx| m.track(menu::Part::Item, shown.clone(), cx));
             div()
                 .child(part(menu, menu::Part::Trigger, None, cx).size(px(ROW)))
@@ -799,13 +801,7 @@ fn a_right_click_opens_a_menu_where_the_pointer_is(cx: &mut TestAppContext) {
         cx,
         Menu::new(entries),
         |menu: &Entity<Machine<Menu>>, cx: &mut App| {
-            let shown: Vec<String> = menu
-                .read(cx)
-                .primitive()
-                .shown()
-                .iter()
-                .map(|entry| entry.key.clone())
-                .collect();
+            let shown = shown_entries(menu, cx);
             menu.update(cx, |m, cx| m.track(menu::Part::Item, shown.clone(), cx));
             div()
                 .size_full()
@@ -972,7 +968,7 @@ fn an_outline_row_is_picked_up_moved_with_its_children_and_dropped(cx: &mut Test
         depth: *depth,
     })
     .collect();
-    let changes = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let changes = Rc::new(RefCell::new(Vec::new()));
     let heard = changes.clone();
     let (page, cx) = cx.add_window_view(|_, cx| Page {
         machine: cx.new(|cx| {
