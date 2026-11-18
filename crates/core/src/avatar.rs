@@ -22,6 +22,16 @@ pub enum Part {
     Fallback,
 }
 
+/// The wait before the fallback is shown.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum Wait {
+    /// No clock has been read yet.
+    #[default]
+    NotStarted,
+    Since(u64),
+    Over,
+}
+
 /// A person's picture with something to show in its place. The adapter reports
 /// loading through `Input::Loaded`.
 #[derive(Clone, Debug, Default)]
@@ -30,8 +40,7 @@ pub struct Avatar {
     /// How long to wait before showing the fallback, so a picture that loads at
     /// once never flashes initials first.
     fallback_delay_ms: u64,
-    /// When the wait began, and whether it is over.
-    waited: (Option<u64>, bool),
+    wait: Wait,
 }
 
 impl Avatar {
@@ -51,7 +60,7 @@ impl Avatar {
     }
 
     fn waiting(&self) -> bool {
-        self.fallback_delay_ms > 0 && !self.waited.1 && self.status == ImageStatus::Loading
+        self.fallback_delay_ms > 0 && self.wait != Wait::Over && self.status == ImageStatus::Loading
     }
 
     #[must_use]
@@ -80,7 +89,7 @@ impl Primitive for Avatar {
     }
 
     fn wake_after(&self) -> Option<u64> {
-        (self.waiting() && self.waited.0.is_none()).then_some(0)
+        (self.waiting() && self.wait == Wait::NotStarted).then_some(0)
     }
 
     fn upsert_item(&mut self, _: Item) {}
@@ -116,16 +125,16 @@ impl Primitive for Avatar {
                     ImageStatus::Error
                 }
             }
-            Input::Tick { now_ms } if self.waiting() => match self.waited.0 {
-                None => {
-                    self.waited.0 = Some(now_ms);
+            Input::Tick { now_ms } if self.waiting() => match self.wait {
+                Wait::NotStarted => {
+                    self.wait = Wait::Since(now_ms);
                     let at_ms = now_ms.saturating_add(self.fallback_delay_ms);
                     return Reaction::default().with(crate::primitive::Effect::Wake { at_ms });
                 }
-                Some(since) if now_ms >= since.saturating_add(self.fallback_delay_ms) => {
-                    self.waited.1 = true;
+                Wait::Since(since) if now_ms >= since.saturating_add(self.fallback_delay_ms) => {
+                    self.wait = Wait::Over;
                 }
-                Some(_) => {}
+                Wait::Since(_) | Wait::Over => {}
             },
             _ => {}
         }
