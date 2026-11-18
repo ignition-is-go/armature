@@ -98,6 +98,101 @@ impl DatePicker {
     }
 }
 
+impl DatePicker {
+    /// Opens the calendar on its first day that can take focus.
+    fn open_calendar(&mut self) -> Reaction<Part> {
+        self.open = true;
+        let to_first_day = Input::Key {
+            key: Key::Home,
+            mods: crate::keys::Modifiers::default(),
+            now_ms: 0,
+        };
+        self.calendar
+            .send(to_first_day, &mut |_| true)
+            .for_parts(from_calendar)
+    }
+
+    /// What the picker itself does with an input: opening and closing the
+    /// calendar. `None` for an input meant for the calendar or the typed pieces.
+    fn open_or_close(&mut self, input: &Input<Part>, gate: Gate) -> Option<Reaction<Part>> {
+        match (input, self.open) {
+            (
+                Input::Press {
+                    part: Part::Trigger,
+                    ..
+                },
+                false,
+            ) => Some(self.open_calendar()),
+            (
+                Input::Press {
+                    part: Part::Trigger,
+                    ..
+                },
+                true,
+            ) => {
+                self.open = false;
+                Some(Reaction::handled())
+            }
+            (
+                Input::Key {
+                    key: Key::Enter | Key::Space | Key::ArrowDown,
+                    mods,
+                    ..
+                },
+                false,
+            ) if self.on_trigger => {
+                let press = Input::Press {
+                    part: Part::Trigger,
+                    item: None,
+                    mods: *mods,
+                };
+                Some(self.send(press, gate))
+            }
+            (
+                Input::Key {
+                    key: Key::Escape, ..
+                },
+                true,
+            ) => {
+                self.open = false;
+                Some(Reaction::focusing(Part::Trigger))
+            }
+            (Input::PressOutside | Input::WindowBlur | Input::Blur { .. }, true) => {
+                self.open = false;
+                Some(Reaction::default())
+            }
+            _ => None,
+        }
+    }
+
+    /// An input for the calendar. Choosing a day fills the typed pieces and closes it.
+    fn send_to_calendar(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
+        let Some(inner) = input.for_parts(to_calendar) else {
+            return Reaction::default();
+        };
+        let before = self.calendar.value();
+        let reaction = self.calendar.send(inner, gate).for_parts(from_calendar);
+        if self.calendar.value() == before {
+            return reaction;
+        }
+        self.input.set_value(self.calendar.value());
+        self.open = false;
+        Reaction::focusing(Part::Trigger)
+    }
+
+    /// An input for the typed pieces. A complete date moves the calendar to it.
+    fn send_to_pieces(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
+        let Some(inner) = input.for_parts(to_input) else {
+            return Reaction::default();
+        };
+        let reaction = self.input.send(inner, gate).for_parts(|_| Part::Segment);
+        if !self.input.value().is_empty() {
+            self.calendar.set_value(self.input.value());
+        }
+        reaction
+    }
+}
+
 impl PartOf for Part {
     type Primitive = DatePicker;
 }
@@ -184,62 +279,8 @@ impl Primitive for DatePicker {
         if let Input::Focus { part, .. } = &input {
             self.on_trigger = *part == Part::Trigger;
         }
-        match (&input, self.open) {
-            (
-                Input::Press {
-                    part: Part::Trigger,
-                    ..
-                },
-                _,
-            ) => {
-                self.open = !self.open;
-                return if self.open {
-                    self.calendar
-                        .send(
-                            Input::Key {
-                                key: Key::Home,
-                                mods: crate::keys::Modifiers::default(),
-                                now_ms: 0,
-                            },
-                            &mut |_| true,
-                        )
-                        .for_parts(from_calendar)
-                } else {
-                    Reaction::handled()
-                };
-            }
-            (
-                Input::Key {
-                    key: Key::Enter | Key::Space | Key::ArrowDown,
-                    mods,
-                    ..
-                },
-                false,
-            ) if self.on_trigger => {
-                let mods = *mods;
-                return self.send(
-                    Input::Press {
-                        part: Part::Trigger,
-                        item: None,
-                        mods,
-                    },
-                    gate,
-                );
-            }
-            (
-                Input::Key {
-                    key: Key::Escape, ..
-                },
-                true,
-            ) => {
-                self.open = false;
-                return Reaction::focusing(Part::Trigger);
-            }
-            (Input::PressOutside | Input::WindowBlur | Input::Blur { .. }, true) => {
-                self.open = false;
-                return Reaction::default();
-            }
-            _ => {}
+        if let Some(reaction) = self.open_or_close(&input, gate) {
+            return reaction;
         }
         // Keys go to the calendar while it is open, and to the typed pieces otherwise.
         let for_calendar = match &input {
@@ -248,27 +289,10 @@ impl Primitive for DatePicker {
             _ => false,
         };
         if for_calendar {
-            let Some(inner) = input.for_parts(to_calendar) else {
-                return Reaction::default();
-            };
-            let before = self.calendar.value();
-            let reaction = self.calendar.send(inner, gate).for_parts(from_calendar);
-            // A day was chosen: the typed pieces follow, and the calendar is done.
-            if self.calendar.value() != before {
-                self.input.set_value(self.calendar.value());
-                self.open = false;
-                return Reaction::focusing(Part::Trigger);
-            }
-            return reaction;
+            self.send_to_calendar(input, gate)
+        } else {
+            self.send_to_pieces(input, gate)
         }
-        let Some(inner) = input.for_parts(to_input) else {
-            return Reaction::default();
-        };
-        let reaction = self.input.send(inner, gate).for_parts(|_| Part::Segment);
-        if !self.input.value().is_empty() {
-            self.calendar.set_value(self.input.value());
-        }
-        reaction
     }
 
     fn text(&self, part: Part, item: Option<&str>) -> Option<String> {

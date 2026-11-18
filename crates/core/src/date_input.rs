@@ -329,6 +329,86 @@ impl DateInput {
     }
 }
 
+impl DateInput {
+    /// A key on the focused piece: stepping it, typing into it, emptying it, or
+    /// moving to the piece beside it.
+    fn on_key(&mut self, key: Key, gate: Gate) -> Reaction<Part> {
+        let segment = self.focused;
+        match key {
+            Key::ArrowUp | Key::ArrowDown => {
+                let next = self.stepped(segment, key == Key::ArrowUp);
+                self.typed.clear();
+                self.put(segment, Some(next), Source::User, Reason::Keyboard, gate);
+                Reaction::handled()
+            }
+            Key::ArrowRight | Key::ArrowLeft => self.move_beside(key == Key::ArrowRight),
+            Key::Backspace => {
+                self.typed.clear();
+                self.put(segment, None, Source::User, Reason::Keyboard, gate);
+                Reaction::handled()
+            }
+            // Morning and afternoon answer to their first letters.
+            Key::Char(letter @ ('a' | 'A' | 'p' | 'P')) if segment == Segment::Period => {
+                let afternoon = u32::from(matches!(letter, 'p' | 'P'));
+                self.put(segment, Some(afternoon), Source::User, Reason::Text, gate);
+                Reaction::handled()
+            }
+            Key::Char(digit) if digit.is_ascii_digit() && segment != Segment::Period => {
+                self.typed_digit(segment, digit, gate)
+            }
+            // A separator typed out of habit moves on, as it would in plain text.
+            Key::Char('/' | '-' | '.' | ':') => self.move_beside(true),
+            _ => Reaction::default(),
+        }
+    }
+
+    /// What a piece holds after one step up or down. Stepping wraps round, and an
+    /// empty piece starts at an end.
+    fn stepped(&self, segment: Segment, up: bool) -> u32 {
+        let (min, max) = self.limits(segment);
+        match (self.get(segment), up) {
+            (None, true) => min,
+            (None, false) => max,
+            (Some(now), true) if now >= max => min,
+            (Some(now), true) => now.saturating_add(1),
+            (Some(now), false) if now <= min => max,
+            (Some(now), false) => now.saturating_sub(1),
+        }
+    }
+
+    /// Moves to the piece after or before the focused one, if there is one.
+    fn move_beside(&mut self, forward: bool) -> Reaction<Part> {
+        self.neighbour(forward)
+            .map_or_else(Reaction::handled, |next| self.move_to(next))
+    }
+
+    /// A digit typed into a piece. A full piece moves on to the next.
+    fn typed_digit(&mut self, segment: Segment, digit: char, gate: Gate) -> Reaction<Part> {
+        let (min, max) = self.limits(segment);
+        self.typed.push(digit);
+        let number: u32 = self.typed.parse().unwrap_or(0);
+        // The piece is full when another digit could not fit under the most it could
+        // ever hold. What was typed is then brought within what this month allows.
+        let most = if segment == Segment::Day { 31 } else { max };
+        let full = self.typed.len() >= segment.width() || number.saturating_mul(10) > most;
+        let stored = match (full, number >= min) {
+            (true, _) => Some(number.clamp(min, max)),
+            (false, true) => Some(number.min(max)),
+            // A leading zero is not a value yet.
+            (false, false) => None,
+        };
+        self.put(segment, stored, Source::User, Reason::Text, gate);
+        match (full, self.neighbour(true)) {
+            (true, Some(next)) => self.move_to(next),
+            (true, None) => {
+                self.typed.clear();
+                Reaction::handled()
+            }
+            (false, _) => Reaction::handled(),
+        }
+    }
+}
+
 impl PartOf for Part {
     type Primitive = DateInput;
 }
@@ -402,85 +482,7 @@ impl Primitive for DateInput {
                 }
                 Reaction::default()
             }
-            Input::Key { key, mods, .. } if !mods.ctrl && !mods.alt => {
-                let segment = self.focused;
-                let (min, max) = self.limits(segment);
-                match key {
-                    Key::ArrowUp | Key::ArrowDown => {
-                        // Stepping wraps round, and an empty piece starts at an end.
-                        let next = match (self.get(segment), key == Key::ArrowUp) {
-                            (None, true) => min,
-                            (None, false) => max,
-                            (Some(now), true) => {
-                                if now >= max {
-                                    min
-                                } else {
-                                    now.saturating_add(1)
-                                }
-                            }
-                            (Some(now), false) => {
-                                if now <= min {
-                                    max
-                                } else {
-                                    now.saturating_sub(1)
-                                }
-                            }
-                        };
-                        self.typed.clear();
-                        self.put(segment, Some(next), Source::User, Reason::Keyboard, gate);
-                        Reaction::handled()
-                    }
-                    Key::ArrowRight | Key::ArrowLeft => self
-                        .neighbour(key == Key::ArrowRight)
-                        .map_or_else(Reaction::handled, |next| self.move_to(next)),
-                    Key::Backspace => {
-                        self.typed.clear();
-                        self.put(segment, None, Source::User, Reason::Keyboard, gate);
-                        Reaction::handled()
-                    }
-                    // Morning and afternoon answer to their first letters.
-                    Key::Char(letter @ ('a' | 'A' | 'p' | 'P')) if segment == Segment::Period => {
-                        self.put(
-                            segment,
-                            Some(u32::from(matches!(letter, 'p' | 'P'))),
-                            Source::User,
-                            Reason::Text,
-                            gate,
-                        );
-                        Reaction::handled()
-                    }
-                    Key::Char(digit) if digit.is_ascii_digit() && segment != Segment::Period => {
-                        self.typed.push(digit);
-                        let number: u32 = self.typed.parse().unwrap_or(0);
-                        // The piece is full when another digit could not fit under the most it
-                        // could ever hold. What was typed is then brought within what this
-                        // month allows.
-                        let most = if segment == Segment::Day { 31 } else { max };
-                        let full =
-                            self.typed.len() >= segment.width() || number.saturating_mul(10) > most;
-                        let stored = match (full, number >= min) {
-                            (true, _) => Some(number.clamp(min, max)),
-                            (false, true) => Some(number.min(max)),
-                            // A leading zero is not a value yet.
-                            (false, false) => None,
-                        };
-                        self.put(segment, stored, Source::User, Reason::Text, gate);
-                        match (full, self.neighbour(true)) {
-                            (true, Some(next)) => self.move_to(next),
-                            (true, None) => {
-                                self.typed.clear();
-                                Reaction::handled()
-                            }
-                            (false, _) => Reaction::handled(),
-                        }
-                    }
-                    // A separator typed out of habit moves on, as it would in plain text.
-                    Key::Char('/' | '-' | '.' | ':') => self
-                        .neighbour(true)
-                        .map_or_else(Reaction::handled, |next| self.move_to(next)),
-                    _ => Reaction::default(),
-                }
-            }
+            Input::Key { key, mods, .. } if !mods.ctrl && !mods.alt => self.on_key(key, gate),
             _ => Reaction::default(),
         }
     }
