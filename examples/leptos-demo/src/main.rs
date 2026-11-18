@@ -553,29 +553,23 @@ fn RatingSection() -> impl IntoView {
 #[component]
 fn TreeSection() -> impl IntoView {
     let (file, on_file) = follow();
-    let files = [
-        "src",
-        "src/main.rs",
-        "src/ui",
-        "src/ui/button.rs",
-        "docs",
-        "docs/intro.md",
-        "README.md",
-    ];
     let tree = tree_from_paths(&[
         "src/main.rs",
         "src/ui/button.rs",
         "docs/intro.md",
         "README.md",
     ]);
+    // Every folder and file, in the order the tree lists them.
+    let nodes = armature_core::tree::Tree::new(&tree).subtree_order();
     view! {
         <Section title="Tree">
             <p id="file-value">"File: " {move || file.get().join("")}</p>
             <Root machine=TreeView::new(tree, Dir::Ltr) label="Files" on_value_change=on_file>
                 <Part part=tree_view::Part::Root>
-                    {files
+                    {nodes
+                        .into_iter()
                         .map(|path| {
-                            let name = path.rsplit('/').next().unwrap_or(path);
+                            let name = path.rsplit('/').next().unwrap_or(&path).to_string();
                             view! { <Part part=tree_view::Part::Node item=path>{name}</Part> }
                         })
                         .collect_view()}
