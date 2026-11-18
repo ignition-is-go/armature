@@ -347,7 +347,7 @@ fn TwelveHourTimeSection() -> impl IntoView {
     view! {
         <Section title="Twelve-hour time">
             <p id="time-value">"Time: " {move || time.get().join("")}</p>
-            <Root machine=DateInput::new(true).twelve_hour() label="Meeting" on_value_change=on_time><TimeParts /></Root>
+            <Root machine=DateInput::new(date_input::Precision::Minute).with_clock(date_input::Clock::Twelve) label="Meeting" on_value_change=on_time><TimeParts /></Root>
         </Section>
     }
 }

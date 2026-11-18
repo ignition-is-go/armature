@@ -670,7 +670,7 @@ fn DateInputSection() -> impl IntoView {
     view! {
         <Section title="Date input">
             <p id="when-value">"When: " {move || when.get().join("")}</p>
-            <Root machine=DateInput::new(false) label="When" on_value_change=on_when>
+            <Root machine=DateInput::new(date_input::Precision::Day) label="When" on_value_change=on_when>
                 <Part part=date_input::Part::Root>
                     <div class="segments">
                         <Part part=date_input::Part::Segment item="year" label="Year" />

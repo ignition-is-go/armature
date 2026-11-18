@@ -53,7 +53,7 @@ Each lives in `armature_core::<module>` and exports a `Part` enum.
 | Hover card | `tooltip` (`Tooltip::hover_card()`) | `Trigger`, `Content` | None. |
 | Trigger menu (mentions, commands) | `trigger_menu` | `Input`, `List`, `Option`, `Empty` | The text. Key each option with its trigger character, such as `@ada`. |
 | Toasts | `toast` (`Toaster`) | `Region`, `Toast`, `Title`, `Description`, `Action`, `Close` | The toasts, each from `Toast::encode`. You add to the value. The toaster offers the list without a toast when it goes. Draw from `visible()`. |
-| Date input | `date_input` | `Root`, `Segment` | `YYYY-MM-DD`, with `THH:MM` for a time. `.twelve_hour()` adds a `period` segment, `.with_seconds()` a `second` one, and `.between(..)` sets limits. Key segments `year`, `month`, `day`, `hour`, `minute`. |
+| Date input | `date_input` | `Root`, `Segment` | `YYYY-MM-DD`, with `THH:MM` for a time. `DateInput::new(Precision::Day | Minute | Second)` sets how much it takes; `.with_clock(Clock::Twelve)` adds a `period` segment, and `.between(..)` sets limits. Key segments `year`, `month`, `day`, `hour`, `minute`. |
 | Date picker | `date_picker` | `Segment`, `Trigger`, `Content`, `Grid`, `Day`, `PreviousMonth`, `NextMonth` | `YYYY-MM-DD`. Draw days from `calendar().weeks()`. |
 | Carousel | `carousel` | `Root`, `Viewport`, `Slide`, `Previous`, `Next`, `Indicator`, `Play` | The slide on show. Move the strip by `position()`. |
 | Scroll area | `scroll_area` | `Root`, `Viewport`, `Scrollbar`, `Thumb` | None. Place the grip with `thumb(track_length)`. `ScrollArea::horizontal()` scrolls sideways. |

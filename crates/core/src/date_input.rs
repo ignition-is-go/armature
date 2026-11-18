@@ -96,9 +96,72 @@ impl Fields {
     }
 }
 
-/// An hour as shown on a twelve-hour clock, on the 24-hour clock.
-const fn to_24_hour(shown: u32, pm: bool) -> u32 {
-    (shown % 12).saturating_add(if pm { 12 } else { 0 })
+/// How much of a moment a date input takes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Precision {
+    /// The date alone.
+    #[default]
+    Day,
+    /// The date and the time to the minute.
+    Minute,
+    /// The date and the time to the second.
+    Second,
+}
+
+/// How the hours read.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Clock {
+    /// From 0 to 23.
+    #[default]
+    TwentyFour,
+    /// From 1 to 12, with a piece after them for morning or afternoon.
+    Twelve,
+}
+
+/// Which half of the day an hour on a twelve-hour clock falls in.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum Half {
+    #[default]
+    Am,
+    Pm,
+}
+
+impl Half {
+    /// The half an hour on the 24-hour clock falls in.
+    const fn of(hour: u32) -> Self {
+        if hour >= 12 { Self::Pm } else { Self::Am }
+    }
+
+    /// The half a period piece's number stands for: 0 for morning, 1 for afternoon.
+    const fn numbered(number: Option<u32>) -> Self {
+        match number {
+            Some(1) => Self::Pm,
+            _ => Self::Am,
+        }
+    }
+
+    const fn number(self) -> u32 {
+        match self {
+            Self::Am => 0,
+            Self::Pm => 1,
+        }
+    }
+
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Am => "AM",
+            Self::Pm => "PM",
+        }
+    }
+
+    /// An hour as shown on a twelve-hour clock, on the 24-hour clock.
+    const fn to_24_hour(self, shown: u32) -> u32 {
+        let base = shown % 12;
+        match self {
+            Self::Am => base,
+            Self::Pm => base.saturating_add(12),
+        }
+    }
 }
 
 /// A date typed one piece at a time.
@@ -107,12 +170,8 @@ const fn to_24_hour(shown: u32, pm: bool) -> u32 {
 /// Right move between pieces. The value is the date as `YYYY-MM-DD`, with `THH:MM` when
 /// it carries a time, once every piece holds something.
 #[derive(Clone, Debug)]
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "each flag is an independent setting"
-)]
 pub struct DateInput {
-    with_time: bool,
+    precision: Precision,
     fields: Fields,
     focused: Segment,
     /// The digits typed into the focused piece so far.
@@ -120,25 +179,22 @@ pub struct DateInput {
     /// The earliest and latest dates taken. A date outside them is refused.
     earliest: Option<Date>,
     latest: Option<Date>,
-    /// Whether seconds are shown.
-    seconds: bool,
-    /// Whether the hours run to twelve with a morning or afternoon after them.
-    twelve: bool,
-    /// Whether it is afternoon, for when the hour has yet to be given.
-    pm: bool,
+    clock: Clock,
+    /// The half of the day, kept for when the hour has yet to be given.
+    half: Half,
 }
 
 impl Default for DateInput {
     fn default() -> Self {
-        Self::new(false)
+        Self::new(Precision::Day)
     }
 }
 
 impl DateInput {
     #[must_use]
-    pub const fn new(with_time: bool) -> Self {
+    pub const fn new(precision: Precision) -> Self {
         Self {
-            with_time,
+            precision,
             fields: Fields {
                 year: None,
                 month: None,
@@ -151,9 +207,8 @@ impl DateInput {
             typed: String::new(),
             earliest: None,
             latest: None,
-            seconds: false,
-            twelve: false,
-            pm: false,
+            clock: Clock::TwentyFour,
+            half: Half::Am,
         }
     }
 
@@ -180,25 +235,23 @@ impl DateInput {
     #[must_use]
     pub fn segments(&self) -> Vec<Segment> {
         let mut shown = Segment::DATE.to_vec();
-        if self.with_time {
-            shown.extend([Segment::Hour, Segment::Minute]);
-            shown.extend(self.seconds.then_some(Segment::Second));
-            shown.extend(self.twelve.then_some(Segment::Period));
+        match self.precision {
+            Precision::Day => return shown,
+            Precision::Minute => shown.extend([Segment::Hour, Segment::Minute]),
+            Precision::Second => {
+                shown.extend([Segment::Hour, Segment::Minute, Segment::Second]);
+            }
+        }
+        if self.clock == Clock::Twelve {
+            shown.push(Segment::Period);
         }
         shown
     }
 
-    /// Shows seconds after the minutes. Only a date with a time has them.
+    /// Sets how the hours read. Only a date with a time has hours.
     #[must_use]
-    pub const fn with_seconds(mut self) -> Self {
-        self.seconds = true;
-        self
-    }
-
-    /// Runs the hours from 1 to 12, with a piece after them for morning or afternoon.
-    #[must_use]
-    pub const fn twelve_hour(mut self) -> Self {
-        self.twelve = true;
+    pub const fn with_clock(mut self, clock: Clock) -> Self {
+        self.clock = clock;
         self
     }
 
@@ -206,8 +259,8 @@ impl DateInput {
     /// shown on whichever clock was asked for.
     fn get(&self, segment: Segment) -> Option<u32> {
         match segment {
-            Segment::Period => Some(u32::from(self.pm)),
-            Segment::Hour if self.twelve => self
+            Segment::Period => Some(self.half.number()),
+            Segment::Hour if self.clock == Clock::Twelve => self
                 .fields
                 .hour
                 .map(|hour| if hour % 12 == 0 { 12 } else { hour % 12 }),
@@ -235,7 +288,7 @@ impl DateInput {
                 ),
                 _ => (1, 31),
             },
-            Segment::Hour if self.twelve => (1, 12),
+            Segment::Hour if self.clock == Clock::Twelve => (1, 12),
             Segment::Hour => (0, 23),
             Segment::Minute | Segment::Second => (0, 59),
             Segment::Period => (0, 1),
@@ -257,13 +310,14 @@ impl DateInput {
             return Vec::new();
         };
         let date = format!("{year:04}-{month:02}-{day:02}");
-        match (self.with_time, fields.hour, fields.minute) {
-            (false, _, _) => vec![date],
-            (true, Some(hour), Some(minute)) => match (self.seconds, fields.second) {
-                (false, _) => vec![format!("{date}T{hour:02}:{minute:02}")],
-                (true, Some(second)) => vec![format!("{date}T{hour:02}:{minute:02}:{second:02}")],
-                (true, None) => Vec::new(),
-            },
+        match (self.precision, fields.hour, fields.minute, fields.second) {
+            (Precision::Day, ..) => vec![date],
+            (Precision::Minute, Some(hour), Some(minute), _) => {
+                vec![format!("{date}T{hour:02}:{minute:02}")]
+            }
+            (Precision::Second, Some(hour), Some(minute), Some(second)) => {
+                vec![format!("{date}T{hour:02}:{minute:02}:{second:02}")]
+            }
             _ => Vec::new(),
         }
     }
@@ -281,12 +335,12 @@ impl DateInput {
         match segment {
             // Morning or afternoon moves the hour to the other half of the day.
             Segment::Period => {
-                let pm = number == Some(1);
-                fields.hour = fields.hour.map(|hour| to_24_hour(hour, pm));
-                self.pm = pm;
+                let half = Half::numbered(number);
+                fields.hour = fields.hour.map(|hour| half.to_24_hour(hour));
+                self.half = half;
             }
-            Segment::Hour if self.twelve => {
-                fields.hour = number.map(|shown| to_24_hour(shown, self.pm));
+            Segment::Hour if self.clock == Clock::Twelve => {
+                fields.hour = number.map(|shown| self.half.to_24_hour(shown));
             }
             other => fields.set(other, number),
         }
@@ -501,7 +555,7 @@ impl Primitive for DateInput {
             .and_then(Segment::named)
             .filter(|_| part == Part::Segment)?;
         if segment == Segment::Period {
-            return Some(if self.pm { "PM" } else { "AM" }.to_string());
+            return Some(self.half.label().to_string());
         }
         Some(self.get(segment).map_or_else(
             || "-".repeat(segment.width()),
@@ -528,7 +582,7 @@ impl Primitive for DateInput {
             clock.next().flatten(),
             clock.next().flatten(),
         );
-        self.pm = hour.is_some_and(|hour| hour >= 12);
+        self.half = hour.map_or(Half::Am, Half::of);
         self.fields = Fields {
             year: Some(date.year.cast::<u32>()),
             month: Some(u32::from(date.month)),
@@ -538,7 +592,7 @@ impl Primitive for DateInput {
             second,
         };
         // A date with a time always has one: midnight, when none was written.
-        if self.with_time {
+        if self.precision != Precision::Day {
             self.fields.hour = Some(hour.unwrap_or(0).min(23));
             self.fields.minute = Some(minute.unwrap_or(0).min(59));
         }
@@ -648,7 +702,7 @@ mod tests {
 
     #[test]
     fn a_time_makes_it_a_date_and_time() {
-        let mut input = DateInput::new(true);
+        let mut input = DateInput::new(Precision::Minute);
         type_digits(&mut input, "20261102");
         assert_eq!(input.value(), Vec::<String>::new());
         type_digits(&mut input, "1430");
@@ -665,7 +719,7 @@ mod tests {
     #[test]
     fn it_conforms() {
         crate::testing::assert_conforms(DateInput::default, &[]);
-        crate::testing::assert_conforms(|| DateInput::new(true), &[]);
+        crate::testing::assert_conforms(|| DateInput::new(Precision::Minute), &[]);
     }
 
     #[test]
@@ -687,7 +741,7 @@ mod tests {
 
     #[test]
     fn a_twelve_hour_clock_keeps_the_hour_on_the_24_hour_clock_underneath() {
-        let mut input = DateInput::new(true).twelve_hour();
+        let mut input = DateInput::new(Precision::Minute).with_clock(Clock::Twelve);
         assert_eq!(input.segments().last(), Some(&Segment::Period));
         type_digits(&mut input, "20261102");
         type_digits(&mut input, "0230");
@@ -719,7 +773,7 @@ mod tests {
 
     #[test]
     fn seconds_are_part_of_the_value_when_they_are_shown() {
-        let mut input = DateInput::new(true).with_seconds();
+        let mut input = DateInput::new(Precision::Second);
         type_digits(&mut input, "202611021430");
         assert!(input.value().is_empty(), "the seconds are still to come");
         type_digits(&mut input, "45");

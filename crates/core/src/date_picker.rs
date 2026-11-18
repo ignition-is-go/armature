@@ -2,7 +2,7 @@ use crate::agent::{ActError, Snapshot};
 use crate::calendar::{self, Calendar};
 use crate::change::Gate;
 use crate::date::Date;
-use crate::date_input::{self, DateInput};
+use crate::date_input::{self, DateInput, Precision};
 use crate::keys::Key;
 use crate::popup::{Align, Placement, Side};
 use crate::primitive::{
@@ -73,7 +73,7 @@ impl DatePicker {
     #[must_use]
     pub const fn new(opts: calendar::Options, showing: Date) -> Self {
         Self {
-            input: DateInput::new(false),
+            input: DateInput::new(Precision::Day),
             calendar: Calendar::new(opts, showing),
             open: false,
             on_trigger: false,
