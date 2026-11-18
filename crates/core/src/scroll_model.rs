@@ -107,14 +107,23 @@ pub fn position_at(point: f64, metrics: AxisMetrics, track: f64) -> f64 {
     ((point - size / 2.0) / travel).clamp(0.0, 1.0) * max_scroll(metrics)
 }
 
-/// Which way a press on the track pages: -1 before the thumb, 1 after it, and 0
-/// on it.
+/// Which way a press on the track pages.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PageTowards {
+    Start,
+    End,
+}
+
+/// Which way a press on the track pages: towards the start before the thumb,
+/// towards the end after it, and nowhere on it.
 #[must_use]
-pub fn page_direction(point: f64, thumb_size: f64, thumb_offset: f64) -> i8 {
+pub fn page_direction(point: f64, thumb_size: f64, thumb_offset: f64) -> Option<PageTowards> {
     if point < thumb_offset {
-        -1
+        Some(PageTowards::Start)
+    } else if point > thumb_offset + thumb_size {
+        Some(PageTowards::End)
     } else {
-        i8::from(point > thumb_offset + thumb_size)
+        None
     }
 }
 
@@ -124,14 +133,21 @@ pub fn page_length(client: f64) -> f64 {
     (client * PAGE_FRACTION).round().max(1.0)
 }
 
-/// A wheel's movement in pixels. `mode` is 0 for pixels, 1 for lines and 2 for
-/// pages, as wheel events report it.
+/// What a wheel event counts its movement in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WheelUnit {
+    Pixels,
+    Lines,
+    Pages,
+}
+
+/// A wheel's movement in pixels, given the height of a line and of a page.
 #[must_use]
-pub fn wheel_pixels(delta: f64, mode: u8, line_height: f64, page: f64) -> f64 {
-    match mode {
-        1 => delta * line_height,
-        2 => delta * page,
-        _ => delta,
+pub fn wheel_pixels(delta: f64, unit: WheelUnit, line_height: f64, page: f64) -> f64 {
+    match unit {
+        WheelUnit::Pixels => delta,
+        WheelUnit::Lines => delta * line_height,
+        WheelUnit::Pages => delta * page,
     }
 }
 
@@ -148,24 +164,25 @@ pub enum ScrollbarType {
     Hover,
 }
 
+/// What the person is doing with a scrolling area.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Activity {
+    Idle,
+    /// The pointer is over the area.
+    Hovering,
+    /// The content is scrolling or the thumb is being dragged.
+    Moving,
+}
+
+/// Whether a scrollbar of this type shows, given whether its content overflows.
 #[must_use]
-#[expect(
-    clippy::fn_params_excessive_bools,
-    reason = "each flag is an independent fact about the scrollbar"
-)]
-pub fn scrollbar_shown(
-    kind: ScrollbarType,
-    overflow: bool,
-    hovering: bool,
-    scrolling: bool,
-    dragging: bool,
-) -> bool {
+pub fn scrollbar_shown(kind: ScrollbarType, overflows: bool, activity: Activity) -> bool {
     match kind {
         ScrollbarType::Always => true,
-        _ if !overflow => false,
+        _ if !overflows => false,
         ScrollbarType::Auto => true,
-        _ if dragging || scrolling => true,
-        kind => kind == ScrollbarType::Hover && hovering,
+        ScrollbarType::Scroll => activity == Activity::Moving,
+        ScrollbarType::Hover => activity != Activity::Idle,
     }
 }
 

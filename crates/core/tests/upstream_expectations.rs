@@ -2306,7 +2306,7 @@ fn scroll_area_model() {
             page_direction(150.0, 40.0, 80.0),
             page_direction(100.0, 40.0, 80.0)
         ),
-        (-1, 1, 0)
+        (Some(PageTowards::Start), Some(PageTowards::End), None)
     );
     assert_eq!(page_length(200.0), 175.0);
     // edges
@@ -2342,9 +2342,9 @@ fn scroll_area_model() {
     // "a Firefox wheel in lines or pages scrolls as far as one in pixels"
     assert_eq!(
         (
-            wheel_pixels(3.0, 1, 16.0, 200.0),
-            wheel_pixels(1.0, 2, 16.0, 200.0),
-            wheel_pixels(53.0, 0, 16.0, 200.0)
+            wheel_pixels(3.0, WheelUnit::Lines, 16.0, 200.0),
+            wheel_pixels(1.0, WheelUnit::Pages, 16.0, 200.0),
+            wheel_pixels(53.0, WheelUnit::Pixels, 16.0, 200.0)
         ),
         (48.0, 200.0, 53.0)
     );
@@ -2352,65 +2352,39 @@ fn scroll_area_model() {
     assert!(scrollbar_shown(
         ScrollbarType::Always,
         false,
-        false,
-        false,
-        false
+        Activity::Idle
     ));
-    assert!(scrollbar_shown(
-        ScrollbarType::Auto,
-        true,
-        false,
-        false,
-        false
-    ));
+    assert!(scrollbar_shown(ScrollbarType::Auto, true, Activity::Idle));
+    assert!(!scrollbar_shown(ScrollbarType::Auto, false, Activity::Idle));
     assert!(!scrollbar_shown(
-        ScrollbarType::Auto,
-        false,
-        false,
-        false,
-        false
+        ScrollbarType::Scroll,
+        true,
+        Activity::Idle
     ));
     assert!(!scrollbar_shown(
         ScrollbarType::Scroll,
         true,
-        false,
-        false,
-        false
-    ));
-    assert!(!scrollbar_shown(
-        ScrollbarType::Scroll,
-        true,
-        true,
-        false,
-        false
+        Activity::Hovering
     ));
     assert!(scrollbar_shown(
         ScrollbarType::Scroll,
         true,
-        false,
-        true,
-        false
+        Activity::Moving
     ));
     assert!(scrollbar_shown(
         ScrollbarType::Scroll,
         true,
-        false,
-        false,
-        true
+        Activity::Moving
     ));
     assert!(scrollbar_shown(
         ScrollbarType::Hover,
         true,
-        true,
-        false,
-        false
+        Activity::Hovering
     ));
     assert!(!scrollbar_shown(
         ScrollbarType::Hover,
         false,
-        true,
-        false,
-        false
+        Activity::Hovering
     ));
     // sticking to the end
     assert!(!follows_end(true, -40.0, 40.0));
