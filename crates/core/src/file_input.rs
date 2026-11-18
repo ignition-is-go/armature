@@ -110,7 +110,10 @@ impl FileInput {
     }
 
     fn commit(&mut self, files: Vec<FileInfo>, source: Source, reason: Reason, gate: Gate) -> bool {
+        // The same names are the same value, so there is nothing to ask. The files
+        // are still kept, since one offered again may differ under its name.
         if Self::written(&files) == Self::written(&self.files) {
+            self.files = files;
             return true;
         }
         let allowed = gate(&ValueChange {
@@ -380,6 +383,21 @@ mod tests {
             max_size: Some(1000),
             max_files: Some(2),
         })
+    }
+
+    #[test]
+    fn a_file_offered_again_replaces_the_one_of_the_same_name() {
+        let mut input = images();
+        for size in [10, 20] {
+            input.send(
+                Input::Files {
+                    files: vec![file("a.png", "image/png", size)],
+                    dropped: false,
+                },
+                &mut |_| true,
+            );
+        }
+        assert_eq!(input.files(), [file("a.png", "image/png", 20)]);
     }
 
     #[test]
