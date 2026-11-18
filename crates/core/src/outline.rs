@@ -16,10 +16,15 @@ pub struct Place {
     pub position: usize,
 }
 
+/// How deep the row at `index` sits. A row that is not there is at the top level.
+fn row_depth(rows: &[OutlineRow], index: usize) -> usize {
+    rows.get(index).map_or(0, |row| row.depth)
+}
+
 /// The index just past a row and everything under it.
 #[must_use]
 pub fn subtree_end(rows: &[OutlineRow], index: usize) -> usize {
-    let depth = rows[index].depth;
+    let depth = row_depth(rows, index);
     rows.get(index.saturating_add(1)..)
         .unwrap_or_default()
         .iter()
@@ -32,7 +37,7 @@ pub fn subtree_end(rows: &[OutlineRow], index: usize) -> usize {
 /// The parent of the row at `index` and its place among that parent's children.
 #[must_use]
 pub fn place_of(rows: &[OutlineRow], index: usize) -> Place {
-    let depth = rows[index].depth;
+    let depth = row_depth(rows, index);
     let parent = rows
         .get(..index)
         .unwrap_or_default()
@@ -76,7 +81,7 @@ pub fn moved_rows(
 ) -> Option<Vec<OutlineRow>> {
     let from = rows.iter().position(|row| row.key == key)?;
     let end = subtree_end(rows, from);
-    let was = rows[from].depth;
+    let was = row_depth(rows, from);
     let block: Vec<OutlineRow> = if depth >= was {
         rows.get(from..end)
             .unwrap_or_default()
@@ -128,7 +133,10 @@ pub struct Landing {
 fn landing(rows: Vec<OutlineRow>, key: &str) -> Option<Landing> {
     let at = rows.iter().position(|row| row.key == key)?;
     let place = place_of(&rows, at);
-    let parent = place.parent.map(|parent| rows[parent].key.clone());
+    let parent = place
+        .parent
+        .and_then(|parent| rows.get(parent))
+        .map(|row| row.key.clone());
     Some(Landing {
         key: key.to_string(),
         parent,
@@ -146,7 +154,7 @@ fn block_max_depth(rows: &[OutlineRow], from: usize, max_depth: Option<usize>) -
         .map(|row| row.depth)
         .max()
         .unwrap_or(0)
-        .saturating_sub(block[0].depth);
+        .saturating_sub(block.first().map_or(0, |row| row.depth));
     max_depth.map(|max| max.saturating_sub(below))
 }
 
@@ -173,7 +181,7 @@ pub fn move_row(
         None => rest.len(),
         Some(before) => rest.iter().position(|row| row.key == before)?,
     };
-    let above = at.checked_sub(1).map(|above| rest[above]);
+    let above = at.checked_sub(1).and_then(|above| rest.get(above).copied());
     let (min, max) = depth_range(
         above,
         rest.get(at).copied(),
@@ -212,7 +220,7 @@ impl OutlineMove {
             key: key.to_string(),
             keys,
             rows: rows.to_vec(),
-            aim: rows[at].depth,
+            aim: row_depth(rows, at),
             max_depth,
         })
     }
@@ -255,7 +263,9 @@ impl OutlineMove {
     pub fn place(&mut self, slot: usize, depth: usize, shown: &dyn Fn(&str) -> bool) -> bool {
         let (others, _) = self.others(shown);
         let to = slot.min(others.len());
-        let above = to.checked_sub(1).map(|above| others[above]);
+        let above = to
+            .checked_sub(1)
+            .and_then(|above| others.get(above).copied());
         let (min, max) = depth_range(
             above,
             others.get(to).copied(),
@@ -296,7 +306,7 @@ impl OutlineMove {
     /// Takes it in a level or out one, as far as the rows around it allow.
     pub fn indent(&mut self, inward: bool, shown: &dyn Fn(&str) -> bool) -> bool {
         let (_, slot) = self.others(shown);
-        let depth = self.rows[self.at()].depth;
+        let depth = row_depth(&self.rows, self.at());
         let wanted = if inward {
             depth.saturating_add(1)
         } else {
@@ -304,7 +314,7 @@ impl OutlineMove {
         };
         let moved = self.place(slot, wanted, shown);
         if moved {
-            self.aim = self.rows[self.at()].depth;
+            self.aim = row_depth(&self.rows, self.at());
         }
         moved
     }

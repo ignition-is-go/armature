@@ -53,9 +53,14 @@ impl TransferList {
     }
 
     /// The keys in the available list (`false`) or the chosen one (`true`), in order.
+    /// One of the two lists: 0 for what is available, 1 for what is chosen.
+    fn side(&self, side: usize) -> &[String] {
+        self.lists.get(side).map_or(&[], Vec::as_slice)
+    }
+
     #[must_use]
     pub fn list(&self, chosen: bool) -> &[String] {
-        &self.lists[usize::from(chosen)]
+        self.side(usize::from(chosen))
     }
 
     fn side_of(&self, key: &str) -> Option<usize> {
@@ -82,7 +87,8 @@ impl TransferList {
         gate: Gate,
     ) -> Option<Reaction<Part>> {
         let from = 1 - to;
-        let moving: Vec<String> = self.lists[from]
+        let moving: Vec<String> = self
+            .side(from)
             .iter()
             .filter(|key| keys.contains(key))
             .cloned()
@@ -90,7 +96,8 @@ impl TransferList {
         if moving.is_empty() {
             return Some(Reaction::handled());
         }
-        let first = self.lists[from]
+        let first = self
+            .side(from)
             .iter()
             .position(|key| moving.contains(key))
             .unwrap_or(0);
@@ -105,10 +112,10 @@ impl TransferList {
         }
         self.lists = lists;
         self.selected.retain(|key| !moving.contains(key));
-        let stay = &self.lists[from];
+        let stay = self.side(from);
         let landing = stay
             .get(first.min(stay.len().saturating_sub(1)))
-            .or_else(|| self.lists[to].last())
+            .or_else(|| self.side(to).last())
             .cloned();
         self.focused.clone_from(&landing);
         let destination = if to == 1 { "chosen" } else { "available" };
@@ -131,7 +138,7 @@ impl TransferList {
     }
 
     fn tab_stop(&self, side: usize) -> Option<&str> {
-        let list = &self.lists[side];
+        let list = self.side(side);
         self.focused
             .as_deref()
             .filter(|key| list.iter().any(|k| k == key))
@@ -260,7 +267,7 @@ impl Primitive for TransferList {
                 let Some(side) = self.side_of(&key) else {
                     return Reaction::default();
                 };
-                let order: Vec<&str> = self.lists[side].iter().map(String::as_str).collect();
+                let order: Vec<&str> = self.side(side).iter().map(String::as_str).collect();
                 // A range never reaches across into the other list.
                 let anchor = self
                     .anchor
@@ -308,10 +315,10 @@ impl Primitive for TransferList {
                     Key::End => Nav::Last,
                     _ => return Reaction::default(),
                 };
-                let list = &self.lists[side];
+                let list = self.side(side);
                 let at = list.iter().position(|k| *k == focused);
                 let target = roving::step(&vec![true; list.len()], at, nav, false)
-                    .map(|index| list[index].clone());
+                    .and_then(|index| list.get(index).cloned());
                 if let Some(key) = &target {
                     self.focused = Some(key.clone());
                 }
