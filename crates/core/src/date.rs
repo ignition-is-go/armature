@@ -262,13 +262,19 @@ const WEEKDAYS: [&str; 7] = [
 /// A month's English name, counting from 1. Other languages are the host's to supply.
 #[must_use]
 pub fn month_name(month: u8) -> &'static str {
-    MONTHS[(month.clamp(1, 12).saturating_sub(1)).cast::<usize>()]
+    MONTHS
+        .get((month.clamp(1, 12).saturating_sub(1)).cast::<usize>())
+        .copied()
+        .unwrap_or_default()
 }
 
 /// A weekday's English name, with Sunday as 0.
 #[must_use]
 pub fn weekday_name(weekday: u8) -> &'static str {
-    WEEKDAYS[(weekday % 7).cast::<usize>()]
+    WEEKDAYS
+        .get((weekday % 7).cast::<usize>())
+        .copied()
+        .unwrap_or_default()
 }
 
 /// The day a week starts on where a language is spoken, with Sunday as 0. It is

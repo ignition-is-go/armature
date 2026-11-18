@@ -102,7 +102,11 @@ impl TriggerMenu {
             .text
             .get(start.saturating_add(written.len_utf8())..)
             .unwrap_or_default();
-        (self.dismissed != Some(start)).then_some((start, self.triggers[found.rule], typed))
+        (self.dismissed != Some(start)).then_some((
+            start,
+            self.triggers.get(found.rule).copied().unwrap_or_default(),
+            typed,
+        ))
     }
 
     #[must_use]

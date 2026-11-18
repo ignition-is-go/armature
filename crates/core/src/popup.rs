@@ -147,8 +147,14 @@ pub fn bridges(trigger: Rect, popup: Rect, padding: f64, point: Point) -> bool {
         for point in points {
             while chain.len() >= 2
                 && cross(
-                    chain[chain.len().saturating_sub(2)],
-                    chain[chain.len().saturating_sub(1)],
+                    chain
+                        .get(chain.len().saturating_sub(2))
+                        .copied()
+                        .unwrap_or_default(),
+                    chain
+                        .get(chain.len().saturating_sub(1))
+                        .copied()
+                        .unwrap_or_default(),
                     point,
                 ) <= 0.0
             {
@@ -163,7 +169,7 @@ pub fn bridges(trigger: Rect, popup: Rect, padding: f64, point: Point) -> bool {
     hull.extend(half(&mut corners.iter().rev().copied()));
     (0..hull.len()).all(|at| {
         cross(
-            hull[at],
+            hull.get(at).copied().unwrap_or_default(),
             hull[(at.saturating_add(1))
                 .checked_rem(hull.len())
                 .unwrap_or_default()],

@@ -52,7 +52,7 @@ impl Typeahead {
                     .unwrap_or_default()
             })
             .find(|i| {
-                let (label, enabled) = items[*i];
+                let (label, enabled) = items.get(*i).copied().unwrap_or_default();
                 enabled && folded(label).starts_with(&needle)
             })
     }

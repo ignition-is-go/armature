@@ -73,7 +73,7 @@ impl Picker {
     fn nearest_enabled(&self, index: usize) -> Option<String> {
         let enabled = self.items.enabled();
         let near = (0..enabled.len())
-            .filter(|at| enabled[*at])
+            .filter(|at| enabled.get(*at).copied().unwrap_or_default())
             .min_by_key(|at| at.abs_diff(index))?;
         Some(self.items.key_at(near))
     }
@@ -119,7 +119,10 @@ impl Picker {
             None => 0,
         };
         self.choose(
-            Some(self.items.key_at(enabled[next])),
+            Some(
+                self.items
+                    .key_at(enabled.get(next).copied().unwrap_or_default()),
+            ),
             Source::User,
             Reason::Keyboard,
             gate,

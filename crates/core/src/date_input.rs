@@ -129,7 +129,7 @@ impl DateInput {
     /// Whether a complete date lies outside the earliest and latest taken.
     #[must_use]
     pub fn out_of_range(&self, fields: &[Option<u32>; 6]) -> bool {
-        let get = |segment: Segment| fields[segment.index()];
+        let get = |segment: Segment| fields.get(segment.index()).copied().unwrap_or_default();
         let (Some(year), Some(month), Some(day)) =
             (get(Segment::Year), get(Segment::Month), get(Segment::Day))
         else {
@@ -176,7 +176,7 @@ impl DateInput {
             Segment::Hour if self.twelve => {
                 self.fields[3].map(|hour| if hour % 12 == 0 { 12 } else { hour % 12 })
             }
-            other => self.fields[other.index()],
+            other => self.fields.get(other.index()).copied().unwrap_or_default(),
         }
     }
 
@@ -203,7 +203,7 @@ impl DateInput {
     }
 
     fn written(&self, fields: &[Option<u32>; 6]) -> Vec<String> {
-        let get = |segment: Segment| fields[segment.index()];
+        let get = |segment: Segment| fields.get(segment.index()).copied().unwrap_or_default();
         let (Some(year), Some(month), Some(day)) =
             (get(Segment::Year), get(Segment::Month), get(Segment::Day))
         else {
@@ -250,7 +250,11 @@ impl DateInput {
             ..self.clone()
         };
         let (_, longest) = trial.limits(Segment::Day);
-        fields[Segment::Day.index()] = fields[Segment::Day.index()].map(|day| day.min(longest));
+        fields[Segment::Day.index()] = fields
+            .get(Segment::Day.index())
+            .copied()
+            .unwrap_or_default()
+            .map(|day| day.min(longest));
         // A date outside the limits is kept on screen to be corrected, but is not a value.
         let after = if self.out_of_range(&fields) {
             Vec::new()

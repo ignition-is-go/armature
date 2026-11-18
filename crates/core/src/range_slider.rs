@@ -85,9 +85,9 @@ impl RangeSlider {
     /// The least and most a grip may hold, given its neighbours.
     fn limits(&self, at: usize) -> (f64, f64) {
         let gap = self.opts.min_steps_between * self.opts.range.step;
-        let low = at
-            .checked_sub(1)
-            .map_or(self.opts.range.min, |before| self.values[before] + gap);
+        let low = at.checked_sub(1).map_or(self.opts.range.min, |before| {
+            self.values.get(before).copied().unwrap_or_default() + gap
+        });
         let high = self
             .values
             .get(at.saturating_add(1))
@@ -105,7 +105,7 @@ impl RangeSlider {
         }
         let (low, high) = self.limits(at);
         let value = self.opts.range.snap(value).clamp(low, high);
-        if value == self.values[at] {
+        if value == self.values.get(at).copied().unwrap_or_default() {
             return true;
         }
         let mut next = self.values.clone();
@@ -178,7 +178,7 @@ impl Primitive for RangeSlider {
                 Semantics {
                     role: Some(Role::Slider),
                     range: Some(ValueRange {
-                        now: self.values[at],
+                        now: self.values.get(at).copied().unwrap_or_default(),
                         min,
                         max,
                     }),
@@ -254,15 +254,19 @@ impl Primitive for RangeSlider {
                 };
                 // Where grips sit on top of one another, a press beyond them takes the
                 // last of the stack and a press before them the first.
-                let distance = |at: usize| (self.values[at] - value).abs();
+                let distance =
+                    |at: usize| (self.values.get(at).copied().unwrap_or_default() - value).abs();
                 let nearest =
                     (0..self.values.len()).min_by(|a, b| distance(*a).total_cmp(&distance(*b)));
                 let nearest = nearest.map(|first| {
                     let stack = (first..self.values.len())
-                        .take_while(|at| self.values[*at] == self.values[first])
+                        .take_while(|at| {
+                            self.values.get(*at).copied().unwrap_or_default()
+                                == self.values.get(first).copied().unwrap_or_default()
+                        })
                         .last()
                         .unwrap_or(first);
-                    if value > self.values[first] {
+                    if value > self.values.get(first).copied().unwrap_or_default() {
                         stack
                     } else {
                         first

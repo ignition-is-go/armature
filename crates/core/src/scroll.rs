@@ -44,7 +44,11 @@ impl Virtualizer {
     }
 
     fn size(&self, index: usize) -> f64 {
-        self.measured[index].unwrap_or(self.estimate)
+        self.measured
+            .get(index)
+            .copied()
+            .unwrap_or_default()
+            .unwrap_or(self.estimate)
     }
 
     /// Where row `index` starts.

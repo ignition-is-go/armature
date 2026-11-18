@@ -54,7 +54,7 @@ pub fn step(enabled: &[bool], current: Option<usize>, nav: Nav, wrap: bool) -> O
         (Nav::First, _) | (Nav::Next, None) => first(),
         (Nav::Last, _) | (Nav::Prev, None) => last(),
         (Nav::Next, Some(cur)) => (cur.saturating_add(1)..n)
-            .find(|i| enabled[*i])
+            .find(|i| enabled.get(*i).copied().unwrap_or_default())
             .or_else(|| {
                 if wrap {
                     first().filter(|i| *i != cur)
@@ -62,13 +62,16 @@ pub fn step(enabled: &[bool], current: Option<usize>, nav: Nav, wrap: bool) -> O
                     None
                 }
             }),
-        (Nav::Prev, Some(cur)) => (0..cur.min(n)).rev().find(|i| enabled[*i]).or_else(|| {
-            if wrap {
-                last().filter(|i| *i != cur)
-            } else {
-                None
-            }
-        }),
+        (Nav::Prev, Some(cur)) => (0..cur.min(n))
+            .rev()
+            .find(|i| enabled.get(*i).copied().unwrap_or_default())
+            .or_else(|| {
+                if wrap {
+                    last().filter(|i| *i != cur)
+                } else {
+                    None
+                }
+            }),
     }
 }
 

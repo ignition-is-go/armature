@@ -176,7 +176,10 @@ pub fn expand_amount(extent: f64, heights: &[f64]) -> f64 {
         return 0.0;
     };
     let lower = if heights.len() > 1 {
-        heights[heights.len().saturating_sub(2)]
+        heights
+            .get(heights.len().saturating_sub(2))
+            .copied()
+            .unwrap_or_default()
     } else {
         0.0
     };

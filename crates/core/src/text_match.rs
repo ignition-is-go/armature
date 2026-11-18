@@ -13,7 +13,7 @@ pub fn match_ranges(query: &str, text: &str) -> Option<Vec<Range<usize>>> {
 
     let mut ranges: Vec<Range<usize>> = Vec::new();
     for index in matched {
-        let (start, ch) = chars[index];
+        let (start, ch) = chars.get(index).copied().unwrap_or_default();
         let end = start.saturating_add(ch.len_utf8());
         match ranges.last_mut() {
             Some(last) if last.end == start => last.end = end,
@@ -39,8 +39,14 @@ pub fn fuzzy_score(query: &str, text: &str) -> Option<u32> {
     if haystack == needle {
         return Some(1000);
     }
-    let starts_word =
-        |index: usize| index == 0 || !haystack[index.saturating_sub(1)].is_alphanumeric();
+    let starts_word = |index: usize| {
+        index == 0
+            || !haystack
+                .get(index.saturating_sub(1))
+                .copied()
+                .unwrap_or_default()
+                .is_alphanumeric()
+    };
     let found_at = |from: usize| {
         (from..haystack
             .len()
@@ -64,7 +70,8 @@ pub fn fuzzy_score(query: &str, text: &str) -> Option<u32> {
     // The letters in order, anywhere. Spaces in the query only separate words.
     let (mut position, mut previous, mut bonus, mut letters) = (0, None, 0u32, 0u32);
     for ch in needle.iter().filter(|ch| **ch != ' ') {
-        let found = (position..haystack.len()).find(|at| haystack[*at] == *ch)?;
+        let found = (position..haystack.len())
+            .find(|at| haystack.get(*at).copied().unwrap_or_default() == *ch)?;
         letters = letters.saturating_add(1);
         bonus = bonus.saturating_add((u32::from(starts_word(found))).saturating_add(u32::from(
             previous.is_some_and(|previous: usize| found == previous.saturating_add(1)),
@@ -129,8 +136,15 @@ fn substring(query: &[char], chars: &[(usize, char)]) -> Option<Vec<usize>> {
             .zip(chars.get(*start..).unwrap_or_default())
             .all(|(q, (_, c))| same(*q, *c))
     };
-    let at_word =
-        |start: &usize| *start == 0 || !chars[start.saturating_sub(1)].1.is_alphanumeric();
+    let at_word = |start: &usize| {
+        *start == 0
+            || !chars
+                .get(start.saturating_sub(1))
+                .copied()
+                .unwrap_or_default()
+                .1
+                .is_alphanumeric()
+    };
     let start = starts
         .clone()
         .filter(matches_at)

@@ -151,7 +151,7 @@ impl PanelGroup {
     pub fn is_collapsed(&self, panel: usize) -> bool {
         self.panels.get(panel).is_some_and(|limits| {
             limits.collapsible
-                && self.sizes[panel] <= limits.collapsed + 1e-6
+                && self.sizes.get(panel).copied().unwrap_or_default() <= limits.collapsed + 1e-6
                 && limits.collapsed < limits.min
         })
     }
@@ -273,7 +273,7 @@ impl Primitive for PanelGroup {
                 Semantics {
                     role: Some(Role::Separator),
                     range: Some(ValueRange {
-                        now: self.sizes[at],
+                        now: self.sizes.get(at).copied().unwrap_or_default(),
                         min: least,
                         max: most,
                     }),
@@ -329,7 +329,7 @@ impl Primitive for PanelGroup {
                         let Some(panel) = toggle_target(&self.panels, self.focused) else {
                             return Reaction::default();
                         };
-                        let limits = self.panels[panel];
+                        let limits = self.panels.get(panel).copied().unwrap_or_default();
                         let target = if self.is_collapsed(panel) {
                             limits.min
                         } else {
@@ -436,7 +436,12 @@ impl Primitive for PanelGroup {
         let (at, share) = parsed
             .filter(|(at, _)| at.saturating_add(1) < self.sizes.len())
             .ok_or_else(|| ActError::UnknownItem(given.to_string()))?;
-        let next = self.moved(&self.sizes, at, share - self.sizes[at], 1.0);
+        let next = self.moved(
+            &self.sizes,
+            at,
+            share - self.sizes.get(at).copied().unwrap_or_default(),
+            1.0,
+        );
         if self.commit(next, Source::Agent, Reason::Action, gate) {
             Ok(())
         } else {

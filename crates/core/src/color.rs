@@ -328,7 +328,12 @@ impl Rgb {
                 f64::mul_add(24389.0 / 27.0, t, 16.0) / 116.0
             }
         };
-        let [fx, fy, fz] = [0, 1, 2].map(|at| curve(adapted[at] / white[at]));
+        let [fx, fy, fz] = [0, 1, 2].map(|at| {
+            curve(
+                adapted.get(at).copied().unwrap_or_default()
+                    / white.get(at).copied().unwrap_or_default(),
+            )
+        });
         (
             116.0f64.mul_add(fy, -16.0),
             500.0 * (fx - fy),
@@ -424,9 +429,9 @@ impl Rgb {
             let n = numbers(body);
             return (n.len() >= 3).then(|| {
                 Self::new(
-                    (n[0].clamp(0.0, 255.0)).cast::<u8>(),
-                    (n[1].clamp(0.0, 255.0)).cast::<u8>(),
-                    (n[2].clamp(0.0, 255.0)).cast::<u8>(),
+                    (n.get(0).copied().unwrap_or_default().clamp(0.0, 255.0)).cast::<u8>(),
+                    (n.get(1).copied().unwrap_or_default().clamp(0.0, 255.0)).cast::<u8>(),
+                    (n.get(2).copied().unwrap_or_default().clamp(0.0, 255.0)).cast::<u8>(),
                 )
             });
         }
@@ -434,9 +439,9 @@ impl Rgb {
             let n = numbers(body);
             return (n.len() >= 3).then(|| {
                 Hsl {
-                    h: n[0].rem_euclid(360.0),
-                    s: (n[1] / 100.0).clamp(0.0, 1.0),
-                    l: (n[2] / 100.0).clamp(0.0, 1.0),
+                    h: n.get(0).copied().unwrap_or_default().rem_euclid(360.0),
+                    s: (n.get(1).copied().unwrap_or_default() / 100.0).clamp(0.0, 1.0),
+                    l: (n.get(2).copied().unwrap_or_default() / 100.0).clamp(0.0, 1.0),
                 }
                 .to_rgb()
             });
@@ -528,9 +533,9 @@ impl P3 {
             .filter_map(|part| part.parse().ok())
             .collect();
         (parts.len() >= 3).then(|| Self {
-            r: parts[0],
-            g: parts[1],
-            b: parts[2],
+            r: parts.get(0).copied().unwrap_or_default(),
+            g: parts.get(1).copied().unwrap_or_default(),
+            b: parts.get(2).copied().unwrap_or_default(),
         })
     }
 

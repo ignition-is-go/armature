@@ -81,14 +81,17 @@ pub fn format_labels(labels: &[&str], most: usize) -> String {
     let rest = labels.len().saturating_sub(shown.len());
     match (shown, rest) {
         ([], _) => String::new(),
-        (shown, 0) if shown.len() == 1 => shown[0].to_string(),
+        (shown, 0) if shown.len() == 1 => shown.get(0).copied().unwrap_or_default().to_string(),
         (shown, 0) => format!(
             "{} and {}",
             shown
                 .get(..shown.len().saturating_sub(1))
                 .unwrap_or_default()
                 .join(", "),
-            shown[shown.len().saturating_sub(1)]
+            shown
+                .get(shown.len().saturating_sub(1))
+                .copied()
+                .unwrap_or_default()
         ),
         (shown, rest) => format!("{} and {rest} more", shown.join(", ")),
     }

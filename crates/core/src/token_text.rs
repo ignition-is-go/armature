@@ -432,9 +432,14 @@ pub fn from_text(text: &str) -> Vec<Segment> {
     let mut plain = String::new();
     let mut index = 0;
     while index < chars.len() {
-        let Some(bracket) = (index..chars.len().saturating_sub(1))
-            .find(|at| chars[*at] == '[' && chars[(*at).saturating_add(1)] == '@')
-        else {
+        let Some(bracket) = (index..chars.len().saturating_sub(1)).find(|at| {
+            chars.get(*at).copied().unwrap_or_default() == '['
+                && chars
+                    .get((*at).saturating_add(1))
+                    .copied()
+                    .unwrap_or_default()
+                    == '@'
+        }) else {
             break;
         };
         let slashes = chars

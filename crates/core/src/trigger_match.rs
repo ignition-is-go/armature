@@ -138,7 +138,10 @@ pub fn is_at_boundary(text: &[char], index: usize, offset: usize, boundary: Boun
     if boundary == Boundary::Start || index == 0 {
         return false;
     }
-    let before = text[index.saturating_sub(1)];
+    let before = text
+        .get(index.saturating_sub(1))
+        .copied()
+        .unwrap_or_default();
     match boundary {
         Boundary::Line => before == '\n',
         _ => before.is_whitespace() || matches!(before, '(' | '[' | '{' | '"' | '\'' | '\u{FFFC}'),
@@ -200,7 +203,7 @@ pub fn find_trigger_match(
                 });
             }
         }
-        let ch = source[index];
+        let ch = source.get(index).copied().unwrap_or_default();
         let continues = rules.iter().any(|rule| {
             rule.trigger.contains(ch)
                 || (ch == ' ' && rule.spaces != Spaces::None)

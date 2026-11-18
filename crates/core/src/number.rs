@@ -268,7 +268,7 @@ pub fn format_file_size(bytes: u64) -> String {
         format!(
             "{} {}",
             format_number(size, usize::from(size < 10.0)),
-            UNITS[unit]
+            UNITS.get(unit).copied().unwrap_or_default()
         )
     }
 }

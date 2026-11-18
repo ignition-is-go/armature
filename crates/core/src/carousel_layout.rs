@@ -65,7 +65,9 @@ pub fn group_slides(slides: &[SlideBox], snapport: f64, per_page: PerPage) -> Ve
         PerPage::Auto => {
             for (index, slide) in slides.iter().enumerate() {
                 let fits = groups.last().is_some_and(|group| {
-                    slide.start + slide.size - slides[group[0]].start <= snapport + 0.5
+                    slide.start + slide.size
+                        - slides[group.get(0).copied().unwrap_or_default()].start
+                        <= snapport + 0.5
                 });
                 match groups.last_mut().filter(|_| fits) {
                     Some(group) => group.push(index),
@@ -93,12 +95,18 @@ fn page_of(
     snapport: f64,
     padding_start: f64,
 ) -> Page {
-    let (first, last) = (boxes[group[0]], boxes[group[group.len().saturating_sub(1)]]);
+    let (first, last) = (
+        boxes[group.get(0).copied().unwrap_or_default()],
+        boxes[group
+            .get(group.len().saturating_sub(1))
+            .copied()
+            .unwrap_or_default()],
+    );
     let margin = align_offset(align, snapport, last.start + last.size - first.start);
     Page {
         slides: group.to_vec(),
         position: first.start - margin - padding_start,
-        leader: group[0],
+        leader: group.get(0).copied().unwrap_or_default(),
         margin,
     }
 }
@@ -133,7 +141,10 @@ pub fn carousel_pages(geometry: &Geometry, align: Align, per_page: PerPage) -> V
 pub fn nearest_page(positions: &[f64], position: f64) -> Option<usize> {
     let mut best: Option<usize> = None;
     for (index, at) in positions.iter().enumerate() {
-        if best.is_none_or(|best| (at - position).abs() < (positions[best] - position).abs()) {
+        if best.is_none_or(|best| {
+            (at - position).abs()
+                < (positions.get(best).copied().unwrap_or_default() - position).abs()
+        }) {
             best = Some(index);
         }
     }
@@ -201,9 +212,9 @@ pub fn place_slides(track: &Track, first: usize) -> Vec<SlideBox> {
             .unwrap_or_default();
         boxes[index] = SlideBox {
             start: at,
-            size: track.sizes[index],
+            size: track.sizes.get(index).copied().unwrap_or_default(),
         };
-        at += track.sizes[index] + track.gap;
+        at += track.sizes.get(index).copied().unwrap_or_default() + track.gap;
     }
     boxes
 }
@@ -321,7 +332,10 @@ pub fn loop_rotation(
     let anchor = anchor_slide(&now, at.position + view.padding_start, at.first);
     // The track can start at any page's first slide. Where it starts now is
     // tried first, so it wins a tie.
-    let mut starts: Vec<usize> = groups.iter().map(|group| group[0]).collect();
+    let mut starts: Vec<usize> = groups
+        .iter()
+        .map(|group| group.get(0).copied().unwrap_or_default())
+        .collect();
     if starts.contains(&at.first) {
         starts.insert(0, at.first);
     }

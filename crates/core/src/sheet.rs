@@ -128,7 +128,7 @@ impl Sheet {
         }
         match (self.grabbed, self.at) {
             (Some(_), _) => self.height,
-            (None, Some(at)) => self.detents[at],
+            (None, Some(at)) => self.detents.get(at).copied().unwrap_or_default(),
             (None, None) => 0.0,
         }
     }
@@ -225,7 +225,10 @@ impl Primitive for Sheet {
     }
 
     fn wanted_scroll(&self) -> Option<f64> {
-        Some(self.at.map_or(0.0, |at| self.detents[at]))
+        Some(
+            self.at
+                .map_or(0.0, |at| self.detents.get(at).copied().unwrap_or_default()),
+        )
     }
 
     fn relations(part: Part) -> Relations<Part> {
@@ -309,9 +312,10 @@ impl Primitive for Sheet {
             }
             // Scrolling carries the sheet. Each movement puts the settling off again.
             (Input::Scrolled { offset, now_ms, .. }, Some(at)) => {
-                let moved = self
-                    .scrolled
-                    .map_or(offset != self.detents[at], |(was, _)| was != offset);
+                let moved = self.scrolled.map_or(
+                    offset != self.detents.get(at).copied().unwrap_or_default(),
+                    |(was, _)| was != offset,
+                );
                 if !moved {
                     return Reaction::default();
                 }
@@ -328,7 +332,10 @@ impl Primitive for Sheet {
                 let landing = self.landing(offset, 0.0);
                 let settled = self.settle(landing, Source::User, Reason::Drag, gate);
                 let rest = Effect::ScrollTo {
-                    offset: self.at.map_or(0.0, |at| self.detents[at]).cast::<u32>(),
+                    offset: self
+                        .at
+                        .map_or(0.0, |at| self.detents.get(at).copied().unwrap_or_default())
+                        .cast::<u32>(),
                 };
                 if settled && landing.is_none() {
                     return Reaction::focusing(Part::Trigger).with(rest);
@@ -409,7 +416,7 @@ impl Primitive for Sheet {
         match (pointer.phase, pointer.part) {
             (PointerPhase::Down, Part::Backdrop) => self.dismiss(Reason::Press, gate),
             (PointerPhase::Down, Part::Handle) => {
-                self.height = self.detents[at];
+                self.height = self.detents.get(at).copied().unwrap_or_default();
                 self.grabbed = Some((self.along(&pointer), self.height));
                 self.speed = VelocityTracker::default();
                 Reaction::focusing(Part::Handle).with(Effect::CapturePointer)
