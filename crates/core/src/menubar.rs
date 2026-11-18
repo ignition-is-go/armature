@@ -52,13 +52,36 @@ impl Menubar {
     #[must_use]
     pub fn shown(&self, menu: &str) -> Vec<&Entry> {
         self.at(menu)
-            .map(|at| self.menus[at].2.shown())
+            .and_then(|at| self.menu_at(at))
+            .map(Menu::shown)
             .unwrap_or_default()
     }
 
     #[must_use]
     pub fn open_menu(&self) -> Option<&str> {
-        self.open.map(|at| self.menus[at].0.as_str())
+        let (key, _, _) = self.menus.get(self.open?)?;
+        Some(key.as_str())
+    }
+
+    fn key_at(&self, at: usize) -> String {
+        self.menus
+            .get(at)
+            .map(|(key, _, _)| key.clone())
+            .unwrap_or_default()
+    }
+
+    fn menu_at(&self, at: usize) -> Option<&Menu> {
+        self.menus.get(at).map(|(_, _, menu)| menu)
+    }
+
+    fn menu_at_mut(&mut self, at: usize) -> Option<&mut Menu> {
+        self.menus.get_mut(at).map(|(_, _, menu)| menu)
+    }
+
+    fn close_menu(&mut self, at: usize) {
+        if let Some(menu) = self.menu_at_mut(at) {
+            menu.act("close", None, &mut |_| true).ok();
+        }
     }
 
     fn at(&self, menu: &str) -> Option<usize> {
@@ -75,8 +98,11 @@ impl Menubar {
     /// Hands an input to one menu, and translates what it answers back to the bar's
     /// own parts and keys.
     fn forward(&mut self, at: usize, input: Input<menu::Part>, gate: Gate) -> Reaction<Part> {
-        let key = self.menus[at].0.clone();
-        let reaction = self.menus[at].2.send(input, &mut |change| {
+        let key = self.key_at(at);
+        let Some(menu) = self.menu_at_mut(at) else {
+            return Reaction::default();
+        };
+        let reaction = menu.send(input, &mut |change| {
             let value = change
                 .value
                 .iter()
@@ -88,7 +114,7 @@ impl Menubar {
                 reason: change.reason,
             })
         });
-        if !self.menus[at].2.is_open() && self.open == Some(at) {
+        if !self.menu_at(at).is_some_and(Menu::is_open) && self.open == Some(at) {
             self.open = None;
         }
         Reaction {
@@ -113,7 +139,7 @@ impl Menubar {
 
     fn open_menu_at(&mut self, at: usize, last: bool, gate: Gate) -> Reaction<Part> {
         if let Some(was) = self.open.filter(|was| *was != at) {
-            self.menus[was].2.act("close", None, &mut |_| true).ok();
+            self.close_menu(was);
         }
         self.open = Some(at);
         self.focused = at;
@@ -219,7 +245,10 @@ impl Primitive for Menubar {
                 hidden: self.open != Some(at),
                 ..Default::default()
             },
-            (Part::Item, Some(at)) => self.menus[at].2.semantics(menu::Part::Item, entry),
+            (Part::Item, Some(at)) => self
+                .menu_at(at)
+                .map(|menu| menu.semantics(menu::Part::Item, entry))
+                .unwrap_or_default(),
             (Part::Trigger, None) => Semantics {
                 role: Some(Role::MenuItem),
                 ..Default::default()
@@ -257,7 +286,7 @@ impl Primitive for Menubar {
                 open,
             ) => match self.at(&key) {
                 Some(at) if open == Some(at) => {
-                    self.menus[at].2.act("close", None, &mut |_| true).ok();
+                    self.close_menu(at);
                     self.open = None;
                     Reaction::handled()
                 }
@@ -319,11 +348,7 @@ impl Primitive for Menubar {
             }
             (Input::Key { key, .. }, None) if key == forward || key == back => {
                 self.focused = self.neighbour(key == forward);
-                Reaction::item(
-                    Part::Trigger,
-                    true,
-                    Some(self.menus[self.focused].0.clone()),
-                )
+                Reaction::item(Part::Trigger, true, Some(self.key_at(self.focused)))
             }
             (
                 Input::Key {
@@ -349,7 +374,7 @@ impl Primitive for Menubar {
                 reaction
             }
             (Input::PressOutside | Input::WindowBlur | Input::Blur { .. }, Some(at)) => {
-                self.menus[at].2.act("close", None, &mut |_| true).ok();
+                self.close_menu(at);
                 self.open = None;
                 Reaction::default()
             }
@@ -407,8 +432,9 @@ impl Primitive for Menubar {
     fn act(&mut self, action: &str, item: Option<&str>, gate: Gate) -> Result<(), ActError> {
         let action: &'static str = match action {
             "close" => {
-                if let Some(at) = self.open.take() {
-                    self.menus[at].2.act("close", None, &mut |_| true)?;
+                let open = self.open.take();
+                if let Some(menu) = open.and_then(|at| self.menu_at_mut(at)) {
+                    menu.act("close", None, &mut |_| true)?;
                 }
                 return Ok(());
             }
@@ -431,8 +457,11 @@ impl Primitive for Menubar {
             self.open_menu_at(at, false, gate);
             return Ok(());
         }
-        let key = self.menus[at].0.clone();
-        self.menus[at].2.act(action, entry, &mut |change| {
+        let key = self.key_at(at);
+        let Some(menu) = self.menu_at_mut(at) else {
+            return Err(ActError::UnknownItem(key));
+        };
+        menu.act(action, entry, &mut |change| {
             let value = change
                 .value
                 .iter()
