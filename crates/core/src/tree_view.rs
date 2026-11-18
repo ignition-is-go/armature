@@ -234,8 +234,8 @@ impl TreeView {
     /// The slot and depth a node currently occupies among the other rows.
     fn place_of(&self, key: &str) -> Option<(usize, usize)> {
         let rows = self.rows();
-        let at = rows.iter().position(|row| row.key == key)?;
-        Some((at, rows[at].level))
+        let (at, row) = rows.iter().enumerate().find(|(_, row)| row.key == key)?;
+        Some((at, row.level))
     }
 
     /// The depth allowed at `slot`, as near to `wanted` as the rows around it permit.
@@ -343,13 +343,17 @@ impl TreeView {
         } else {
             (Key::ArrowRight, Key::ArrowLeft)
         };
+        let Some(row) = rows.get(at) else {
+            return Reaction::default();
+        };
+        let below = rows.get(at.saturating_add(1)..).unwrap_or_default();
         match key {
             Key::ArrowDown => {
-                let next = enabled_from(&mut rows[at.saturating_add(1)..].iter());
+                let next = enabled_from(&mut below.iter());
                 self.move_to(next)
             }
             Key::ArrowUp => {
-                let previous = enabled_from(&mut rows[..at].iter().rev());
+                let previous = enabled_from(&mut rows.iter().take(at).rev());
                 self.move_to(previous)
             }
             Key::Home => {
@@ -361,13 +365,10 @@ impl TreeView {
                 self.move_to(last)
             }
             // On a closed branch this opens it; on an open one it steps into it.
-            k if k == open_key && rows[at].has_children => {
-                if rows[at].expanded {
-                    let child = enabled_from(
-                        &mut rows[at.saturating_add(1)..]
-                            .iter()
-                            .take_while(|row| row.level > rows[at].level),
-                    );
+            k if k == open_key && row.has_children => {
+                if row.expanded {
+                    let child =
+                        enabled_from(&mut below.iter().take_while(|under| under.level > row.level));
                     self.move_to(child)
                 } else {
                     self.open_node(&current, gate);
@@ -376,7 +377,7 @@ impl TreeView {
             }
             // On an open branch this closes it; otherwise it steps out to the parent.
             k if k == close_key => {
-                if rows[at].expanded {
+                if row.expanded {
                     self.expanded.remove(&current);
                     Reaction::handled()
                 } else {
@@ -398,7 +399,8 @@ impl TreeView {
                 let target = self
                     .typeahead
                     .push(ch, now_ms, &candidates, Some(at))
-                    .map(|index| rows[index].key.clone());
+                    .and_then(|index| rows.get(index))
+                    .map(|row| row.key.clone());
                 let found = target.is_some();
                 Reaction {
                     handled: found,

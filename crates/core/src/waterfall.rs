@@ -287,6 +287,9 @@ impl Primitive for Waterfall {
                     return Reaction::default();
                 };
                 let at = rows.iter().position(|row| row.key == current).unwrap_or(0);
+                let Some(row) = rows.get(at) else {
+                    return Reaction::default();
+                };
                 let (open, close) = if self.dir == Dir::Rtl {
                     (Key::ArrowLeft, Key::ArrowRight)
                 } else {
@@ -296,19 +299,22 @@ impl Primitive for Waterfall {
                     Key::ArrowDown => {
                         self.move_to(rows.get(at.saturating_add(1)).map(|row| row.key.clone()))
                     }
-                    Key::ArrowUp => self.move_to(at.checked_sub(1).map(|at| rows[at].key.clone())),
+                    Key::ArrowUp => {
+                        let above = at.checked_sub(1).and_then(|above| rows.get(above));
+                        self.move_to(above.map(|row| row.key.clone()))
+                    }
                     Key::Home => self.move_to(rows.first().map(|row| row.key.clone())),
                     Key::End => self.move_to(rows.last().map(|row| row.key.clone())),
                     // Opening a closed row, then stepping into it. Closing an open
                     // one, then stepping out to its parent.
-                    k if k == open && rows[at].has_children && !rows[at].expanded => {
+                    k if k == open && row.has_children && !row.expanded => {
                         self.expanded.insert(current);
                         Reaction::handled()
                     }
-                    k if k == open && rows[at].has_children => {
+                    k if k == open && row.has_children => {
                         self.move_to(rows.get(at.saturating_add(1)).map(|row| row.key.clone()))
                     }
-                    k if k == close && rows[at].expanded => {
+                    k if k == close && row.expanded => {
                         self.expanded.remove(&current);
                         Reaction::handled()
                     }

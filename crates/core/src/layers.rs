@@ -87,12 +87,17 @@ impl LayerStack {
         self.layers.last().map(|layer| layer.id.as_str())
     }
 
+    /// Whether the layer at `at` stays open through whatever closes the others.
+    fn is_persistent(&self, at: usize) -> bool {
+        self.layers.get(at).is_some_and(|layer| layer.persistent)
+    }
+
     /// Whether a layer cannot be interacted with because a modal sits above it. A
     /// persistent layer never is.
     #[must_use]
     pub fn is_inert(&self, id: &str) -> bool {
         match self.layers.iter().position(|layer| layer.id == id) {
-            Some(at) if self.layers[at].persistent => false,
+            Some(at) if self.is_persistent(at) => false,
             Some(at) => self
                 .layers
                 .get(at.saturating_add(1)..)
@@ -123,7 +128,7 @@ impl LayerStack {
         let mut index = self.layers.len();
         while index > at {
             index = index.saturating_sub(1);
-            if index == at || !self.layers[index].persistent {
+            if index == at || !self.is_persistent(index) {
                 closed.push(self.layers.remove(index).id);
             }
         }
@@ -135,7 +140,7 @@ impl LayerStack {
     /// dismiss this way. Returns what closed.
     pub fn press(&mut self, inside: Option<&str>) -> Vec<String> {
         let pressed = inside.and_then(|id| self.layers.iter().position(|layer| layer.id == id));
-        if pressed.is_some_and(|at| self.layers[at].persistent) {
+        if pressed.is_some_and(|at| self.is_persistent(at)) {
             return Vec::new();
         }
         let keep = pressed.map_or(0, |at| at.saturating_add(1));
@@ -143,10 +148,14 @@ impl LayerStack {
         let mut index = self.layers.len();
         while index > keep {
             index = index.saturating_sub(1);
-            if self.layers[index].persistent {
+            if self.is_persistent(index) {
                 continue;
             }
-            if !self.layers[index].dismiss_on_outside_press {
+            if !self
+                .layers
+                .get(index)
+                .is_some_and(|layer| layer.dismiss_on_outside_press)
+            {
                 break;
             }
             closed.push(self.layers.remove(index).id);

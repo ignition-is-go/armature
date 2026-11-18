@@ -9,25 +9,28 @@ pub fn transfer<T: PartialEq + Clone>(
     to: usize,
     index: Option<usize>,
 ) -> usize {
-    if to >= lists.len() {
+    let Some(destination) = lists.get(to) else {
         return 0;
-    }
+    };
     let present: Vec<T> = keys
         .iter()
         .filter(|key| lists.iter().any(|list| list.contains(key)))
         .cloned()
         .collect();
     // Removing items that sit before the target position shifts it left.
-    let target = index.unwrap_or(lists[to].len()).min(lists[to].len());
-    let removed_before = lists[to][..target]
+    let target = index.unwrap_or(destination.len()).min(destination.len());
+    let removed_before = destination
         .iter()
+        .take(target)
         .filter(|item| present.contains(item))
         .count();
     for list in lists.iter_mut() {
         list.retain(|item| !present.contains(item));
     }
     let at = target.saturating_sub(removed_before);
-    lists[to].splice(at..at, present.iter().cloned());
+    if let Some(destination) = lists.get_mut(to) {
+        destination.splice(at..at, present.iter().cloned());
+    }
     present.len()
 }
 

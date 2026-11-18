@@ -24,23 +24,23 @@ pub fn is_span_free(candidate: Span, others: &[Span]) -> bool {
 /// takes the lowest lane that is free, in order of start.
 #[must_use]
 pub fn stack_spans(spans: &[Span]) -> Vec<usize> {
-    let mut order: Vec<usize> = (0..spans.len()).collect();
-    order.sort_by(|a, b| spans[*a].start.total_cmp(&spans[*b].start));
+    let mut in_start_order: Vec<(usize, Span)> = spans.iter().copied().enumerate().collect();
+    in_start_order.sort_by(|(_, a), (_, b)| a.start.total_cmp(&b.start));
 
     let mut lane_ends: Vec<f64> = Vec::new();
     let mut lanes = vec![0; spans.len()];
-    for index in order {
-        let span = spans[index];
+    for (index, span) in in_start_order {
         let lane = lane_ends
             .iter()
             .position(|end| *end <= span.start)
             .unwrap_or(lane_ends.len());
-        if lane == lane_ends.len() {
-            lane_ends.push(span.end);
-        } else {
-            lane_ends[lane] = span.end;
+        match lane_ends.get_mut(lane) {
+            Some(end) => *end = span.end,
+            None => lane_ends.push(span.end),
         }
-        lanes[index] = lane;
+        if let Some(slot) = lanes.get_mut(index) {
+            *slot = lane;
+        }
     }
     lanes
 }
