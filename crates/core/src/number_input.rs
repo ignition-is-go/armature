@@ -32,6 +32,14 @@ struct Scrub {
     value_at_start: f64,
 }
 
+/// How many steps `PageUp`, `PageDown` and Shift move at once.
+const LARGE_STEP: f64 = 10.0;
+
+/// How many steps an arrow or the wheel moves: a large step with Shift held.
+const fn steps_for(mods: crate::keys::Modifiers) -> f64 {
+    if mods.shift { LARGE_STEP } else { 1.0 }
+}
+
 /// A number typed into a field or stepped with buttons and arrow keys.
 #[derive(Clone, Debug)]
 pub struct NumberInput {
@@ -187,8 +195,7 @@ impl Primitive for NumberInput {
                 Reaction::default()
             }
             Input::Wheel { delta, mods, .. } if self.focused => {
-                let steps = if mods.shift { 10.0 } else { 1.0 };
-                self.step(delta.signum() * steps, Reason::Drag, gate);
+                self.step(delta.signum() * steps_for(mods), Reason::Drag, gate);
                 Reaction::handled()
             }
             // Home and End go to the least value and the greatest one on the steps.
@@ -205,17 +212,17 @@ impl Primitive for NumberInput {
                 );
                 Reaction::handled()
             }
-            // PageUp, PageDown and Shift with an arrow go ten steps at a time.
+            // PageUp, PageDown and Shift with an arrow go a large step at a time.
             Input::Key {
                 key: Key::PageUp, ..
             } => {
-                self.step(10.0, Reason::Keyboard, gate);
+                self.step(LARGE_STEP, Reason::Keyboard, gate);
                 Reaction::handled()
             }
             Input::Key {
                 key: Key::PageDown, ..
             } => {
-                self.step(-10.0, Reason::Keyboard, gate);
+                self.step(-LARGE_STEP, Reason::Keyboard, gate);
                 Reaction::handled()
             }
             Input::Key {
@@ -223,7 +230,7 @@ impl Primitive for NumberInput {
                 mods,
                 ..
             } => {
-                self.step(if mods.shift { 10.0 } else { 1.0 }, Reason::Keyboard, gate);
+                self.step(steps_for(mods), Reason::Keyboard, gate);
                 Reaction::handled()
             }
             Input::Key {
@@ -231,11 +238,7 @@ impl Primitive for NumberInput {
                 mods,
                 ..
             } => {
-                self.step(
-                    if mods.shift { -10.0 } else { -1.0 },
-                    Reason::Keyboard,
-                    gate,
-                );
+                self.step(-steps_for(mods), Reason::Keyboard, gate);
                 Reaction::handled()
             }
             Input::Key {
