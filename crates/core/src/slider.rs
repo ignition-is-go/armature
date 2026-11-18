@@ -1,7 +1,7 @@
 use crate::agent::{ActError, Snapshot};
 use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::keys::{Dir, Key, Orientation};
-use crate::number::NumberRange;
+use crate::number::{NumberRange, read_number};
 use crate::primitive::{
     Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction,
     Role, Semantics, ValueRange,
@@ -206,7 +206,7 @@ impl Primitive for Slider {
     }
 
     fn set_value(&mut self, value: Vec<String>) {
-        if let Some(number) = value.first().and_then(|text| text.parse::<f64>().ok()) {
+        if let Some(number) = value.first().and_then(|text| read_number(text)) {
             self.value = self.opts.range.snap(number);
         }
     }
@@ -228,8 +228,7 @@ impl Primitive for Slider {
             "decrement" => self.opts.range.nudge(self.value, -1.0),
             "set" => {
                 let text = item.ok_or(ActError::MissingItem { action: "set" })?;
-                text.parse::<f64>()
-                    .map_err(|_| ActError::UnknownItem(text.to_string()))?
+                read_number(text).ok_or_else(|| ActError::UnknownItem(text.to_string()))?
             }
             other => {
                 return Err(ActError::UnknownAction {

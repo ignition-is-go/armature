@@ -3,6 +3,7 @@ use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::geometry::{Point, Rect, Size};
 use crate::keys::Key;
 use crate::motion::{Handle, ResizeLimits, key_delta, moved, resized};
+use crate::number::read_number;
 use crate::primitive::{
     Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction,
     Role, Semantics,
@@ -263,8 +264,8 @@ impl Primitive for ImageCropper {
     }
 
     fn set(&mut self, name: &str, value: &str) -> bool {
-        match (name, value.parse::<f64>()) {
-            ("zoom", Ok(zoom)) => self.zoom_to(zoom),
+        match (name, read_number(value)) {
+            ("zoom", Some(zoom)) => self.zoom_to(zoom),
             _ => return false,
         }
         true
@@ -404,11 +405,7 @@ impl Primitive for ImageCropper {
     fn set_value(&mut self, value: Vec<String>) {
         let numbers: Vec<f64> = value
             .first()
-            .map(|text| {
-                text.split(',')
-                    .filter_map(|n| n.trim().parse().ok())
-                    .collect()
-            })
+            .map(|text| text.split(',').filter_map(read_number).collect())
             .unwrap_or_default();
         if let [x, y, width, height] = numbers[..] {
             let width = width.clamp(1.0, self.image.width);

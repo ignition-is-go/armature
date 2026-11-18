@@ -1,6 +1,7 @@
 use crate::agent::{ActError, Snapshot};
 use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::keys::{Dir, Key};
+use crate::number::read_number;
 use crate::primitive::{
     Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction,
     Role, Semantics, ValueRange,
@@ -99,7 +100,7 @@ impl Rating {
 
     /// What a pointer over a star would give: the star, or half of it on its first half.
     fn at(&self, pointer: &Pointer<Part>, measure: Measure<Part>) -> Option<f64> {
-        let star: f64 = pointer.item.as_deref()?.parse().ok()?;
+        let star = read_number(pointer.item.as_deref()?)?;
         let rect = measure(Part::Star, pointer.item.as_deref())?;
         let along = (pointer.at.x - rect.x) / rect.width.max(1.0);
         let first_half = if self.opts.dir == Dir::Rtl {
@@ -239,7 +240,7 @@ impl Primitive for Rating {
     fn set_value(&mut self, value: Vec<String>) {
         let number = value
             .first()
-            .and_then(|text| text.parse::<f64>().ok())
+            .and_then(|text| read_number(text))
             .unwrap_or(0.0);
         self.value =
             ((number / self.step()).round() * self.step()).clamp(0.0, f64::from(self.opts.max));
@@ -261,8 +262,7 @@ impl Primitive for Rating {
             "clear" => 0.0,
             "set" => {
                 let text = item.ok_or(ActError::MissingItem { action: "set" })?;
-                text.parse()
-                    .map_err(|_| ActError::UnknownItem(text.to_string()))?
+                read_number(text).ok_or_else(|| ActError::UnknownItem(text.to_string()))?
             }
             other => {
                 return Err(ActError::UnknownAction {

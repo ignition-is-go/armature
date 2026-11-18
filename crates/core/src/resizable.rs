@@ -1,7 +1,7 @@
 use crate::agent::{ActError, Snapshot};
 use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::keys::{Dir, Key, Orientation};
-use crate::number::NumberRange;
+use crate::number::{NumberRange, read_number};
 use crate::primitive::{
     Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction,
     Role, Semantics, ValueRange,
@@ -206,7 +206,7 @@ impl Primitive for Resizable {
     }
 
     fn set_value(&mut self, value: Vec<String>) {
-        if let Some(percent) = value.first().and_then(|text| text.parse::<f64>().ok()) {
+        if let Some(percent) = value.first().and_then(|text| read_number(text)) {
             self.percent = self.range().clamp(percent);
         }
     }
@@ -230,9 +230,7 @@ impl Primitive for Resizable {
             });
         }
         let text = item.ok_or(ActError::MissingItem { action: "set" })?;
-        let percent = text
-            .parse::<f64>()
-            .map_err(|_| ActError::UnknownItem(text.to_string()))?;
+        let percent = read_number(text).ok_or_else(|| ActError::UnknownItem(text.to_string()))?;
         if self.set(percent, Source::Agent, Reason::Action, gate) {
             Ok(())
         } else {

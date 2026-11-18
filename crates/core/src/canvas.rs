@@ -5,6 +5,7 @@ use crate::geometry::{Point, Rect, Size};
 use crate::keys::{Key, Modifiers};
 use crate::lasso::{lasso_hits, lasso_selection};
 use crate::motion::{Handle, ResizeLimits, key_delta, moved, resized};
+use crate::number::read_number;
 use crate::primitive::{
     Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction,
     Role, Semantics,
@@ -93,8 +94,8 @@ fn written(nodes: &[Node]) -> Vec<String> {
 
 fn read(entry: &str) -> Option<Node> {
     let (key, numbers) = entry.split_once(':')?;
-    let mut numbers = numbers.split(',').map(|n| n.trim().parse::<f64>());
-    let mut next = || numbers.next()?.ok();
+    let mut numbers = numbers.split(',').map(read_number);
+    let mut next = || numbers.next()?;
     Some(Node {
         key: key.to_string(),
         rect: Rect::new(next()?, next()?, next()?, next()?),
@@ -627,8 +628,8 @@ impl Primitive for Canvas {
                 let (key, point) = text.split_once(':').ok_or_else(unknown)?;
                 let (x, y) = point.split_once(',').ok_or_else(unknown)?;
                 let (x, y) = (
-                    x.trim().parse::<f64>().map_err(|_| unknown())?,
-                    y.trim().parse::<f64>().map_err(|_| unknown())?,
+                    read_number(x).ok_or_else(unknown)?,
+                    read_number(y).ok_or_else(unknown)?,
                 );
                 let before = self.nodes.clone();
                 let node = self

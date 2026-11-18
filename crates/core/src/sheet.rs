@@ -3,6 +3,7 @@ use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::convert::Cast;
 use crate::gesture::{DECELERATION, VelocityTracker, project_distance, rubber_band};
 use crate::keys::Key;
+use crate::number::read_number;
 use crate::primitive::{
     Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction,
     Relations, Role, Semantics, ValueRange,
@@ -305,8 +306,8 @@ impl Primitive for Sheet {
     }
 
     fn set(&mut self, name: &str, value: &str) -> bool {
-        match (name, value.parse::<f64>()) {
-            ("content_offset", Ok(offset)) => self.content_at_start = offset <= 0.0,
+        match (name, read_number(value)) {
+            ("content_offset", Some(offset)) => self.content_at_start = offset <= 0.0,
             _ => return false,
         }
         true

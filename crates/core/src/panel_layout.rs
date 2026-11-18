@@ -2,6 +2,7 @@
 //! them. Sizes are percentages of the space and always add up to a hundred.
 
 use crate::convert::Cast;
+use crate::number::read_number;
 
 const EPSILON: f64 = 1e-6;
 
@@ -498,7 +499,7 @@ impl Reader<'_> {
         list.split(',')
             .map(str::trim)
             .filter(|number| !number.is_empty())
-            .map(|number| number.parse::<f64>().ok().filter(|size| size.is_finite()))
+            .map(read_number)
             .collect()
     }
 

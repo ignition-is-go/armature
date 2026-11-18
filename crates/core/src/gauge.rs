@@ -4,7 +4,7 @@
 use crate::agent::{ActError, Snapshot};
 use crate::change::Gate;
 use crate::keys::Orientation;
-use crate::number::format_number;
+use crate::number::{format_number, read_number};
 use crate::primitive::{Input, Item, PartOf, Primitive, Reaction, Role, Semantics, ValueRange};
 
 /// Where `value` sits between `min` and `max`, from 0 to 100. Readings outside the
@@ -262,10 +262,7 @@ impl Primitive for Progress {
 
     fn set_value(&mut self, value: Vec<String>) {
         // Something that is not a number says nothing of how far along it is.
-        self.value = value
-            .first()
-            .and_then(|text| text.parse::<f64>().ok())
-            .filter(|value| value.is_finite());
+        self.value = value.first().and_then(|text| read_number(text));
     }
 
     fn snapshot(&self, label: &str) -> Snapshot {

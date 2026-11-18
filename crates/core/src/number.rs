@@ -159,6 +159,17 @@ impl NumberRange {
     }
 }
 
+/// Reads a number as code writes it: a value, a setting or an agent's argument.
+/// "NaN" and "inf" parse as floats, but are not numbers anyone can use, so they
+/// are refused.
+#[must_use]
+pub fn read_number(text: &str) -> Option<f64> {
+    text.trim()
+        .parse::<f64>()
+        .ok()
+        .filter(|value| value.is_finite())
+}
+
 /// Reads a number the way people type one: surrounding spaces, thousands separators
 /// and a trailing percent sign are accepted.
 #[must_use]
@@ -169,11 +180,7 @@ pub fn parse_number(text: &str) -> Option<f64> {
         .chars()
         .filter(|c| *c != ',' && *c != '_')
         .collect();
-    cleaned
-        .trim()
-        .parse::<f64>()
-        .ok()
-        .filter(|value| value.is_finite())
+    read_number(&cleaned)
 }
 
 /// Formats with a fixed number of decimals and thousands separators.
@@ -303,7 +310,7 @@ pub fn parse_localized(text: &str, locale: &str) -> Option<f64> {
         .replace(group, "")
         .replace(' ', "")
         .replace(point, ".");
-    plain.parse().ok()
+    read_number(&plain)
 }
 
 #[cfg(test)]
@@ -343,6 +350,10 @@ mod tests {
         assert_eq!(parse_number("45%"), Some(45.0));
         assert_eq!(parse_number("abc"), None);
         assert_eq!(parse_number("inf"), None);
+        assert_eq!(read_number(" 2.5 "), Some(2.5));
+        assert_eq!(read_number("NaN"), None);
+        assert_eq!(read_number("-inf"), None);
+        assert_eq!(read_number("1,000"), None, "code writes no separators");
     }
 
     #[test]

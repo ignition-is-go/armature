@@ -2,6 +2,7 @@ use crate::agent::{ActError, Snapshot};
 use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::convert::Cast;
 use crate::keys::{Dir, Key, Orientation};
+use crate::number::read_number;
 use crate::panel_layout::{
     PanelConstraints, PanelSizes, constraints_of, end_delta, fit_layout, handle_bounds, home_delta,
     initial_layout, is_collapsed, resize_at, resize_panel, toggle_target,
@@ -425,7 +426,7 @@ impl Primitive for PanelGroup {
     }
 
     fn set_value(&mut self, value: Vec<String>) {
-        let numbers: Vec<f64> = value.iter().filter_map(|text| text.parse().ok()).collect();
+        let numbers: Vec<f64> = value.iter().filter_map(|text| read_number(text)).collect();
         let total: f64 = numbers.iter().sum();
         if numbers.len() == self.sizes.len() && total > 0.0 {
             self.sizes = numbers.iter().map(|size| size / total * 100.0).collect();
@@ -455,7 +456,7 @@ impl Primitive for PanelGroup {
         let given = item.ok_or(ActError::MissingItem { action: "set" })?;
         let parsed = given
             .split_once('=')
-            .and_then(|(at, share)| Some((at.parse::<usize>().ok()?, share.parse::<f64>().ok()?)));
+            .and_then(|(at, share)| Some((at.parse::<usize>().ok()?, read_number(share)?)));
         let (at, share) = parsed
             .filter(|(at, _)| at.saturating_add(1) < self.sizes.len())
             .ok_or_else(|| ActError::UnknownItem(given.to_string()))?;

@@ -1,6 +1,7 @@
 use crate::agent::{ActError, Snapshot, SnapshotItem};
 use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::keys::Key;
+use crate::number::read_number;
 use crate::primitive::{
     Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction,
     Role, Semantics,
@@ -84,8 +85,8 @@ fn read(entry: &str) -> Option<(String, Span)> {
     Some((
         key.to_string(),
         Span {
-            start: start.parse().ok()?,
-            end: end.parse().ok()?,
+            start: read_number(start)?,
+            end: read_number(end)?,
         },
     ))
 }

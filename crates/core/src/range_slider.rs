@@ -1,7 +1,7 @@
 use crate::agent::{ActError, Snapshot};
 use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::keys::{Dir, Key, Orientation};
-use crate::number::NumberRange;
+use crate::number::{NumberRange, read_number};
 use crate::primitive::{
     Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction,
     Role, Semantics, ValueRange,
@@ -309,8 +309,8 @@ impl Primitive for RangeSlider {
     fn set_value(&mut self, value: Vec<String>) {
         let mut numbers: Vec<f64> = value
             .iter()
-            .filter_map(|text| text.parse().ok())
-            .map(|number: f64| self.opts.range.snap(number))
+            .filter_map(|text| read_number(text))
+            .map(|number| self.opts.range.snap(number))
             .collect();
         if numbers.len() == self.values.len() {
             numbers.sort_by(f64::total_cmp);
@@ -338,9 +338,9 @@ impl Primitive for RangeSlider {
             });
         }
         let given = item.ok_or(ActError::MissingItem { action: "set" })?;
-        let parsed = given.split_once('=').and_then(|(at, number)| {
-            Some((at.parse::<usize>().ok()?, number.parse::<f64>().ok()?))
-        });
+        let parsed = given
+            .split_once('=')
+            .and_then(|(at, number)| Some((at.parse::<usize>().ok()?, read_number(number)?)));
         let (at, number) = parsed
             .filter(|(at, _)| *at < self.values.len())
             .ok_or_else(|| ActError::UnknownItem(given.to_string()))?;
@@ -462,5 +462,14 @@ mod tests {
     #[test]
     fn it_conforms() {
         crate::testing::assert_conforms(RangeSlider::default, &[]);
+    }
+
+    #[test]
+    fn something_that_is_not_a_number_moves_no_grip() {
+        let mut slider = RangeSlider::default();
+        let acted = slider.act("set", Some("0=NaN"), &mut |_| true);
+        assert_eq!(slider.value(), ["25", "75"], "after act: {acted:?}");
+        slider.set_value(vec!["NaN".into(), "inf".into()]);
+        assert_eq!(slider.value(), ["25", "75"]);
     }
 }

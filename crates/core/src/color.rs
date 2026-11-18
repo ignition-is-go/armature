@@ -2,6 +2,7 @@
 //! contrast.
 
 use crate::convert::Cast;
+use crate::number::read_number;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Rgb {
@@ -429,8 +430,8 @@ impl Rgb {
             Some((_, alpha)) => {
                 let alpha = alpha.trim().trim_end_matches(')').trim();
                 match alpha.strip_suffix('%') {
-                    Some(percent) => percent.parse::<f64>().ok()? / 100.0,
-                    None => alpha.parse().ok()?,
+                    Some(percent) => read_number(percent)? / 100.0,
+                    None => read_number(alpha)?,
                 }
             }
             None => 1.0,
