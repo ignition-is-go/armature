@@ -23,35 +23,36 @@ pub fn page_range(page: usize, count: usize, siblings: usize, boundaries: usize)
         return Vec::new();
     }
     let current = page.clamp(1, count);
-    let slots = ((boundaries.saturating_mul(2)).saturating_add(siblings.saturating_mul(2)))
+    let around = siblings.saturating_mul(2);
+    // Both sets of boundary pages, the window, the current page and two ellipses.
+    let slots = boundaries
+        .saturating_mul(2)
+        .saturating_add(around)
         .saturating_add(3);
     if count <= slots {
         return (1..=count).map(PageItem::Page).collect();
     }
     // The window around the current page slides to stay clear of the ends.
-    let start = current
-        .saturating_sub(siblings)
-        .max(boundaries.saturating_add(2))
-        .min(
-            ((count.saturating_sub(boundaries)).saturating_sub(1))
-                .saturating_sub(siblings.saturating_mul(2)),
-        );
-    let end = start.saturating_add(siblings.saturating_mul(2));
+    // The pages just inside the boundary pages at either end.
+    let first_inner = boundaries.saturating_add(1);
+    let last_inner = count.saturating_sub(boundaries);
+    let earliest = first_inner.saturating_add(1);
+    let latest = last_inner.saturating_sub(1).saturating_sub(around);
+    let start = current.saturating_sub(siblings).max(earliest).min(latest);
+    let end = start.saturating_add(around);
     let mut row: Vec<PageItem> = (1..=boundaries).map(PageItem::Page).collect();
-    row.push(if start > boundaries.saturating_add(2) {
+    row.push(if start > earliest {
         PageItem::EllipsisStart
     } else {
-        PageItem::Page(boundaries.saturating_add(1))
+        PageItem::Page(first_inner)
     });
     row.extend((start..=end).map(PageItem::Page));
-    row.push(
-        if end < (count.saturating_sub(boundaries)).saturating_sub(1) {
-            PageItem::EllipsisEnd
-        } else {
-            PageItem::Page(count.saturating_sub(boundaries))
-        },
-    );
-    row.extend(((count.saturating_sub(boundaries)).saturating_add(1)..=count).map(PageItem::Page));
+    row.push(if end < last_inner.saturating_sub(1) {
+        PageItem::EllipsisEnd
+    } else {
+        PageItem::Page(last_inner)
+    });
+    row.extend((last_inner.saturating_add(1)..=count).map(PageItem::Page));
     row
 }
 

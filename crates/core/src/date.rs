@@ -171,8 +171,7 @@ pub fn month_grid(year: i32, month: u8, week_start: u8) -> Vec<[Date; 7]> {
         month,
         day: 1,
     };
-    let lead = ((first.weekday().saturating_add(7)).saturating_sub(week_start % 7)) % 7;
-    let mut day = first.add_days(i64::from(lead).saturating_neg());
+    let mut day = first.start_of_week(week_start);
     let last = Date {
         year,
         month,
@@ -221,8 +220,7 @@ pub fn date_for_key(
     week_start: u8,
 ) -> Option<Date> {
     let forward: i64 = if dir == Dir::Rtl { -1 } else { 1 };
-    let into_week =
-        i64::from(((date.weekday().saturating_add(7)).saturating_sub(week_start % 7)) % 7);
+    let into_week = i64::from(date.days_into_week(week_start));
     Some(match key {
         Key::ArrowLeft => date.add_days(forward.saturating_neg()),
         Key::ArrowRight => date.add_days(forward),
@@ -308,14 +306,21 @@ impl Date {
         latest.map_or(date, |latest| date.min(latest))
     }
 
+    /// How many days this date is past the start of its week, from 0 to 6, when
+    /// weeks start on `week_start` (Sunday is 0).
+    #[must_use]
+    pub fn days_into_week(self, week_start: u8) -> u8 {
+        self.weekday()
+            .saturating_add(7)
+            .saturating_sub(week_start % 7)
+            % 7
+    }
+
     /// The first day of the week this date falls in, for a week starting on
     /// `week_start` (Sunday is 0).
     #[must_use]
     pub fn start_of_week(self, week_start: u8) -> Self {
-        self.add_days(
-            (i64::from(((self.weekday().saturating_add(7)).saturating_sub(week_start % 7)) % 7))
-                .saturating_neg(),
-        )
+        self.add_days(i64::from(self.days_into_week(week_start)).saturating_neg())
     }
 
     #[must_use]
