@@ -39,7 +39,8 @@ pub enum Part {
 
 const ACTIONS: &[&str] = &["select"];
 
-/// Tabs with automatic activation: moving focus to a tab selects it.
+/// Tabs. Moving focus to a tab selects it, unless `manual` is set, when Enter or
+/// Space does.
 #[derive(Clone, Debug, Default)]
 pub struct Tabs {
     opts: Options,
@@ -157,7 +158,7 @@ impl Primitive for Tabs {
     }
 
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
-        if crate::roving::is_platform_arrow(&input) {
+        if roving::is_platform_arrow(&input) {
             return Reaction::default();
         }
         match input {
@@ -176,7 +177,7 @@ impl Primitive for Tabs {
                 match (key, self.focused.clone()) {
                     (Key::Enter | Key::Space, Some(key)) => {
                         self.select(&key, Source::User, Reason::Keyboard, gate);
-                        Reaction::to_item(Part::Tab, None)
+                        Reaction::handled()
                     }
                     _ => Reaction::default(),
                 }
