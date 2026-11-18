@@ -235,8 +235,8 @@ impl Primitive for OtpInput {
                 match key {
                     Key::Char(ch) if self.accept.takes(ch) => {
                         // Typing replaces the character under the caret, or adds one.
-                        if self.slot < cells.len() {
-                            cells[self.slot] = ch;
+                        if let Some(cell) = cells.get_mut(self.slot) {
+                            *cell = ch;
                         } else if cells.len() < self.length {
                             cells.push(ch);
                         }

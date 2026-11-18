@@ -21,7 +21,8 @@ pub fn propose(
 ) -> Vec<String> {
     if mode == Mode::Single {
         // Toggling the one selected item clears it.
-        let sole = mods.ctrl && selected.len() == 1 && selected[0] == key;
+        let sole =
+            mods.ctrl && selected.len() == 1 && selected.first().is_some_and(|only| only == key);
         return if sole {
             Vec::new()
         } else {

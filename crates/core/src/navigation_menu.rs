@@ -332,7 +332,11 @@ impl Primitive for NavigationMenu {
                 else {
                     return Reaction::default();
                 };
-                let key = self.entries[next].0.clone();
+                let key = self
+                    .entries
+                    .get(next)
+                    .map(|entry| entry.0.clone())
+                    .unwrap_or_default();
                 self.focused = Some(key.clone());
                 Reaction::item(self.part_of(&key), true, Some(key))
             }

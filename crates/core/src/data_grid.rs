@@ -142,7 +142,13 @@ impl DataGrid {
         });
         if allowed {
             for (cell, text) in changed {
-                self.cells[cell.row][cell.col] = text;
+                let slot = self
+                    .cells
+                    .get_mut(cell.row)
+                    .and_then(|row| row.get_mut(cell.col));
+                if let Some(slot) = slot {
+                    *slot = text;
+                }
             }
         }
         allowed

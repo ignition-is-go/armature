@@ -109,7 +109,9 @@ impl RangeSlider {
             return true;
         }
         let mut next = self.values.clone();
-        next[at] = value;
+        if let Some(slot) = next.get_mut(at) {
+            *slot = value;
+        }
         let allowed = gate(&ValueChange {
             value: Self::written(&next),
             source,

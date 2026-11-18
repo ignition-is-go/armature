@@ -167,15 +167,11 @@ pub fn bridges(trigger: Rect, popup: Rect, padding: f64, point: Point) -> bool {
     };
     let mut hull = half(&mut corners.iter().copied());
     hull.extend(half(&mut corners.iter().rev().copied()));
-    (0..hull.len()).all(|at| {
-        cross(
-            hull.get(at).copied().unwrap_or_default(),
-            hull[(at.saturating_add(1))
-                .checked_rem(hull.len())
-                .unwrap_or_default()],
-            point,
-        ) >= 0.0
-    })
+    // The point is inside when it lies on the same side of every edge.
+    let edges = hull.iter().zip(hull.iter().cycle().skip(1));
+    edges
+        .take(hull.len())
+        .all(|(from, to)| cross(*from, *to, point) >= 0.0)
 }
 
 #[cfg(test)]

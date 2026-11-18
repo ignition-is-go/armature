@@ -106,7 +106,7 @@ pub fn match_segments<'a>(text: &'a str, ranges: &[Range<usize>]) -> Vec<Segment
             });
         }
         segments.push(Segment {
-            text: &text[range.clone()],
+            text: text.get(range.clone()).unwrap_or_default(),
             matched: true,
         });
         cursor = range.end;

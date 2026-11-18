@@ -162,8 +162,11 @@ impl Sheet {
             return None;
         }
         let distance = |detent: &f64| (detent - coasted).abs();
-        (0..self.detents.len())
-            .min_by(|a, b| distance(&self.detents[*a]).total_cmp(&distance(&self.detents[*b])))
+        self.detents
+            .iter()
+            .enumerate()
+            .min_by(|(_, a), (_, b)| distance(a).total_cmp(&distance(b)))
+            .map(|(index, _)| index)
     }
 
     fn dismiss(&mut self, reason: Reason, gate: Gate) -> Reaction<Part> {

@@ -28,7 +28,7 @@ impl InputHistory {
             self.draft = typed.to_string();
         }
         self.cursor = Some(target);
-        Some(&self.entries[target])
+        self.entries.get(target).map(String::as_str)
     }
 
     /// The entry after the one shown, ending with the text typed before recalling.
@@ -37,7 +37,7 @@ impl InputHistory {
         let at = self.cursor?;
         if at.saturating_add(1) < self.entries.len() {
             self.cursor = Some(at.saturating_add(1));
-            Some(&self.entries[at.saturating_add(1)])
+            self.entries.get(at.saturating_add(1)).map(String::as_str)
         } else {
             self.cursor = None;
             Some(&self.draft)

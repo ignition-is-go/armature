@@ -243,18 +243,20 @@ impl DateInput {
                 fields[3] =
                     number.map(|shown| (shown % 12).saturating_add(if self.pm { 12 } else { 0 }));
             }
-            other => fields[other.index()] = number,
+            other => {
+                if let Some(field) = fields.get_mut(other.index()) {
+                    *field = number;
+                }
+            }
         }
         let trial = Self {
             fields,
             ..self.clone()
         };
         let (_, longest) = trial.limits(Segment::Day);
-        fields[Segment::Day.index()] = fields
-            .get(Segment::Day.index())
-            .copied()
-            .unwrap_or_default()
-            .map(|day| day.min(longest));
+        if let Some(day) = fields.get_mut(Segment::Day.index()) {
+            *day = day.map(|day| day.min(longest));
+        }
         // A date outside the limits is kept on screen to be corrected, but is not a value.
         let after = if self.out_of_range(&fields) {
             Vec::new()
@@ -287,7 +289,7 @@ impl DateInput {
         if forward {
             segments.get(at.saturating_add(1)).copied()
         } else {
-            at.checked_sub(1).map(|at| segments[at])
+            at.checked_sub(1).and_then(|at| segments.get(at).copied())
         }
     }
 

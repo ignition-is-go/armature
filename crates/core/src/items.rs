@@ -17,7 +17,10 @@ impl Items {
 
     #[must_use]
     pub fn key_at(&self, index: usize) -> String {
-        self.0[index].key.clone()
+        self.0
+            .get(index)
+            .map(|item| item.key.clone())
+            .unwrap_or_default()
     }
 
     #[must_use]

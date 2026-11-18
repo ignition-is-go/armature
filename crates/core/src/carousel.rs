@@ -248,7 +248,11 @@ impl Carousel {
                 self.opts.wrap,
             ))
             .saturating_sub(1);
-            return (to != page).then(|| self.measured[to].leader);
+            return self
+                .measured
+                .get(to)
+                .filter(|_| to != page)
+                .map(|landing| landing.leader);
         }
         // A step is a page of slides, and the last page never runs past the end.
         let per_page = self.opts.per_page.max(1).cast::<isize>();

@@ -525,7 +525,9 @@ impl Primitive for Menu {
                     .as_deref()
                     .and_then(|key| shown.iter().position(|entry| entry.key == key));
                 let go = |nav| {
-                    roving::step(&enabled, at, nav, true).map(|index| shown[index].key.clone())
+                    roving::step(&enabled, at, nav, true)
+                        .and_then(|index| shown.get(index))
+                        .map(|entry| entry.key.clone())
                 };
                 let target = match key {
                     Key::ArrowDown => go(Nav::Next),
@@ -542,7 +544,7 @@ impl Primitive for Menu {
                     }
                     Key::ArrowRight => {
                         let submenu = at
-                            .map(|at| &shown[at])
+                            .and_then(|at| shown.get(at))
                             .filter(|entry| entry.kind == Kind::Submenu && !entry.disabled);
                         let Some(key) = submenu.map(|entry| entry.key.clone()) else {
                             return Reaction::default();
@@ -572,7 +574,8 @@ impl Primitive for Menu {
                             .collect();
                         self.typeahead
                             .push(ch, now_ms, &labels, at)
-                            .map(|index| shown[index].key.clone())
+                            .and_then(|index| shown.get(index))
+                            .map(|entry| entry.key.clone())
                     }
                     _ => return Reaction::default(),
                 };

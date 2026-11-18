@@ -310,7 +310,7 @@ impl Primitive for TriggerMenu {
                     Nav::Prev
                 };
                 if let Some(next) = roving::step(&enabled, at, nav, true) {
-                    self.active = Some(results[next].clone());
+                    self.active = results.get(next).cloned();
                 }
                 Reaction::handled()
             }

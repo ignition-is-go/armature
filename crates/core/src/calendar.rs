@@ -175,8 +175,10 @@ impl Calendar {
                 .collect(),
             Selecting::Multiple => self.selected.iter().copied().chain([date]).collect(),
             // The second day closes the span. A third starts another.
-            Selecting::Range if self.selected.len() == 1 => vec![self.selected[0], date],
-            Selecting::Range => vec![date],
+            Selecting::Range => match self.selected.as_slice() {
+                [first] => vec![*first, date],
+                _ => vec![date],
+            },
         };
         next.sort();
         // A span may not reach across a day that cannot be chosen.

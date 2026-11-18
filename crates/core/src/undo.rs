@@ -1,8 +1,11 @@
 /// Recorded states to step back and forward through.
 #[derive(Clone, Debug)]
 pub struct UndoStack<T> {
-    states: Vec<T>,
-    current: usize,
+    /// What undo steps back to, oldest first.
+    past: Vec<T>,
+    present: T,
+    /// What redo steps forward to, the next one last.
+    future: Vec<T>,
     limit: usize,
 }
 
@@ -10,50 +13,51 @@ impl<T> UndoStack<T> {
     /// Keeps at most `limit` states, dropping the oldest.
     pub fn new(initial: T, limit: usize) -> Self {
         Self {
-            states: vec![initial],
-            current: 0,
+            past: Vec::new(),
+            present: initial,
+            future: Vec::new(),
             limit: limit.max(1),
         }
     }
 
     #[must_use]
-    pub fn current(&self) -> &T {
-        &self.states[self.current]
+    pub const fn current(&self) -> &T {
+        &self.present
     }
 
     /// Records a new state. Anything that had been undone can no longer be redone.
     pub fn record(&mut self, state: T) {
-        self.states.truncate(self.current.saturating_add(1));
-        self.states.push(state);
-        if self.states.len() > self.limit {
-            self.states.remove(0);
+        self.future.clear();
+        self.past.push(std::mem::replace(&mut self.present, state));
+        // The present counts toward the limit.
+        while self.past.len() >= self.limit {
+            self.past.remove(0);
         }
-        self.current = self.states.len().saturating_sub(1);
     }
 
     #[must_use]
-    pub const fn can_undo(&self) -> bool {
-        self.current > 0
+    pub fn can_undo(&self) -> bool {
+        !self.past.is_empty()
     }
 
     #[must_use]
-    pub const fn can_redo(&self) -> bool {
-        self.current.saturating_add(1) < self.states.len()
+    pub fn can_redo(&self) -> bool {
+        !self.future.is_empty()
     }
 
     /// Steps back and returns the state to restore.
     pub fn undo(&mut self) -> Option<&T> {
-        self.can_undo().then(|| {
-            self.current = self.current.saturating_sub(1);
-            &self.states[self.current]
-        })
+        let previous = self.past.pop()?;
+        self.future
+            .push(std::mem::replace(&mut self.present, previous));
+        Some(&self.present)
     }
 
+    /// Steps forward again and returns the state to restore.
     pub fn redo(&mut self) -> Option<&T> {
-        self.can_redo().then(|| {
-            self.current = self.current.saturating_add(1);
-            &self.states[self.current]
-        })
+        let next = self.future.pop()?;
+        self.past.push(std::mem::replace(&mut self.present, next));
+        Some(&self.present)
     }
 }
 

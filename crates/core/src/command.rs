@@ -226,7 +226,7 @@ impl Primitive for Command {
                     Nav::Prev
                 };
                 let next = crate::roving::step(&enabled, at, nav, true).unwrap_or(0);
-                self.highlighted = Some(shown[next].clone());
+                self.highlighted = shown.get(next).cloned();
                 Reaction::handled()
             }
             Input::Key {

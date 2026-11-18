@@ -243,7 +243,7 @@ impl Combobox {
             .as_deref()
             .and_then(|key| results.iter().position(|result| result == key));
         if let Some(next) = roving::step(&enabled, at, nav, true) {
-            self.active = Some(results[next].clone());
+            self.active = results.get(next).cloned();
             self.at_end = next.saturating_add(1) == results.len();
         }
         Reaction::handled()
