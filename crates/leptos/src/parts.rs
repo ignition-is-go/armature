@@ -25,6 +25,9 @@ use crate::agent;
 /// Called with each proposed change. Returning `false` cancels it.
 pub type ChangeGate = Callback<ValueChange, bool>;
 
+/// The listeners that follow a pointer on its way from a part to its popup.
+type Held = Rc<std::cell::RefCell<Option<(WindowListenerHandle, IntervalHandle)>>>;
+
 thread_local! {
         static WATCHING_MODALITY: Cell<bool> = const { Cell::new(false) };
     /// Where focus was before a component's hotkey took it, by component.
@@ -45,6 +48,10 @@ struct Context<P: Primitive> {
     secret: bool,
 }
 
+#[expect(
+    clippy::expl_impl_clone_on_copy,
+    reason = "deriving it would ask the primitive to be Copy, which it need not be"
+)]
 impl<P: Primitive> Clone for Context<P> {
     fn clone(&self) -> Self {
         *self
@@ -323,12 +330,12 @@ impl<P: Primitive + Send + Sync> Context<P> {
         } else {
             popup.remove_attribute("data-arrow-clamped")
         };
-        let side = if placed.side == Side::Bottom {
+        let side_name = if placed.side == Side::Bottom {
             "bottom"
         } else {
             "top"
         };
-        let _ = popup.set_attribute("data-side", side);
+        let _ = popup.set_attribute("data-side", side_name);
     }
 }
 
@@ -382,16 +389,17 @@ fn trap_tab(container: &HtmlElement, backwards: bool) {
             .as_ref()
             .is_some_and(|active| active.is_same_node(Some(stop)))
     });
-    if let Some(next) = armature_core::layers::trapped_focus(current, stops.len(), backwards) {
-        let _ = stops[next].focus();
+    let next = armature_core::layers::trapped_focus(current, stops.len(), backwards);
+    if let Some(stop) = next.and_then(|next| stops.get(next)) {
+        let _ = stop.focus();
     }
 }
 
-fn orientation_name(orientation: Option<Orientation>) -> Option<&'static str> {
-    orientation.map(|orientation| match orientation {
+const fn orientation_name(orientation: Orientation) -> &'static str {
+    match orientation {
         Orientation::Vertical => "vertical",
         Orientation::Horizontal => "horizontal",
-    })
+    }
 }
 
 pub fn key_from_dom(key: &str) -> Option<Key> {
@@ -514,9 +522,7 @@ where
     // the owner it shares with its siblings, and a later root of the same
     // primitive would take over any part this one creates later, such as a menu's
     // items when it opens.
-    let owner = Owner::current()
-        .expect("a Root is rendered inside a reactive owner")
-        .child();
+    let owner = Owner::current().map_or_else(Owner::new, |current| current.child());
     let view = owner.with(move || {
         root_view(
             machine,
@@ -533,7 +539,14 @@ where
     leptos::tachys::reactive_graph::OwnedView::new_with_owner(view, owner)
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the props of `Root`, passed straight through"
+)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one block for each thing a root sets up"
+)]
 fn root_view<P>(
     machine: P,
     label: String,
@@ -550,7 +563,7 @@ where
 {
     let machine = RwSignal::new(machine);
     let label = StoredValue::new(label);
-    let instance = NEXT_INSTANCE.replace(NEXT_INSTANCE.get() + 1);
+    let instance = NEXT_INSTANCE.replace(NEXT_INSTANCE.get().saturating_add(1));
     let ctx = Context {
         instance,
         machine,
@@ -803,6 +816,10 @@ where
 /// One part of the primitive owned by the nearest `Root`. It renders unstyled, as a
 /// `div`, or as an `input` for a part the person types into, and carries the part's
 /// semantics and event wiring.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one block of wiring for each kind of input a part can take"
+)]
 #[component]
 pub fn Part<K>(
     part: K,
@@ -825,9 +842,13 @@ where
     let tracks_pointer = K::Primitive::tracks_pointer(part);
     let own_name = (!registers && !label.is_empty()).then(|| label.clone());
     if registers {
-        let key = item
-            .clone()
-            .expect("this part is an item and needs an `item` key");
+        let key = item.clone().unwrap_or_default();
+        if key.is_empty() {
+            leptos::logging::warn!(
+                "an item part of `{}` was rendered without an `item` key",
+                label
+            );
+        }
         ctx.machine.update(|m| {
             m.upsert_item(Item {
                 key: key.clone(),
@@ -1256,7 +1277,6 @@ where
             let bridged = move |at: Point| {
                 trigger.is_some_and(|trigger| popup::bridges(trigger, popup, 4.0, at))
             };
-            type Held = Rc<std::cell::RefCell<Option<(WindowListenerHandle, IntervalHandle)>>>;
             let held: Held = Rc::default();
             // Ends the wait, telling the primitive the pointer left unless it arrived.
             let finish = {
@@ -1410,7 +1430,9 @@ where
             ("aria-valuemax", number(state.range.map(|range| range.max))),
             (
                 "aria-orientation",
-                orientation_name(state.orientation).map(str::to_string),
+                state
+                    .orientation
+                    .map(|orientation| orientation_name(orientation).to_string()),
             ),
             (
                 "aria-haspopup",

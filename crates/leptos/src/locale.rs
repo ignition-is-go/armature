@@ -70,7 +70,7 @@ pub fn weekday_name(weekday: u8, locale: &str) -> String {
     let date = Date {
         year: 2026,
         month: 11,
-        day: 1 + weekday % 7,
+        day: (weekday % 7).saturating_add(1),
     };
     date_text(date, locale, &[("weekday", "long")])
 }

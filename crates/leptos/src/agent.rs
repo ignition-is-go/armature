@@ -63,6 +63,10 @@ pub fn snapshot() -> Vec<(String, Snapshot)> {
 }
 
 /// Runs one action and returns the component's value afterwards.
+///
+/// # Errors
+///
+/// When no component has that ref, or it refuses the action.
 pub fn act(reference: &str, action: &str, item: Option<&str>) -> Result<Vec<String>, Error> {
     registry().target(reference)?.act(&mut (), action, item)
 }
@@ -84,10 +88,11 @@ pub fn history() -> Vec<Entry> {
     HISTORY.with_borrow(Clone::clone)
 }
 
-/// Exposes the bridge to page scripts as `window.armature`, with `snapshot`, `query`,
-/// `act`, `run`, `history` and `tools`. `run` asks `window.armature.approve(step,
-/// what)` before acting on a component that needs approval, and refuses if the page
-/// has not defined it.
+/// Exposes the bridge to page scripts as `window.armature`.
+///
+/// It has `snapshot`, `query`, `act`, `run`, `history` and `tools`. `run` asks
+/// `window.armature.approve(step, what)` before acting on a component that needs
+/// approval, and refuses if the page has not defined it.
 pub fn install() {
     let api = Object::new();
     expose(
@@ -238,6 +243,10 @@ pub fn register_tools() -> bool {
     true
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "the signature JavaScript calls it with"
+)]
 fn run_from_js(steps: JsValue) -> JsValue {
     let text = |value: &JsValue, key: &str| {
         Reflect::get(value, &key.into())
@@ -358,5 +367,7 @@ fn strings(values: &[String]) -> JsValue {
 }
 
 fn set(target: &JsValue, key: &str, value: &JsValue) {
-    Reflect::set(target, &key.into(), value).expect("target is an object");
+    // Setting a property only fails on something that is not an object, which
+    // nothing passed here is.
+    let _ = Reflect::set(target, &key.into(), value);
 }

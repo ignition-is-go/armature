@@ -842,7 +842,7 @@ fn files_dragged_over_a_dropzone_light_it_up_and_dropping_takes_them(cx: &mut Te
 
 #[gpui::test]
 fn a_panel_stays_open_while_the_pointer_crosses_the_gap_to_it(cx: &mut TestAppContext) {
-    let nav = NavigationMenu::new(Default::default(), &[("products", true)]);
+    let nav = NavigationMenu::new(navigation_menu::Options::default(), &[("products", true)]);
     let (nav, cx) = open(
         cx,
         nav,
@@ -905,7 +905,7 @@ fn an_outline_row_is_picked_up_moved_with_its_children_and_dropped(cx: &mut Test
     let (page, cx) = cx.add_window_view(|_, cx| Page {
         machine: cx.new(|cx| {
             Machine::new(
-                Outline::new(Default::default(), rows),
+                Outline::new(outline::Options::default(), rows),
                 "Notes",
                 Vec::<Item>::new(),
                 cx,

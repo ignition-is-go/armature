@@ -336,7 +336,14 @@ fn a_calendar_keeps_focus_when_the_keyboard_pages_to_another_month(cx: &mut Test
     }
     let start = Date::parse("2026-11-30").unwrap();
     let (page, cx) = cx.add_window_view(|_, cx| {
-        Page(cx.new(|cx| Machine::new(Calendar::new(Default::default(), start), "Date", [], cx)))
+        Page(cx.new(|cx| {
+            Machine::new(
+                Calendar::new(armature_core::calendar::Options::default(), start),
+                "Date",
+                [],
+                cx,
+            )
+        }))
     });
     let calendar = page.update(cx, |page, _| page.0.clone());
     calendar.update_in(cx, |c, window, cx| {
