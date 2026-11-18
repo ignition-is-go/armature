@@ -1,6 +1,7 @@
 //! The agent bridge: every mounted `Root` registers here, and an agent reads and
 //! operates components through it instead of screenshots and clicks.
 
+use armature_core::convert::Cast;
 use std::cell::RefCell;
 
 use armature_core::agent::{Entry, Error, Found, Registry, Run, Snapshot, Step, TOOLS, Target};
@@ -292,7 +293,7 @@ fn run_from_js(steps: JsValue) -> JsValue {
     set(&result, "appeared", &strings(&outcome.appeared));
     if let Some((index, error)) = outcome.failed {
         let failed = Object::new();
-        set(&failed, "step", &(index as u32).into());
+        set(&failed, "step", &(index.cast::<u32>()).into());
         set(&failed, "error", &error.to_string().into());
         set(&result, "failed", &failed);
     }

@@ -1,3 +1,4 @@
+use armature_core::convert::Cast;
 use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Duration;
@@ -27,9 +28,9 @@ pub type ChangeGate = Callback<ValueChange, bool>;
 thread_local! {
         static WATCHING_MODALITY: Cell<bool> = const { Cell::new(false) };
     /// Where focus was before a component's hotkey took it, by component.
-    static RETURN_TO: std::cell::RefCell<std::collections::HashMap<u32, HtmlElement>> = std::cell::RefCell::new(Default::default());
+    static RETURN_TO: std::cell::RefCell<std::collections::HashMap<u32, HtmlElement>> = std::cell::RefCell::new(std::collections::HashMap::default());
     /// The popups and dialogs open on the page, in the order they opened.
-    static LAYERS: std::cell::RefCell<armature_core::layers::LayerStack> = std::cell::RefCell::new(Default::default());
+    static LAYERS: std::cell::RefCell<armature_core::layers::LayerStack> = std::cell::RefCell::new(armature_core::layers::LayerStack::default());
     static NEXT_INSTANCE: Cell<u32> = const { Cell::new(1) };
 }
 
@@ -77,7 +78,7 @@ impl<P: Primitive + Send + Sync> Context<P> {
             item,
             at: Point::new(f64::from(ev.client_x()), f64::from(ev.client_y())),
             mods: modifiers(ev.shift_key(), ev.ctrl_key() || ev.meta_key(), ev.alt_key()),
-            now_ms: js_sys::Date::now() as u64,
+            now_ms: js_sys::Date::now().cast::<u64>(),
         };
         let measure = move |part: P::Part, item: Option<&str>| {
             let element = self.element_of(part, item)?;
@@ -139,11 +140,11 @@ impl<P: Primitive + Send + Sync> Context<P> {
             match effect {
                 Ask::Announce { message, assertive } => announce(&message, assertive),
                 Ask::Wake { at_ms } => {
-                    let wait = at_ms.saturating_sub(js_sys::Date::now() as u64);
+                    let wait = at_ms.saturating_sub(js_sys::Date::now().cast::<u64>());
                     set_timeout(
                         move || {
                             self.dispatch(Input::Tick {
-                                now_ms: js_sys::Date::now() as u64,
+                                now_ms: js_sys::Date::now().cast::<u64>(),
                             });
                         },
                         Duration::from_millis(wait),
@@ -159,9 +160,9 @@ impl<P: Primitive + Send + Sync> Context<P> {
                         == Orientation::Horizontal;
                     if let Some(element) = scrolling.and_then(|part| self.element_of(part, None)) {
                         if across {
-                            element.set_scroll_left(offset as i32);
+                            element.set_scroll_left(offset.cast::<i32>());
                         } else {
-                            element.set_scroll_top(offset as i32);
+                            element.set_scroll_top(offset.cast::<i32>());
                         }
                     }
                 }
@@ -335,7 +336,7 @@ fn allows(gate: Option<ChangeGate>, change: &ValueChange) -> bool {
     gate.is_none_or(|gate| gate.run(change.clone()))
 }
 
-fn modifiers(shift: bool, ctrl: bool, alt: bool) -> Modifiers {
+const fn modifiers(shift: bool, ctrl: bool, alt: bool) -> Modifiers {
     Modifiers { shift, ctrl, alt }
 }
 
@@ -420,7 +421,7 @@ pub fn key_from_dom(key: &str) -> Option<Key> {
     })
 }
 
-fn aria_role(role: Role) -> &'static str {
+const fn aria_role(role: Role) -> &'static str {
     match role {
         Role::Listbox => "listbox",
         Role::Option => "option",
@@ -586,7 +587,7 @@ where
             if let (Some(offset), Some(part)) = (wanted, scrolling)
                 && let Some(element) = ctx.element_of(part, None)
             {
-                element.set_scroll_top(offset.round() as i32);
+                element.set_scroll_top(offset.round().cast::<i32>());
             }
             agent::record(
                 label.get_value(),
@@ -735,7 +736,7 @@ where
                 move || {
                     waking.set_value(false);
                     ctx.dispatch(Input::Tick {
-                        now_ms: js_sys::Date::now() as u64,
+                        now_ms: js_sys::Date::now().cast::<u64>(),
                     });
                 },
                 Duration::from_millis(delay),
@@ -1186,7 +1187,7 @@ where
                 Some(meant) => (meant, Modifiers::default()),
                 None => (key, mods),
             };
-        let now_ms = js_sys::Date::now() as u64;
+        let now_ms = js_sys::Date::now().cast::<u64>();
         if ctx.dispatch(Input::Key { key, mods, now_ms }) {
             ev.prevent_default();
             ev.stop_propagation();
@@ -1204,7 +1205,7 @@ where
             let leave = {
                 let item = item.clone();
                 move || {
-                    let now_ms = js_sys::Date::now() as u64;
+                    let now_ms = js_sys::Date::now().cast::<u64>();
                     ctx.dispatch(Input::Hover {
                         part,
                         item: item.clone(),
@@ -1247,7 +1248,7 @@ where
                 from,
                 popup,
                 axis,
-                js_sys::Date::now() as u64,
+                js_sys::Date::now().cast::<u64>(),
             )));
             let last = Rc::new(Cell::new(from));
             // The shape spanning this part and its popup: a pointer inside it is
@@ -1282,7 +1283,9 @@ where
                     last.set(at);
                     if popup.contains(at) {
                         finish(true);
-                    } else if !area.borrow_mut().contains(at, js_sys::Date::now() as u64)
+                    } else if !area
+                        .borrow_mut()
+                        .contains(at, js_sys::Date::now().cast::<u64>())
                         && !bridged(at)
                     {
                         finish(false);
@@ -1294,7 +1297,7 @@ where
                 move || {
                     if !area
                         .borrow_mut()
-                        .contains(last.get(), js_sys::Date::now() as u64)
+                        .contains(last.get(), js_sys::Date::now().cast::<u64>())
                     {
                         finish(false);
                     }
@@ -1333,7 +1336,7 @@ where
                 offset: f64::from(offset),
                 viewport: f64::from(viewport),
                 content: f64::from(content),
-                now_ms: js_sys::Date::now() as u64,
+                now_ms: js_sys::Date::now().cast::<u64>(),
             });
         }
     };

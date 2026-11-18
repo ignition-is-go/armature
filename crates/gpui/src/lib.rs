@@ -3,6 +3,7 @@
 
 pub mod agent;
 
+use armature_core::convert::Cast;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -220,7 +221,9 @@ impl<P: Primitive> Machine<P> {
                         // An agent action cannot ask for a scroll, so the part is
                         // brought to wherever the primitive now wants it.
                         if let Some(offset) = state.machine.wanted_scroll() {
-                            state.scroll.set_offset(point(px(0.), px(-(offset as f32))));
+                            state
+                                .scroll
+                                .set_offset(point(px(0.), px(-(offset.cast::<f32>()))));
                         }
                         cx.notify();
                         result.map(|()| state.machine.value())
@@ -584,7 +587,9 @@ impl<P: Primitive> Machine<P> {
     }
 
     fn now_ms(&self) -> u64 {
-        (self.created.elapsed().as_millis() as u64).max(self.woke_at_ms)
+        u64::try_from(self.created.elapsed().as_millis())
+            .unwrap_or(u64::MAX)
+            .max(self.woke_at_ms)
     }
 
     fn dispatch(
@@ -760,7 +765,7 @@ impl<P: Primitive> Machine<P> {
                     }
                 }
                 Effect::ScrollTo { offset } => {
-                    let along = px(-(*offset as f32));
+                    let along = px(-((*offset).cast::<f32>()));
                     let across = self.machine.scroll_axis() == Orientation::Horizontal;
                     self.scroll.set_offset(if across {
                         point(along, px(0.))
@@ -844,7 +849,7 @@ pub fn part<K: PartOf>(
         });
     }
     if let Some(level) = semantics.level {
-        el = el.aria_level(level as usize);
+        el = el.aria_level(level.cast::<usize>());
     }
     if let Some(range) = semantics.range {
         el = el
@@ -1120,7 +1125,7 @@ pub fn part<K: PartOf>(
             // A popup called up at a point, as a context menu is, sits against it.
             .map(|at| {
                 Bounds::new(
-                    point(px(at.x as f32), px(at.y as f32)),
+                    point(px(at.x.cast::<f32>()), px(at.y.cast::<f32>())),
                     gpui::size(px(0.), px(0.)),
                 )
             })
@@ -1335,7 +1340,7 @@ enum Layout {
 
 /// GPUI flips a floating part to the other side of its anchor when it would overflow.
 fn floating(side: Side, align: Align, gap: f64, anchor: Bounds<Pixels>) -> Layout {
-    let gap = px(gap as f32);
+    let gap = px(gap.cast::<f32>());
     let (corner, x) = match (side, align) {
         (Side::Bottom, Align::Start) => (Anchor::TopLeft, anchor.left()),
         (Side::Bottom, Align::End) => (Anchor::TopRight, anchor.right()),

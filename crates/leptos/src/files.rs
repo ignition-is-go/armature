@@ -1,6 +1,7 @@
 //! The files a person last chose or dropped. The primitive hears only their names and
 //! sizes, so the files themselves are kept here for the application to read.
 
+use armature_core::convert::Cast;
 use std::cell::RefCell;
 
 use armature_core::primitive::FileInfo;
@@ -19,7 +20,7 @@ pub fn remember(list: Option<web_sys::FileList>) -> Vec<FileInfo> {
         .map(|file| FileInfo {
             name: file.name(),
             kind: file.type_(),
-            size: file.size() as u64,
+            size: file.size().cast::<u64>(),
             path: None,
         })
         .collect();
