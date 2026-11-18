@@ -249,7 +249,7 @@ impl<Cx> Clone for Registry<Cx> {
 impl<Cx> Registry<Cx> {
     pub fn register(&mut self, target: Target<Cx>) -> u32 {
         let id = self.next_id;
-        self.next_id += 1;
+        self.next_id = self.next_id.saturating_add(1);
         self.targets.push((id, target));
         id
     }

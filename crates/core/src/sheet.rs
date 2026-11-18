@@ -314,7 +314,7 @@ impl Primitive for Sheet {
                 if !moved {
                     return Reaction::default();
                 }
-                let at_ms = now_ms + REST_MS;
+                let at_ms = now_ms.saturating_add(REST_MS);
                 self.scrolled = Some((offset, at_ms));
                 Reaction::default().with(Effect::Wake { at_ms })
             }
@@ -387,9 +387,9 @@ impl Primitive for Sheet {
                 };
                 let target = match key {
                     // The arrow that points away from its edge makes it larger.
-                    k if k == grow => (at + 1).min(last),
+                    k if k == grow => (at.saturating_add(1)).min(last),
                     k if k == shrink && at == 0 => return self.dismiss(Reason::Keyboard, gate),
-                    k if k == shrink => at - 1,
+                    k if k == shrink => at.saturating_sub(1),
                     Key::Home => 0,
                     Key::End => last,
                     _ => return Reaction::default(),

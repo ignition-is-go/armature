@@ -275,7 +275,7 @@ impl Primitive for NavigationMenu {
                 } else {
                     self.opts.close_delay_ms
                 };
-                let at_ms = now_ms + delay;
+                let at_ms = now_ms.saturating_add(delay);
                 self.due = Some((at_ms, wanted));
                 Reaction::default().with(Effect::Wake { at_ms })
             }

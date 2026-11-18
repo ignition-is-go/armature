@@ -36,16 +36,25 @@ impl Typeahead {
         // Repeating one letter cycles through its matches; a longer prefix keeps the
         // current item if it still matches.
         let (needle, start) = if repeated {
-            (first.to_string(), current.map_or(0, |c| c + 1))
+            (
+                first.to_string(),
+                current.map_or(0, |c| c.saturating_add(1)),
+            )
         } else {
             (self.buffer.clone(), current.unwrap_or(0))
         };
 
         let n = items.len();
-        (0..n).map(|offset| (start + offset) % n).find(|i| {
-            let (label, enabled) = items[*i];
-            enabled && folded(label).starts_with(&needle)
-        })
+        (0..n)
+            .map(|offset| {
+                (start.saturating_add(offset))
+                    .checked_rem(n)
+                    .unwrap_or_default()
+            })
+            .find(|i| {
+                let (label, enabled) = items[*i];
+                enabled && folded(label).starts_with(&needle)
+            })
     }
 }
 

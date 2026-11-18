@@ -53,13 +53,15 @@ pub fn step(enabled: &[bool], current: Option<usize>, nav: Nav, wrap: bool) -> O
     match (nav, current) {
         (Nav::First, _) | (Nav::Next, None) => first(),
         (Nav::Last, _) | (Nav::Prev, None) => last(),
-        (Nav::Next, Some(cur)) => (cur + 1..n).find(|i| enabled[*i]).or_else(|| {
-            if wrap {
-                first().filter(|i| *i != cur)
-            } else {
-                None
-            }
-        }),
+        (Nav::Next, Some(cur)) => (cur.saturating_add(1)..n)
+            .find(|i| enabled[*i])
+            .or_else(|| {
+                if wrap {
+                    first().filter(|i| *i != cur)
+                } else {
+                    None
+                }
+            }),
         (Nav::Prev, Some(cur)) => (0..cur.min(n)).rev().find(|i| enabled[*i]).or_else(|| {
             if wrap {
                 last().filter(|i| *i != cur)

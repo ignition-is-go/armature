@@ -22,29 +22,35 @@ pub fn page_range(page: usize, count: usize, siblings: usize, boundaries: usize)
         return Vec::new();
     }
     let current = page.clamp(1, count);
-    let slots = 2 * boundaries + 2 * siblings + 3;
+    let slots = ((boundaries.saturating_mul(2)).saturating_add(siblings.saturating_mul(2)))
+        .saturating_add(3);
     if count <= slots {
         return (1..=count).map(PageItem::Page).collect();
     }
     // The window around the current page slides to stay clear of the ends.
     let start = current
         .saturating_sub(siblings)
-        .max(boundaries + 2)
-        .min(count - boundaries - 1 - 2 * siblings);
-    let end = start + 2 * siblings;
+        .max(boundaries.saturating_add(2))
+        .min(
+            ((count.saturating_sub(boundaries)).saturating_sub(1))
+                .saturating_sub(siblings.saturating_mul(2)),
+        );
+    let end = start.saturating_add(siblings.saturating_mul(2));
     let mut row: Vec<PageItem> = (1..=boundaries).map(PageItem::Page).collect();
-    row.push(if start > boundaries + 2 {
+    row.push(if start > boundaries.saturating_add(2) {
         PageItem::EllipsisStart
     } else {
-        PageItem::Page(boundaries + 1)
+        PageItem::Page(boundaries.saturating_add(1))
     });
     row.extend((start..=end).map(PageItem::Page));
-    row.push(if end < count - boundaries - 1 {
-        PageItem::EllipsisEnd
-    } else {
-        PageItem::Page(count - boundaries)
-    });
-    row.extend((count - boundaries + 1..=count).map(PageItem::Page));
+    row.push(
+        if end < (count.saturating_sub(boundaries)).saturating_sub(1) {
+            PageItem::EllipsisEnd
+        } else {
+            PageItem::Page(count.saturating_sub(boundaries))
+        },
+    );
+    row.extend(((count.saturating_sub(boundaries)).saturating_add(1)..=count).map(PageItem::Page));
     row
 }
 
@@ -131,7 +137,7 @@ impl Pagination {
         match part {
             Part::First => Some(1),
             Part::Previous => Some(self.page.saturating_sub(1).max(1)),
-            Part::Next => Some((self.page + 1).min(self.count)),
+            Part::Next => Some((self.page.saturating_add(1)).min(self.count)),
             Part::Last => Some(self.count),
             Part::Page => item?.parse().ok(),
             Part::Root => None,
@@ -241,7 +247,7 @@ impl Primitive for Pagination {
 
     fn act(&mut self, action: &str, item: Option<&str>, gate: Gate) -> Result<(), ActError> {
         let page = match action {
-            "next" => self.page + 1,
+            "next" => self.page.saturating_add(1),
             "previous" => self.page.saturating_sub(1),
             "first" => 1,
             "last" => self.count,

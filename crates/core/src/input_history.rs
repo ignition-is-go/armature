@@ -35,9 +35,9 @@ impl InputHistory {
     /// `None` when not recalling.
     pub fn newer(&mut self) -> Option<&str> {
         let at = self.cursor?;
-        if at + 1 < self.entries.len() {
-            self.cursor = Some(at + 1);
-            Some(&self.entries[at + 1])
+        if at.saturating_add(1) < self.entries.len() {
+            self.cursor = Some(at.saturating_add(1));
+            Some(&self.entries[at.saturating_add(1)])
         } else {
             self.cursor = None;
             Some(&self.draft)

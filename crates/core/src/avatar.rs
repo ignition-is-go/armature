@@ -119,10 +119,12 @@ impl Primitive for Avatar {
             Input::Tick { now_ms } if self.waiting() => match self.waited.0 {
                 None => {
                     self.waited.0 = Some(now_ms);
-                    let at_ms = now_ms + self.fallback_delay_ms;
+                    let at_ms = now_ms.saturating_add(self.fallback_delay_ms);
                     return Reaction::default().with(crate::primitive::Effect::Wake { at_ms });
                 }
-                Some(since) if now_ms >= since + self.fallback_delay_ms => self.waited.1 = true,
+                Some(since) if now_ms >= since.saturating_add(self.fallback_delay_ms) => {
+                    self.waited.1 = true
+                }
                 Some(_) => {}
             },
             _ => {}

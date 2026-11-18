@@ -90,7 +90,7 @@ impl RangeSlider {
             .map_or(self.opts.range.min, |before| self.values[before] + gap);
         let high = self
             .values
-            .get(at + 1)
+            .get(at.saturating_add(1))
             .map_or(self.opts.range.max, |after| after - gap);
         (low, high.max(low))
     }

@@ -310,7 +310,7 @@ impl Primitive for Timeline {
                         key: key.to_string(),
                     }),
                     (Part::Track, _) => {
-                        self.next_id += 1;
+                        self.next_id = self.next_id.saturating_add(1);
                         let key = format!("span-{}", self.next_id);
                         let span = draw_span(at, at, self.opts.min_length, Some(self.opts.grid));
                         self.spans.push((key.clone(), span));
@@ -415,7 +415,7 @@ impl Primitive for Timeline {
                 let text = item.ok_or(ActError::MissingItem { action: "add" })?;
                 let (_, span) = read(&format!("new:{text}"))
                     .ok_or_else(|| ActError::UnknownItem(text.to_string()))?;
-                self.next_id += 1;
+                self.next_id = self.next_id.saturating_add(1);
                 let key = format!("span-{}", self.next_id);
                 self.spans.push((key.clone(), span));
                 self.put(

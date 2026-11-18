@@ -14,7 +14,7 @@ pub fn match_ranges(query: &str, text: &str) -> Option<Vec<Range<usize>>> {
     let mut ranges: Vec<Range<usize>> = Vec::new();
     for index in matched {
         let (start, ch) = chars[index];
-        let end = start + ch.len_utf8();
+        let end = start.saturating_add(ch.len_utf8());
         match ranges.last_mut() {
             Some(last) if last.end == start => last.end = end,
             _ => ranges.push(start..end),
@@ -39,20 +39,25 @@ pub fn fuzzy_score(query: &str, text: &str) -> Option<u32> {
     if haystack == needle {
         return Some(1000);
     }
-    let starts_word = |index: usize| index == 0 || !haystack[index - 1].is_alphanumeric();
+    let starts_word =
+        |index: usize| index == 0 || !haystack[index.saturating_sub(1)].is_alphanumeric();
     let found_at = |from: usize| {
-        (from..haystack.len().saturating_sub(needle.len() - 1))
+        (from..haystack
+            .len()
+            .saturating_sub(needle.len().saturating_sub(1)))
             .find(|at| haystack[*at..].starts_with(&needle))
     };
-    let coverage = (90 * needle.len() / haystack.len().max(1)) as u32;
+    let coverage = ((needle.len().saturating_mul(90))
+        .checked_div(haystack.len().max(1))
+        .unwrap_or_default()) as u32;
     match found_at(0) {
-        Some(0) => return Some(900 + coverage),
+        Some(0) => return Some(coverage.saturating_add(900)),
         Some(first) => {
             let mut at = Some(first);
             while let Some(index) = at.filter(|index| !starts_word(*index)) {
-                at = found_at(index + 1);
+                at = found_at(index.saturating_add(1));
             }
-            return Some(if at.is_some() { 750 } else { 600 } + coverage);
+            return Some(coverage.saturating_add(if at.is_some() { 750 } else { 600 }));
         }
         None => {}
     }
@@ -60,13 +65,19 @@ pub fn fuzzy_score(query: &str, text: &str) -> Option<u32> {
     let (mut position, mut previous, mut bonus, mut letters) = (0, None, 0u32, 0u32);
     for ch in needle.iter().filter(|ch| **ch != ' ') {
         let found = (position..haystack.len()).find(|at| haystack[*at] == *ch)?;
-        letters += 1;
-        bonus += u32::from(starts_word(found))
-            + u32::from(previous.is_some_and(|previous: usize| found == previous + 1));
+        letters = letters.saturating_add(1);
+        bonus = bonus.saturating_add((u32::from(starts_word(found))).saturating_add(u32::from(
+            previous.is_some_and(|previous: usize| found == previous.saturating_add(1)),
+        )));
         previous = Some(found);
-        position = found + 1;
+        position = found.saturating_add(1);
     }
-    (letters > 0).then(|| 100 + 400 * bonus / (2 * letters))
+    (letters > 0).then(|| {
+        ((bonus.saturating_mul(400))
+            .checked_div((letters.saturating_mul(2)))
+            .unwrap_or_default())
+        .saturating_add(100)
+    })
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -111,20 +122,21 @@ fn substring(query: &[char], chars: &[(usize, char)]) -> Option<Vec<usize>> {
     if query.len() > chars.len() {
         return None;
     }
-    let starts = 0..=chars.len() - query.len();
+    let starts = 0..=chars.len().saturating_sub(query.len());
     let matches_at = |start: &usize| {
         query
             .iter()
             .zip(&chars[*start..])
             .all(|(q, (_, c))| same(*q, *c))
     };
-    let at_word = |start: &usize| *start == 0 || !chars[start - 1].1.is_alphanumeric();
+    let at_word =
+        |start: &usize| *start == 0 || !chars[start.saturating_sub(1)].1.is_alphanumeric();
     let start = starts
         .clone()
         .filter(matches_at)
         .find(at_word)
         .or_else(|| starts.clone().find(matches_at))?;
-    Some((start..start + query.len()).collect())
+    Some((start..start.saturating_add(query.len())).collect())
 }
 
 fn subsequence(query: &[char], chars: &[(usize, char)]) -> Option<Vec<usize>> {
@@ -132,8 +144,8 @@ fn subsequence(query: &[char], chars: &[(usize, char)]) -> Option<Vec<usize>> {
     let mut from = 0;
     for q in query {
         let offset = chars[from..].iter().position(|(_, c)| same(*q, *c))?;
-        matched.push(from + offset);
-        from += offset + 1;
+        matched.push(from.saturating_add(offset));
+        from = from.saturating_add(offset.saturating_add(1));
     }
     Some(matched)
 }

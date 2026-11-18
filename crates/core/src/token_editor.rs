@@ -165,7 +165,7 @@ impl TokenEditor {
         before
             .iter()
             .rposition(|ch| *ch == '\n')
-            .map_or(0, |line_break| line_break + 1)
+            .map_or(0, |line_break| line_break.saturating_add(1))
     }
 
     /// Where the line the caret is on ends.
@@ -174,7 +174,9 @@ impl TokenEditor {
             .chars()
             .skip(self.caret)
             .position(|ch| ch == '\n');
-        after.map_or(self.length(), |line_break| self.caret + line_break)
+        after.map_or(self.length(), |line_break| {
+            self.caret.saturating_add(line_break)
+        })
     }
 }
 
@@ -235,9 +237,13 @@ impl TokenEditor {
             return;
         };
         let caret = self.caret;
-        if self.replace(at..at + 1, Vec::new(), Cause::OWNER, gate) {
+        if self.replace(at..at.saturating_add(1), Vec::new(), Cause::OWNER, gate) {
             // The caret stays with the text it was in.
-            self.caret = if caret > at { caret - 1 } else { caret };
+            self.caret = if caret > at {
+                caret.saturating_sub(1)
+            } else {
+                caret
+            };
             // A token that never loaded is not something to undo back to.
             self.undone.pop();
         }
@@ -255,7 +261,7 @@ impl TokenEditor {
         };
         let caret = self.caret;
         let allowed = self.replace(
-            at..at + 1,
+            at..at.saturating_add(1),
             vec![Segment::Token(renamed)],
             Cause::OWNER,
             gate,
@@ -295,7 +301,7 @@ impl TokenEditor {
             self.undone.remove(0);
         }
         self.redone.clear();
-        self.caret = range.start + added;
+        self.caret = range.start.saturating_add(added);
         self.anchor = None;
         true
     }
@@ -433,7 +439,7 @@ impl TokenEditor {
                 }
             }
             _ if by_word => word_boundary(&self.value, self.caret, ahead),
-            _ if ahead => (self.caret + 1).min(self.length()),
+            _ if ahead => (self.caret.saturating_add(1)).min(self.length()),
             _ => self.caret.saturating_sub(1),
         };
         self.move_caret_to(to, shift);
@@ -514,7 +520,7 @@ impl Primitive for TokenEditor {
                 ..
             } => {
                 if let Some((at, _)) = self.token(&id) {
-                    self.move_caret_to(at + 1, false);
+                    self.move_caret_to(at.saturating_add(1), false);
                 }
                 Reaction::focusing(Part::Root)
             }
@@ -577,7 +583,7 @@ impl Primitive for TokenEditor {
                 let (at, _) = self
                     .token(id)
                     .ok_or_else(|| ActError::UnknownItem(id.to_string()))?;
-                self.delete(at..at + 1, Cause::AGENT, gate)
+                self.delete(at..at.saturating_add(1), Cause::AGENT, gate)
             }
             other => {
                 return Err(ActError::UnknownAction {

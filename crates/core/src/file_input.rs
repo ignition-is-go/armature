@@ -136,7 +136,7 @@ impl FileInput {
             1
         };
         let mut rejected = Vec::new();
-        let mut added = 0;
+        let mut added = 0_usize;
         for file in offered {
             let problem = if !self.accepts(&file) {
                 Some(Rejection::WrongType)
@@ -153,7 +153,7 @@ impl FileInput {
                 None => {
                     taken.retain(|held| held.name != file.name);
                     taken.push(file);
-                    added += 1;
+                    added = added.saturating_add(1);
                 }
             }
         }

@@ -186,7 +186,8 @@ impl Primitive for Picker {
 
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
         // A page is the options on show, less one kept in view as context.
-        let page = ((self.viewport / self.option_size.max(1.0)) as isize - 1).max(1);
+        let page =
+            (((self.viewport / self.option_size.max(1.0)) as isize).saturating_sub(1)).max(1);
         match input {
             Input::Scrolled {
                 offset,
@@ -207,7 +208,7 @@ impl Primitive for Picker {
                 let nearest = self.nearest_enabled(middle);
                 self.choose(nearest, Source::User, Reason::Drag, gate);
                 // Each movement puts the settling off again.
-                let at_ms = now_ms + REST_MS;
+                let at_ms = now_ms.saturating_add(REST_MS);
                 self.settle_at = Some(at_ms);
                 Reaction::default().with(Effect::Wake { at_ms })
             }
@@ -234,7 +235,7 @@ impl Primitive for Picker {
                 Key::ArrowDown => self.step(1, gate),
                 Key::ArrowUp => self.step(-1, gate),
                 Key::PageDown => self.step(page, gate),
-                Key::PageUp => self.step(-page, gate),
+                Key::PageUp => self.step(page.saturating_neg(), gate),
                 Key::Home => self.step(isize::MIN, gate),
                 Key::End => self.step(isize::MAX, gate),
                 Key::Char(ch) if ch != ' ' => {

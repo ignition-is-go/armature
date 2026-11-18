@@ -147,7 +147,7 @@ impl Sortable {
                 let steps = match nav {
                     roving::Nav::Next => 1,
                     roving::Nav::Prev => -1,
-                    roving::Nav::First => -(count as isize),
+                    roving::Nav::First => (count as isize).saturating_neg(),
                     roving::Nav::Last => count as isize,
                 };
                 self.session.step(steps, count);
@@ -376,10 +376,10 @@ impl Primitive for Sortable {
             .items
             .index_of(key)
             .ok_or_else(|| ActError::UnknownItem(key.to_string()))?;
-        let last = self.items.iter().count() - 1;
+        let last = self.items.iter().count().saturating_sub(1);
         let to = match action {
             "move_up" => from.saturating_sub(1),
-            "move_down" => (from + 1).min(last),
+            "move_down" => (from.saturating_add(1)).min(last),
             "move_to_start" => 0,
             _ => last,
         };

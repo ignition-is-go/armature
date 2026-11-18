@@ -135,7 +135,7 @@ impl Dialog {
         match self.opts.refusal(dismiss) {
             None => self.dismiss(reason, gate),
             Some(Refusal::Attempt) => {
-                self.attempts += 1;
+                self.attempts = self.attempts.saturating_add(1);
                 Reaction::handled()
             }
             Some(Refusal::Silent) => Reaction::default(),

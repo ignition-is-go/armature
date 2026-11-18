@@ -92,7 +92,9 @@ pub fn sector_of(dx: f64, dy: f64, sectors: usize) -> usize {
     let sectors = sectors.max(1);
     let clockwise_from_up = dx.atan2(-dy).rem_euclid(std::f64::consts::TAU);
     let slice = std::f64::consts::TAU / sectors as f64;
-    ((clockwise_from_up + slice / 2.0) / slice) as usize % sectors
+    (((clockwise_from_up + slice / 2.0) / slice) as usize)
+        .checked_rem(sectors)
+        .unwrap_or_default()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -157,7 +159,7 @@ pub fn dim_amount(extent: f64, heights: &[f64], largest_undimmed: Option<usize>)
         .copied()
         .unwrap_or(0.0);
     let upper = heights
-        .get(largest_undimmed.map_or(0, |at| at + 1))
+        .get(largest_undimmed.map_or(0, |at| at.saturating_add(1)))
         .copied();
     match upper {
         Some(upper) if upper > lower => ((extent - lower) / (upper - lower)).clamp(0.0, 1.0),
@@ -172,7 +174,7 @@ pub fn expand_amount(extent: f64, heights: &[f64]) -> f64 {
         return 0.0;
     };
     let lower = if heights.len() > 1 {
-        heights[heights.len() - 2]
+        heights[heights.len().saturating_sub(2)]
     } else {
         0.0
     };

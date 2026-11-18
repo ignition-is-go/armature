@@ -26,7 +26,7 @@ pub fn transfer<T: PartialEq + Clone>(
     for list in lists.iter_mut() {
         list.retain(|item| !present.contains(item));
     }
-    let at = target - removed_before;
+    let at = target.saturating_sub(removed_before);
     lists[to].splice(at..at, present.iter().cloned());
     present.len()
 }

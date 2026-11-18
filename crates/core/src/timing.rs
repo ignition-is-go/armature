@@ -29,7 +29,7 @@ impl Hold {
 
     /// Begins the press. Returns when to call `tick`.
     pub const fn start(&mut self, now_ms: u64) -> u64 {
-        let at = now_ms + self.delay_ms;
+        let at = now_ms.saturating_add(self.delay_ms);
         self.fires_at = Some(at);
         at
     }
@@ -90,22 +90,25 @@ impl Repeat {
 
     /// Begins the press, which counts as the first step. Returns when to call `tick`.
     pub const fn start(&mut self, now_ms: u64) -> u64 {
-        let at = now_ms + self.delay_ms;
+        let at = now_ms.saturating_add(self.delay_ms);
         self.next_at = Some(at);
         at
     }
 
     /// How many steps are due now, and when to call `tick` next. A late tick catches
     /// up on the steps it missed.
-    pub const fn tick(&mut self, now_ms: u64) -> (u32, Option<u64>) {
+    pub fn tick(&mut self, now_ms: u64) -> (u32, Option<u64>) {
         let Some(next_at) = self.next_at else {
             return (0, None);
         };
         if now_ms < next_at {
             return (0, Some(next_at));
         }
-        let steps = (now_ms - next_at) / self.interval_ms + 1;
-        let following = next_at + steps * self.interval_ms;
+        let steps = ((now_ms.saturating_sub(next_at))
+            .checked_div(self.interval_ms)
+            .unwrap_or_default())
+        .saturating_add(1);
+        let following = next_at.saturating_add(steps.saturating_mul(self.interval_ms));
         self.next_at = Some(following);
         (steps as u32, Some(following))
     }

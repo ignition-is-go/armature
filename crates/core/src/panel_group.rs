@@ -196,7 +196,10 @@ impl PanelGroup {
     }
 
     fn divider(&self, item: Option<&str>) -> Option<usize> {
-        item?.parse().ok().filter(|at| at + 1 < self.sizes.len())
+        item?
+            .parse::<usize>()
+            .ok()
+            .filter(|at| at.saturating_add(1) < self.sizes.len())
     }
 }
 
@@ -302,7 +305,7 @@ impl Primitive for PanelGroup {
                 Reaction::default()
             }
             Input::Key { key, mods, .. }
-                if !mods.ctrl && !mods.alt && self.focused + 1 < self.sizes.len() =>
+                if !mods.ctrl && !mods.alt && self.focused.saturating_add(1) < self.sizes.len() =>
             {
                 let step = if mods.shift {
                     self.opts.large_step
@@ -430,7 +433,7 @@ impl Primitive for PanelGroup {
             .split_once('=')
             .and_then(|(at, share)| Some((at.parse::<usize>().ok()?, share.parse::<f64>().ok()?)));
         let (at, share) = parsed
-            .filter(|(at, _)| at + 1 < self.sizes.len())
+            .filter(|(at, _)| at.saturating_add(1) < self.sizes.len())
             .ok_or_else(|| ActError::UnknownItem(given.to_string()))?;
         let next = self.moved(&self.sizes, at, share - self.sizes[at], 1.0);
         if self.commit(next, Source::Agent, Reason::Action, gate) {

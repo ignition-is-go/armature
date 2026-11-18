@@ -129,8 +129,10 @@ fn is_locked(locked: &[bool], handle: usize) -> bool {
 /// The panels a handle can take from, nearest first. It stops at a locked handle.
 fn shrinkable(count: usize, handle: usize, forward: bool, locked: &[bool]) -> Vec<usize> {
     if forward {
-        (handle + 1..count)
-            .take_while(|index| *index == handle + 1 || !is_locked(locked, index - 1))
+        (handle.saturating_add(1)..count)
+            .take_while(|index| {
+                *index == handle.saturating_add(1) || !is_locked(locked, index.saturating_sub(1))
+            })
             .collect()
     } else {
         (0..=handle)
@@ -154,11 +156,15 @@ pub fn resize_at(
     threshold: f64,
     locked: &[bool],
 ) -> Option<Vec<f64>> {
-    if delta.abs() < EPSILON || layout.len() < 2 || handle >= layout.len() - 1 {
+    if delta.abs() < EPSILON || layout.len() < 2 || handle >= layout.len().saturating_sub(1) {
         return None;
     }
     let forward = delta > 0.0;
-    let pivot = if forward { handle } else { handle + 1 };
+    let pivot = if forward {
+        handle
+    } else {
+        handle.saturating_add(1)
+    };
     let shrinking = shrinkable(layout.len(), handle, forward, locked);
     let start = layout[pivot];
     let room = panels[pivot].max - start;
@@ -243,19 +249,19 @@ pub fn all_handle_bounds(
             .collect();
     }
     // How much each panel, and those after it that a resize can reach, can give up.
-    let mut spare = vec![0.0; layout.len() + 1];
+    let mut spare = vec![0.0; layout.len().saturating_add(1)];
     for index in (0..layout.len()).rev() {
         let own = (layout[index] - panels[index].min).max(0.0);
         let passed_on = if is_locked(locked, index) {
             0.0
         } else {
-            spare[index + 1]
+            spare[index.saturating_add(1)]
         };
         spare[index] = own + passed_on;
     }
     handles
         .map(|handle| {
-            let (before, after) = (handle, handle + 1);
+            let (before, after) = (handle, handle.saturating_add(1));
             let size = layout[before];
             let can_shrink = (size - panels[before].min).min(panels[after].max - layout[after]);
             let can_grow = (panels[before].max - size).min(spare[after]);
@@ -311,7 +317,7 @@ pub fn initial_layout(panels: &[PanelConstraints]) -> Vec<f64> {
     let given: Vec<f64> = panels.iter().filter_map(|panel| panel.initial).collect();
     let left = (100.0 - given.iter().sum::<f64>()).max(0.0);
     let share = if panels.len() > given.len() {
-        left / (panels.len() - given.len()) as f64
+        left / (panels.len().saturating_sub(given.len())) as f64
     } else {
         0.0
     };
@@ -379,11 +385,20 @@ pub fn resize_panel(
     locked: &[bool],
 ) -> Option<Vec<f64>> {
     let delta = target - layout[index];
-    let after = (index + 1 < layout.len() && !is_locked(locked, index))
+    let after = (index.saturating_add(1) < layout.len() && !is_locked(locked, index))
         .then(|| resize_at(layout, panels, index, delta, threshold, locked))
         .flatten();
-    let before = (index > 0 && !is_locked(locked, index - 1))
-        .then(|| resize_at(layout, panels, index - 1, -delta, threshold, locked))
+    let before = (index > 0 && !is_locked(locked, index.saturating_sub(1)))
+        .then(|| {
+            resize_at(
+                layout,
+                panels,
+                index.saturating_sub(1),
+                -delta,
+                threshold,
+                locked,
+            )
+        })
         .flatten();
     let mut best: Option<Vec<f64>> = None;
     for candidate in [after, before].into_iter().flatten() {
@@ -399,7 +414,7 @@ pub fn resize_panel(
 /// one after when only that one can collapse.
 #[must_use]
 pub fn toggle_target(panels: &[PanelConstraints], handle: usize) -> Option<usize> {
-    [handle, handle + 1]
+    [handle, handle.saturating_add(1)]
         .into_iter()
         .find(|index| panels.get(*index).is_some_and(|panel| panel.collapsible))
 }
@@ -438,7 +453,7 @@ impl Reader<'_> {
             match chars.next()? {
                 (_, '\\') => text.push(chars.next()?.1),
                 (end, '"') => {
-                    self.rest = &self.rest[end + 1..];
+                    self.rest = &self.rest[end.saturating_add(1)..];
                     return Some(text);
                 }
                 (_, ch) => text.push(ch),
@@ -452,7 +467,7 @@ impl Reader<'_> {
             return None;
         }
         let end = self.rest.find(']')?;
-        let (list, rest) = (&self.rest[..end], &self.rest[end + 1..]);
+        let (list, rest) = (&self.rest[..end], &self.rest[end.saturating_add(1)..]);
         self.rest = rest;
         list.split(',')
             .map(str::trim)

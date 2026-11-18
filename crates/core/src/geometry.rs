@@ -21,6 +21,20 @@ impl Point {
     }
 }
 
+impl Point {
+    /// This point moved by `other`.
+    #[must_use]
+    pub fn plus(self, other: Self) -> Self {
+        Self::new(self.x + other.x, self.y + other.y)
+    }
+
+    /// How far this point is from `other`.
+    #[must_use]
+    pub fn minus(self, other: Self) -> Self {
+        Self::new(self.x - other.x, self.y - other.y)
+    }
+}
+
 impl Add for Point {
     type Output = Self;
     fn add(self, other: Self) -> Self {

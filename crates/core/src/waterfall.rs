@@ -124,7 +124,7 @@ impl Waterfall {
                     expanded,
                 });
                 if expanded {
-                    walk(waterfall, Some(&span.key), level + 1, rows);
+                    walk(waterfall, Some(&span.key), level.saturating_add(1), rows);
                 }
             }
         }
@@ -292,7 +292,9 @@ impl Primitive for Waterfall {
                     (Key::ArrowRight, Key::ArrowLeft)
                 };
                 match key {
-                    Key::ArrowDown => self.move_to(rows.get(at + 1).map(|row| row.key.clone())),
+                    Key::ArrowDown => {
+                        self.move_to(rows.get(at.saturating_add(1)).map(|row| row.key.clone()))
+                    }
                     Key::ArrowUp => self.move_to(at.checked_sub(1).map(|at| rows[at].key.clone())),
                     Key::Home => self.move_to(rows.first().map(|row| row.key.clone())),
                     Key::End => self.move_to(rows.last().map(|row| row.key.clone())),
@@ -303,7 +305,7 @@ impl Primitive for Waterfall {
                         Reaction::handled()
                     }
                     k if k == open && rows[at].has_children => {
-                        self.move_to(rows.get(at + 1).map(|row| row.key.clone()))
+                        self.move_to(rows.get(at.saturating_add(1)).map(|row| row.key.clone()))
                     }
                     k if k == close && rows[at].expanded => {
                         self.expanded.remove(&current);

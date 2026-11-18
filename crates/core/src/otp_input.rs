@@ -247,7 +247,7 @@ impl Primitive for OtpInput {
                             Reason::Text,
                             gate,
                         ) {
-                            self.slot = (at + 1).min(self.end());
+                            self.slot = (at.saturating_add(1)).min(self.end());
                         }
                         Reaction::handled()
                     }
@@ -275,7 +275,7 @@ impl Primitive for OtpInput {
                         Reaction::handled()
                     }
                     k if k == forward => {
-                        self.slot = (self.slot + 1).min(self.end());
+                        self.slot = (self.slot.saturating_add(1)).min(self.end());
                         Reaction::handled()
                     }
                     Key::Home => {

@@ -145,7 +145,7 @@ impl Primitive for TokenInput {
                 key: Key::Backspace,
                 ..
             } if self.draft.is_empty() && !self.tokens.is_empty() => {
-                let tokens = self.tokens[..self.tokens.len() - 1].to_vec();
+                let tokens = self.tokens[..self.tokens.len().saturating_sub(1)].to_vec();
                 self.set(tokens, Source::User, Reason::Keyboard, gate);
                 Reaction::handled()
             }

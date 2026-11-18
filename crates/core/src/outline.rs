@@ -20,10 +20,12 @@ pub struct Place {
 #[must_use]
 pub fn subtree_end(rows: &[OutlineRow], index: usize) -> usize {
     let depth = rows[index].depth;
-    rows[index + 1..]
+    rows[index.saturating_add(1)..]
         .iter()
         .position(|row| row.depth <= depth)
-        .map_or(rows.len(), |offset| index + 1 + offset)
+        .map_or(rows.len(), |offset| {
+            (index.saturating_add(1)).saturating_add(offset)
+        })
 }
 
 /// The parent of the row at `index` and its place among that parent's children.
@@ -31,7 +33,7 @@ pub fn subtree_end(rows: &[OutlineRow], index: usize) -> usize {
 pub fn place_of(rows: &[OutlineRow], index: usize) -> Place {
     let depth = rows[index].depth;
     let parent = rows[..index].iter().rposition(|row| row.depth < depth);
-    let first = parent.map_or(0, |parent| parent + 1);
+    let first = parent.map_or(0, |parent| parent.saturating_add(1));
     let position = rows[first..index]
         .iter()
         .filter(|row| row.depth == depth)
@@ -49,7 +51,7 @@ pub fn depth_range(
     max_depth: Option<usize>,
 ) -> (usize, usize) {
     let max = above
-        .map_or(0, |row| row.depth + 1)
+        .map_or(0, |row| row.depth.saturating_add(1))
         .min(max_depth.unwrap_or(usize::MAX));
     let min = below.map_or(0, |row| row.depth);
     (min.min(max), max)
@@ -73,7 +75,7 @@ pub fn moved_rows(
             .iter()
             .map(|row| OutlineRow {
                 key: row.key.clone(),
-                depth: row.depth + (depth - was),
+                depth: row.depth.saturating_add((depth.saturating_sub(was))),
             })
             .collect()
     } else {
@@ -81,7 +83,7 @@ pub fn moved_rows(
             .iter()
             .map(|row| OutlineRow {
                 key: row.key.clone(),
-                depth: row.depth - (was - depth),
+                depth: row.depth.saturating_sub((was.saturating_sub(depth))),
             })
             .collect()
     };
@@ -124,7 +126,12 @@ fn landing(rows: Vec<OutlineRow>, key: &str) -> Option<Landing> {
 /// `max_depth`.
 fn block_max_depth(rows: &[OutlineRow], from: usize, max_depth: Option<usize>) -> Option<usize> {
     let block = &rows[from..subtree_end(rows, from)];
-    let below = block.iter().map(|row| row.depth).max().unwrap_or(0) - block[0].depth;
+    let below = block
+        .iter()
+        .map(|row| row.depth)
+        .max()
+        .unwrap_or(0)
+        .saturating_sub(block[0].depth);
     max_depth.map(|max| max.saturating_sub(below))
 }
 
@@ -245,7 +252,7 @@ impl OutlineMove {
     pub fn step(&mut self, down: bool, shown: &dyn Fn(&str) -> bool) -> bool {
         let (_, slot) = self.others(shown);
         let to = if down {
-            slot + 1
+            slot.saturating_add(1)
         } else {
             slot.saturating_sub(1)
         };
@@ -263,7 +270,7 @@ impl OutlineMove {
         let (_, slot) = self.others(shown);
         let depth = self.rows[self.at()].depth;
         let wanted = if inward {
-            depth + 1
+            depth.saturating_add(1)
         } else {
             depth.saturating_sub(1)
         };
@@ -295,7 +302,7 @@ pub fn slot_at(middles: &[f64], y: f64) -> usize {
 #[must_use]
 pub fn depth_at(start_depth: usize, moved_x: f64, indent: f64) -> usize {
     let levels = (moved_x / indent).round() as i64;
-    (start_depth as i64 + levels).max(0) as usize
+    ((start_depth as i64).saturating_add(levels)).max(0) as usize
 }
 
 use crate::agent::{ActError, Snapshot, SnapshotItem};
@@ -421,7 +428,7 @@ impl Outline {
         Some(format!(
             "{} moved {place}, position {}",
             self.label(&landed.key),
-            landed.index + 1
+            landed.index.saturating_add(1)
         ))
     }
 
@@ -444,7 +451,7 @@ impl Outline {
                         self.label(&focused)
                     ))
                 }
-                Key::ArrowDown => to(at.map(|at| at + 1)),
+                Key::ArrowDown => to(at.map(|at| at.saturating_add(1))),
                 Key::ArrowUp => to(at.and_then(|at| at.checked_sub(1))),
                 Key::Home => to(Some(0)),
                 Key::End => to(self.rows.len().checked_sub(1)),
@@ -533,7 +540,9 @@ impl Primitive for Outline {
             .or_else(|| self.rows.first().map(|row| row.key.as_str()));
         Semantics {
             role: Some(Role::TreeItem),
-            level: self.depth_of(key).map(|depth| depth as u32 + 1),
+            level: self
+                .depth_of(key)
+                .map(|depth| (depth as u32).saturating_add(1)),
             selected: Some(self.moving().iter().any(|moved| moved == key)),
             focusable: if stop == Some(key) {
                 Focusable::TabStop

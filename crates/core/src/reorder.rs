@@ -107,7 +107,7 @@ pub enum ReorderStep {
 /// What to tell a screen reader at each step. Positions are spoken from 1.
 #[must_use]
 pub fn reorder_message(step: ReorderStep, label: &str, reorder: Reorder, count: usize) -> String {
-    let (from, to) = (reorder.from + 1, reorder.to + 1);
+    let (from, to) = (reorder.from.saturating_add(1), reorder.to.saturating_add(1));
     match step {
         ReorderStep::Grabbed => format!("Picked up {label}, position {from} of {count}."),
         ReorderStep::Moved => format!("{label}, position {to} of {count}."),

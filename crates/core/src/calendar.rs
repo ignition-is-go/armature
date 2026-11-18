@@ -107,10 +107,17 @@ impl Calendar {
     #[must_use]
     pub fn shown_months(&self) -> Vec<(i32, u8)> {
         let run = self.opts.months.max(1) as i32;
-        let index = self.focused.year * 12 + i32::from(self.focused.month) - 1;
-        let first = index.div_euclid(run) * run;
-        (first..first + run)
-            .map(|month| (month.div_euclid(12), (month.rem_euclid(12) + 1) as u8))
+        let index = ((self.focused.year.saturating_mul(12))
+            .saturating_add(i32::from(self.focused.month)))
+        .saturating_sub(1);
+        let first = index.div_euclid(run).saturating_mul(run);
+        (first..first.saturating_add(run))
+            .map(|month| {
+                (
+                    month.div_euclid(12),
+                    (month.rem_euclid(12).saturating_add(1)) as u8,
+                )
+            })
             .collect()
     }
 
@@ -338,7 +345,7 @@ impl Primitive for Calendar {
                 part: Part::PreviousMonth,
                 ..
             } => {
-                self.focused = self.focused.add_months(-self.page());
+                self.focused = self.focused.add_months(self.page().saturating_neg());
                 Reaction::handled()
             }
             Input::Press {
@@ -387,7 +394,9 @@ impl Primitive for Calendar {
     fn act(&mut self, action: &str, item: Option<&str>, gate: Gate) -> Result<(), ActError> {
         match action {
             "next_month" => self.focused = self.focused.add_months(self.page()),
-            "previous_month" => self.focused = self.focused.add_months(-self.page()),
+            "previous_month" => {
+                self.focused = self.focused.add_months(self.page().saturating_neg())
+            }
             "select" => {
                 let text = item.ok_or(ActError::MissingItem { action: "select" })?;
                 let date =

@@ -146,7 +146,11 @@ pub fn bridges(trigger: Rect, popup: Rect, padding: f64, point: Point) -> bool {
         let mut chain: Vec<Point> = Vec::new();
         for point in points {
             while chain.len() >= 2
-                && cross(chain[chain.len() - 2], chain[chain.len() - 1], point) <= 0.0
+                && cross(
+                    chain[chain.len().saturating_sub(2)],
+                    chain[chain.len().saturating_sub(1)],
+                    point,
+                ) <= 0.0
             {
                 chain.pop();
             }
@@ -157,7 +161,15 @@ pub fn bridges(trigger: Rect, popup: Rect, padding: f64, point: Point) -> bool {
     };
     let mut hull = half(&mut corners.iter().copied());
     hull.extend(half(&mut corners.iter().rev().copied()));
-    (0..hull.len()).all(|at| cross(hull[at], hull[(at + 1) % hull.len()], point) >= 0.0)
+    (0..hull.len()).all(|at| {
+        cross(
+            hull[at],
+            hull[(at.saturating_add(1))
+                .checked_rem(hull.len())
+                .unwrap_or_default()],
+            point,
+        ) >= 0.0
+    })
 }
 
 #[cfg(test)]

@@ -65,7 +65,10 @@ pub const TOKEN_CHAR: char = '\u{FFFC}';
 static LAST_ID: AtomicU64 = AtomicU64::new(0);
 
 fn next_id() -> String {
-    format!("t{}", LAST_ID.fetch_add(1, Ordering::Relaxed) + 1)
+    format!(
+        "t{}",
+        LAST_ID.fetch_add(1, Ordering::Relaxed).saturating_add(1)
+    )
 }
 
 /// Keeps generated ids clear of one a token came with.
@@ -146,12 +149,15 @@ pub fn slice_value(value: &[Segment], start: usize, end: usize) -> Vec<Segment> 
         if from < to {
             result.push(match segment {
                 Segment::Token(token) => Segment::Token(token.clone()),
-                Segment::Text(text) => {
-                    Segment::Text(text.chars().skip(from).take(to - from).collect())
-                }
+                Segment::Text(text) => Segment::Text(
+                    text.chars()
+                        .skip(from)
+                        .take(to.saturating_sub(from))
+                        .collect(),
+                ),
             });
         }
-        at += length;
+        at = at.saturating_add(length);
         if at >= end {
             break;
         }
@@ -182,7 +188,7 @@ pub fn token_at(value: &[Segment], offset: usize) -> Option<&Token> {
         if let (Segment::Token(token), true) = (segment, at == offset) {
             return Some(token);
         }
-        at += length_of(segment);
+        at = at.saturating_add(length_of(segment));
     }
     None
 }
@@ -194,7 +200,7 @@ pub fn offset_of_token(value: &[Segment], id: &str) -> Option<usize> {
         if matches!(segment, Segment::Token(token) if token.id == id) {
             return Some(at);
         }
-        at += length_of(segment);
+        at = at.saturating_add(length_of(segment));
     }
     None
 }
@@ -240,7 +246,13 @@ pub fn word_boundary(value: &[Segment], offset: usize, forward: bool) -> usize {
             index > 0
         }
     };
-    let step = |index: usize| if forward { index + 1 } else { index - 1 };
+    let step = |index: usize| {
+        if forward {
+            index.saturating_add(1)
+        } else {
+            index.saturating_sub(1)
+        }
+    };
     let mut at = offset;
     if char_at(at) == Some(TOKEN_CHAR) {
         return step(at);
@@ -270,9 +282,9 @@ pub fn line_boundary(value: &[Segment], offset: usize, forward: bool) -> usize {
         let start = text[..offset.min(text.len())]
             .iter()
             .rposition(|ch| *ch == '\n')
-            .map_or(0, |at| at + 1);
+            .map_or(0, |at| at.saturating_add(1));
         return if start == offset && offset > 0 {
-            offset - 1
+            offset.saturating_sub(1)
         } else {
             start
         };
@@ -281,10 +293,10 @@ pub fn line_boundary(value: &[Segment], offset: usize, forward: bool) -> usize {
         .iter()
         .skip(offset)
         .position(|ch| *ch == '\n')
-        .map(|found| found + offset)
+        .map(|found| found.saturating_add(offset))
     {
         None => text.len(),
-        Some(end) if end == offset => offset + 1,
+        Some(end) if end == offset => offset.saturating_add(1),
         Some(end) => end,
     }
 }
@@ -341,7 +353,7 @@ pub fn to_text(value: &[Segment]) -> String {
                     out.push_str("\\[@");
                 }
                 out.push_str(last);
-                if matches!(value.get(index + 1), Some(Segment::Token(_))) {
+                if matches!(value.get(index.saturating_add(1)), Some(Segment::Token(_))) {
                     out.push_str(trailing_slashes(last));
                 }
             }
@@ -373,38 +385,38 @@ fn link_at(text: &[char], at: usize) -> Option<(Token, usize)> {
             match *text.get(index)? {
                 '\\' => {
                     raw.push('\\');
-                    raw.push(*text.get(index + 1)?);
-                    index += 2;
+                    raw.push(*text.get(index.saturating_add(1))?);
+                    index = index.saturating_add(2);
                 }
                 ch if ch == stop => return Some((raw, index)),
                 ch if refused.contains(&ch) => return None,
                 ch => {
                     raw.push(ch);
-                    index += 1;
+                    index = index.saturating_add(1);
                 }
             }
         }
     };
-    let (label, close) = run(at + 2, ']', &[])?;
-    if text.get(close + 1) != Some(&'(') {
+    let (label, close) = run(at.saturating_add(2), ']', &[])?;
+    if text.get(close.saturating_add(1)) != Some(&'(') {
         return None;
     }
-    let mut index = close + 2;
+    let mut index = close.saturating_add(2);
     let mut kind = String::new();
     while let Some(ch) = text
         .get(index)
         .filter(|ch| ch.is_alphanumeric() || **ch == '_' || **ch == '-')
     {
         kind.push(*ch);
-        index += 1;
+        index = index.saturating_add(1);
     }
     if kind.is_empty() || text.get(index) != Some(&':') {
         return None;
     }
-    let (value, end) = run(index + 1, ')', &['('])?;
+    let (value, end) = run(index.saturating_add(1), ')', &['('])?;
     Some((
         Token::new(&kind, &unescaped(&value), &unescaped(&label)),
-        end + 1,
+        end.saturating_add(1),
     ))
 }
 
@@ -418,7 +430,7 @@ pub fn from_text(text: &str) -> Vec<Segment> {
     let mut index = 0;
     while index < chars.len() {
         let Some(bracket) = (index..chars.len().saturating_sub(1))
-            .find(|at| chars[*at] == '[' && chars[*at + 1] == '@')
+            .find(|at| chars[*at] == '[' && chars[(*at).saturating_add(1)] == '@')
         else {
             break;
         };
@@ -427,7 +439,7 @@ pub fn from_text(text: &str) -> Vec<Segment> {
             .rev()
             .take_while(|ch| **ch == '\\')
             .count();
-        plain.extend(&chars[index..bracket - slashes]);
+        plain.extend(&chars[index..bracket.saturating_sub(slashes)]);
         plain.push_str(&"\\".repeat(slashes / 2));
         let link = if slashes % 2 == 1 {
             None
@@ -440,7 +452,7 @@ pub fn from_text(text: &str) -> Vec<Segment> {
             index = end;
         } else {
             plain.push_str("[@");
-            index = bracket + 2;
+            index = bracket.saturating_add(2);
         }
     }
     plain.extend(&chars[index.min(chars.len())..]);

@@ -99,20 +99,20 @@ pub fn is_valid_query(query: &str, rule: &TriggerRule) -> bool {
     {
         return false;
     }
-    let (mut words, mut previous) = (1, None);
+    let (mut words, mut previous) = (1_usize, None);
     for ch in query.chars() {
         if ch == ' ' {
             if rule.spaces == Spaces::None || previous == Some(' ') {
                 return false;
             }
-            words += 1;
+            words = words.saturating_add(1);
         } else if !rule.takes(ch) {
             return false;
         }
         previous = Some(ch);
     }
     match rule.spaces {
-        Spaces::Words(most) => words - usize::from(previous == Some(' ')) <= most,
+        Spaces::Words(most) => words.saturating_sub(usize::from(previous == Some(' '))) <= most,
         _ => true,
     }
 }
@@ -122,13 +122,13 @@ pub fn is_valid_query(query: &str, rule: &TriggerRule) -> bool {
 /// them is, is not known, so it is no boundary.
 #[must_use]
 pub fn is_at_boundary(text: &[char], index: usize, offset: usize, boundary: Boundary) -> bool {
-    if boundary == Boundary::Anywhere || offset + index == 0 {
+    if boundary == Boundary::Anywhere || offset.saturating_add(index) == 0 {
         return true;
     }
     if boundary == Boundary::Start || index == 0 {
         return false;
     }
-    let before = text[index - 1];
+    let before = text[index.saturating_sub(1)];
     match boundary {
         Boundary::Line => before == '\n',
         _ => before.is_whitespace() || matches!(before, '(' | '[' | '{' | '"' | '\'' | '\u{FFFC}'),
@@ -139,12 +139,12 @@ pub fn is_at_boundary(text: &[char], index: usize, offset: usize, boundary: Boun
 /// the character before them.
 #[must_use]
 pub fn look_behind(rules: &[TriggerRule]) -> usize {
-    rules
+    (rules
         .iter()
-        .map(|rule| rule.max_length + rule.trigger.chars().count())
+        .map(|rule| rule.max_length.saturating_add(rule.trigger.chars().count()))
         .max()
-        .unwrap_or(0)
-        + 1
+        .unwrap_or(0))
+    .saturating_add(1)
 }
 
 /// The nearest trigger before the caret whose query runs up to it. `text` is the
@@ -159,21 +159,24 @@ pub fn find_trigger_match(
     let source: Vec<char> = normalize_trigger_text(text).chars().collect();
     let caret = source.len();
     let limit = look_behind(rules);
-    for index in (0..caret).rev().take_while(|index| caret - index <= limit) {
+    for index in (0..caret)
+        .rev()
+        .take_while(|index| caret.saturating_sub(*index) <= limit)
+    {
         for (at, rule) in rules.iter().enumerate() {
             let trigger: Vec<char> = rule.trigger.chars().collect();
             if trigger.is_empty() || !source[index..].starts_with(&trigger) {
                 continue;
             }
-            let query: String = raw[index + trigger.len()..].iter().collect();
+            let query: String = raw[index.saturating_add(trigger.len())..].iter().collect();
             if is_valid_query(&normalize_trigger_text(&query), rule)
                 && is_at_boundary(&source, index, offset, rule.boundary)
             {
                 return Some(TriggerMatch {
                     rule: at,
                     trigger: rule.trigger.clone(),
-                    start: offset + index,
-                    end: offset + caret,
+                    start: offset.saturating_add(index),
+                    end: offset.saturating_add(caret),
                     query,
                 });
             }
@@ -208,8 +211,10 @@ pub fn map_dismissed(
     to: usize,
     inserted: usize,
 ) -> Option<Dismissed> {
-    let shift = |at: usize| (at + inserted).saturating_sub(to - from);
-    let trigger_end = dismissed.start + dismissed.trigger.chars().count();
+    let shift = |at: usize| (at.saturating_add(inserted)).saturating_sub(to.saturating_sub(from));
+    let trigger_end = dismissed
+        .start
+        .saturating_add(dismissed.trigger.chars().count());
     if to <= dismissed.start {
         return Some(Dismissed {
             start: shift(dismissed.start),

@@ -40,7 +40,7 @@ impl Viewport {
     }
 
     pub fn pan_by(&mut self, delta: Point) {
-        self.pan = self.pan + delta;
+        self.pan = self.pan.plus(delta);
     }
 
     /// Zooms by `factor` while keeping the canvas point under `screen` where it is,

@@ -57,7 +57,7 @@ pub fn group_slides(slides: &[SlideBox], snapport: f64, per_page: PerPage) -> Ve
         PerPage::Count(count) => {
             let size = count.max(1);
             for index in (0..slides.len()).step_by(size) {
-                groups.push((index..(index + size).min(slides.len())).collect());
+                groups.push((index..(index.saturating_add(size)).min(slides.len())).collect());
             }
         }
         PerPage::Auto => {
@@ -91,7 +91,7 @@ fn page_of(
     snapport: f64,
     padding_start: f64,
 ) -> Page {
-    let (first, last) = (boxes[group[0]], boxes[group[group.len() - 1]]);
+    let (first, last) = (boxes[group[0]], boxes[group[group.len().saturating_sub(1)]]);
     let margin = align_offset(align, snapport, last.start + last.size - first.start);
     Page {
         slides: group.to_vec(),
@@ -153,9 +153,9 @@ pub fn step_page(page: usize, by: i64, count: usize, wrap: bool) -> usize {
     if count <= 1 {
         return page;
     }
-    let next = page as i64 + by;
+    let next = (page as i64).saturating_add(by);
     if wrap {
-        (next - 1).rem_euclid(count as i64) as usize + 1
+        ((next.saturating_sub(1)).rem_euclid(count as i64) as usize).saturating_add(1)
     } else {
         next.clamp(1, count as i64) as usize
     }
@@ -194,7 +194,9 @@ pub fn place_slides(track: &Track, first: usize) -> Vec<SlideBox> {
     ];
     let mut at = track.start;
     for step in 0..count {
-        let index = (first + step) % count;
+        let index = (first.saturating_add(step))
+            .checked_rem(count)
+            .unwrap_or_default();
         boxes[index] = SlideBox {
             start: at,
             size: track.sizes[index],
@@ -211,7 +213,12 @@ pub fn measure_track(slides: &[SlideBox], first: usize) -> Option<Track> {
     if slides.len() < 2 || first >= slides.len() {
         return None;
     }
-    let (lead, next) = (slides[first], slides[(first + 1) % slides.len()]);
+    let (lead, next) = (
+        slides[first],
+        slides[(first.saturating_add(1))
+            .checked_rem(slides.len())
+            .unwrap_or_default()],
+    );
     let track = Track {
         sizes: slides.iter().map(|slide| slide.size).collect(),
         gap: next.start - lead.start - lead.size,
@@ -251,7 +258,9 @@ pub fn can_loop(track: &Track, view: &LoopView) -> bool {
     let length: f64 = track.sizes.iter().map(|size| size + track.gap).sum();
     let step = (0..groups.len())
         .map(|index| {
-            let next = &groups[(index + 1) % groups.len()];
+            let next = &groups[(index.saturating_add(1))
+                .checked_rem(groups.len())
+                .unwrap_or_default()];
             (boxes[next[0]].start - boxes[groups[index][0]].start + length) % length
         })
         .fold(0.0, f64::max);

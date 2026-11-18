@@ -39,13 +39,15 @@ impl Warmth {
     pub const WINDOW_MS: u64 = 300;
 
     fn closed(&self, now_ms: u64) {
-        self.0.store(now_ms + 1, Ordering::Relaxed);
+        self.0.store(now_ms.saturating_add(1), Ordering::Relaxed);
     }
 
     #[must_use]
     pub fn is_warm(&self, now_ms: u64) -> bool {
         let closed = self.0.load(Ordering::Relaxed);
-        closed > 0 && now_ms + 1 >= closed && now_ms + 1 - closed <= Self::WINDOW_MS
+        closed > 0
+            && now_ms.saturating_add(1) >= closed
+            && (now_ms.saturating_add(1)).saturating_sub(closed) <= Self::WINDOW_MS
     }
 }
 
@@ -160,7 +162,7 @@ impl Tooltip {
             self.change(open, Source::User, Reason::Hover, Some(now_ms), gate);
             return Reaction::default();
         }
-        let at_ms = now_ms + delay;
+        let at_ms = now_ms.saturating_add(delay);
         self.due = Some((at_ms, open));
         Reaction::default().with(Effect::Wake { at_ms })
     }

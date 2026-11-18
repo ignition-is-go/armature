@@ -299,7 +299,7 @@ impl TreeView {
         };
         let (slot, sideways) = match key {
             Key::ArrowUp => (slot.saturating_sub(1), 0.0),
-            Key::ArrowDown => ((slot + 1).min(others.len()), 0.0),
+            Key::ArrowDown => ((slot.saturating_add(1)).min(others.len()), 0.0),
             k if k == deeper => (slot, TREE_INDENT),
             k if k == shallower => (slot, -TREE_INDENT),
             _ => return Reaction::default(),
@@ -344,7 +344,7 @@ impl TreeView {
         };
         match key {
             Key::ArrowDown => {
-                let next = enabled_from(&mut rows[at + 1..].iter());
+                let next = enabled_from(&mut rows[at.saturating_add(1)..].iter());
                 self.move_to(next)
             }
             Key::ArrowUp => {
@@ -363,7 +363,7 @@ impl TreeView {
             k if k == open_key && rows[at].has_children => {
                 if rows[at].expanded {
                     let child = enabled_from(
-                        &mut rows[at + 1..]
+                        &mut rows[at.saturating_add(1)..]
                             .iter()
                             .take_while(|row| row.level > rows[at].level),
                     );

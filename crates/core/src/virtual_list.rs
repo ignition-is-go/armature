@@ -95,7 +95,7 @@ impl VirtualList {
     fn go_to(&mut self, index: usize) -> Reaction<Part> {
         self.focused = index.min(self.count.saturating_sub(1));
         let start = self.rows.offset_of(self.focused);
-        let end = self.rows.offset_of(self.focused + 1);
+        let end = self.rows.offset_of(self.focused.saturating_add(1));
         let target = if start < self.offset {
             Some(
                 self.rows
@@ -208,18 +208,18 @@ impl Primitive for VirtualList {
             Input::Key {
                 key: Key::ArrowDown,
                 ..
-            } => self.go_to(self.focused + 1),
+            } => self.go_to(self.focused.saturating_add(1)),
             Input::Key {
                 key: Key::ArrowUp, ..
             } => self.go_to(self.focused.saturating_sub(1)),
             Input::Key {
                 key: Key::PageDown, ..
-            } => self.go_to(self.focused + page),
+            } => self.go_to(self.focused.saturating_add(page)),
             Input::Key {
                 key: Key::PageUp, ..
             } => self.go_to(self.focused.saturating_sub(page)),
             Input::Key { key: Key::Home, .. } => self.go_to(0),
-            Input::Key { key: Key::End, .. } => self.go_to(self.count - 1),
+            Input::Key { key: Key::End, .. } => self.go_to(self.count.saturating_sub(1)),
             Input::Key {
                 key: Key::Enter | Key::Space,
                 ..

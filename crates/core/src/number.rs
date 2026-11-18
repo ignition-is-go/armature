@@ -181,7 +181,7 @@ pub fn format_number(value: f64, decimals: usize) -> String {
     let (whole, fraction) = fixed.split_once('.').unwrap_or((&fixed, ""));
     let mut grouped = String::new();
     for (index, digit) in whole.chars().enumerate() {
-        if index > 0 && (whole.len() - index) % 3 == 0 {
+        if index > 0 && (whole.len().saturating_sub(index)) % 3 == 0 {
             grouped.push(',');
         }
         grouped.push(digit);
@@ -227,7 +227,7 @@ pub fn format_grouped(value: f64, decimals: usize) -> String {
     let (whole, fraction) = text.split_once('.').unwrap_or((&text, ""));
     let mut grouped = String::new();
     for (at, digit) in whole.chars().enumerate() {
-        if at > 0 && (whole.len() - at) % 3 == 0 {
+        if at > 0 && (whole.len().saturating_sub(at)) % 3 == 0 {
             grouped.push(',');
         }
         grouped.push(digit);
@@ -250,9 +250,9 @@ pub fn format_file_size(bytes: u64) -> String {
     const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
     let mut size = bytes as f64;
     let mut unit = 0;
-    while size >= 1024.0 && unit < UNITS.len() - 1 {
+    while size >= 1024.0 && unit < UNITS.len().saturating_sub(1) {
         size /= 1024.0;
-        unit += 1;
+        unit = unit.saturating_add(1);
     }
     if unit == 0 {
         format!("{bytes} B")

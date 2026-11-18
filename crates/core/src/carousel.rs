@@ -238,19 +238,20 @@ impl Carousel {
                 .iter()
                 .position(|page| page.slides.contains(&self.current))
                 .unwrap_or(0);
-            let to = step_page(
-                page + 1,
+            let to = (step_page(
+                page.saturating_add(1),
                 by.signum() as i64,
                 self.measured.len(),
                 self.opts.wrap,
-            ) - 1;
+            ))
+            .saturating_sub(1);
             return (to != page).then(|| self.measured[to].leader);
         }
         // A step is a page of slides, and the last page never runs past the end.
         let per_page = self.opts.per_page.max(1) as isize;
-        let last = (count - per_page).max(0);
+        let last = (count.saturating_sub(per_page)).max(0);
         let now = self.current as isize;
-        let wanted = (now + by.signum() * per_page).clamp(0, last);
+        let wanted = (now.saturating_add(by.signum().saturating_mul(per_page))).clamp(0, last);
         if wanted != now {
             Some(wanted as usize)
         } else if self.opts.wrap && last > 0 {
@@ -289,7 +290,11 @@ impl Carousel {
     }
 
     fn said(&self) -> String {
-        format!("Slide {} of {}", self.current + 1, self.count())
+        format!(
+            "Slide {} of {}",
+            self.current.saturating_add(1),
+            self.count()
+        )
     }
 }
 
@@ -424,7 +429,7 @@ impl Primitive for Carousel {
                 {
                     self.go(index, Source::User, Reason::Timer, gate);
                 }
-                let at_ms = now_ms + every;
+                let at_ms = now_ms.saturating_add(every);
                 self.advance_at = Some(at_ms);
                 Reaction::default().with(Effect::Wake { at_ms })
             }

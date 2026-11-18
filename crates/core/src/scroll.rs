@@ -70,12 +70,14 @@ impl Virtualizer {
             let end = start + self.size(index);
             if end > offset && start < offset + viewport {
                 first.get_or_insert(index);
-                last = index + 1;
+                last = index.saturating_add(1);
             }
             start = end + self.gap;
         }
         match first {
-            Some(first) => first.saturating_sub(overscan)..(last + overscan).min(self.count),
+            Some(first) => {
+                first.saturating_sub(overscan)..(last.saturating_add(overscan)).min(self.count)
+            }
             None => 0..0,
         }
     }
@@ -149,7 +151,7 @@ pub fn picker_index(offset: f64, item_size: f64, count: usize) -> usize {
     if count == 0 || item_size <= 0.0 {
         return 0;
     }
-    ((offset / item_size).round().max(0.0) as usize).min(count - 1)
+    ((offset / item_size).round().max(0.0) as usize).min(count.saturating_sub(1))
 }
 
 /// The option a wheel picker comes to rest on when released moving at `velocity`

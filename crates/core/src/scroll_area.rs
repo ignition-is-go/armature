@@ -200,7 +200,7 @@ impl Primitive for ScrollArea {
                     return Reaction::default();
                 }
                 self.scrolling = true;
-                let at_ms = now_ms + IDLE_MS;
+                let at_ms = now_ms.saturating_add(IDLE_MS);
                 self.idle_at = Some(at_ms);
                 Reaction::default().with(Effect::Wake { at_ms })
             }

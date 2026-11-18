@@ -156,8 +156,8 @@ impl DataGrid {
             for (c, value) in row.into_iter().enumerate() {
                 edits.push((
                     Cell {
-                        row: top + r,
-                        col: left + c,
+                        row: top.saturating_add(r),
+                        col: left.saturating_add(c),
                     },
                     value,
                 ));

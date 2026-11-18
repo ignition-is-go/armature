@@ -23,12 +23,12 @@ impl<T> UndoStack<T> {
 
     /// Records a new state. Anything that had been undone can no longer be redone.
     pub fn record(&mut self, state: T) {
-        self.states.truncate(self.current + 1);
+        self.states.truncate(self.current.saturating_add(1));
         self.states.push(state);
         if self.states.len() > self.limit {
             self.states.remove(0);
         }
-        self.current = self.states.len() - 1;
+        self.current = self.states.len().saturating_sub(1);
     }
 
     #[must_use]
@@ -38,20 +38,20 @@ impl<T> UndoStack<T> {
 
     #[must_use]
     pub const fn can_redo(&self) -> bool {
-        self.current + 1 < self.states.len()
+        self.current.saturating_add(1) < self.states.len()
     }
 
     /// Steps back and returns the state to restore.
     pub fn undo(&mut self) -> Option<&T> {
         self.can_undo().then(|| {
-            self.current -= 1;
+            self.current = self.current.saturating_sub(1);
             &self.states[self.current]
         })
     }
 
     pub fn redo(&mut self) -> Option<&T> {
         self.can_redo().then(|| {
-            self.current += 1;
+            self.current = self.current.saturating_add(1);
             &self.states[self.current]
         })
     }

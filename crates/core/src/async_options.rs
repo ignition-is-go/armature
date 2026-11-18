@@ -38,7 +38,7 @@ impl Requests {
     /// Starts a request and returns its number, to hand back with its answer. An
     /// empty query asks for nothing.
     pub fn begin(&mut self, query: &str) -> Option<u64> {
-        self.newest += 1;
+        self.newest = self.newest.saturating_add(1);
         if query.trim().is_empty() {
             self.status = Status::Idle;
             return None;

@@ -498,7 +498,9 @@ impl Primitive for Canvas {
                             mods,
                         });
                     }
-                    Some(Gesture::Move { from, origin }) => self.shift_selected(&origin, at - from),
+                    Some(Gesture::Move { from, origin }) => {
+                        self.shift_selected(&origin, at.minus(from))
+                    }
                     Some(Gesture::Resize { key, from, origin }) => {
                         let limits = ResizeLimits {
                             min: MIN_NODE,
@@ -512,11 +514,12 @@ impl Primitive for Canvas {
                         if let (Some(start), Some(node)) =
                             (start, self.nodes.iter_mut().find(|node| node.key == key))
                         {
-                            node.rect = resized(start, Handle::BOTTOM_RIGHT, at - from, limits);
+                            node.rect =
+                                resized(start, Handle::BOTTOM_RIGHT, at.minus(from), limits);
                         }
                     }
                     Some(Gesture::Pan { last }) => {
-                        self.view.pan_by(pointer.at - last);
+                        self.view.pan_by(pointer.at.minus(last));
                         self.gesture = Some(Gesture::Pan { last: pointer.at });
                     }
                     None => return Reaction::default(),

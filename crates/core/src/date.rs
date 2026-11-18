@@ -52,38 +52,51 @@ impl Date {
 
     /// Days since 1 January 1970.
     fn to_days(self) -> i64 {
-        let year = i64::from(self.year) - i64::from(self.month <= 2);
+        let year = i64::from(self.year).saturating_sub(i64::from(self.month <= 2));
         let era = year.div_euclid(400);
         let year_of_era = year.rem_euclid(400);
         let month = i64::from(self.month);
-        let day_of_year =
-            (153 * (month + if month > 2 { -3 } else { 9 }) + 2) / 5 + i64::from(self.day) - 1;
-        let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-        era * 146_097 + day_of_era - 719_468
+        let day_of_year = ((((month.saturating_add(if month > 2 { -3 } else { 9 }))
+            .saturating_mul(153))
+        .saturating_add(2))
+            / 5)
+        .saturating_add(i64::from(self.day).saturating_sub(1));
+        let day_of_era = (((year_of_era.saturating_mul(365)).saturating_add(year_of_era / 4))
+            .saturating_sub(year_of_era / 100))
+        .saturating_add(day_of_year);
+        ((era.saturating_mul(146_097)).saturating_add(day_of_era)).saturating_sub(719_468)
     }
 
     fn from_days(days: i64) -> Self {
-        let shifted = days + 719_468;
+        let shifted = days.saturating_add(719_468);
         let era = shifted.div_euclid(146_097);
         let day_of_era = shifted.rem_euclid(146_097);
-        let year_of_era =
-            (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
-        let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-        let shifted_month = (5 * day_of_year + 2) / 153;
-        let day = (day_of_year - (153 * shifted_month + 2) / 5 + 1) as u8;
+        let year_of_era = (((day_of_era.saturating_sub(day_of_era / 1460))
+            .saturating_add(day_of_era / 36_524))
+        .saturating_sub(day_of_era / 146_096))
+            / 365;
+        let day_of_year = day_of_era.saturating_sub(
+            (((year_of_era.saturating_mul(365)).saturating_add(year_of_era / 4))
+                .saturating_sub(year_of_era / 100)),
+        );
+        let shifted_month = ((day_of_year.saturating_mul(5)).saturating_add(2)) / 153;
+        let day = ((day_of_year
+            .saturating_sub(((shifted_month.saturating_mul(153)).saturating_add(2)) / 5))
+        .saturating_add(1)) as u8;
         let month = if shifted_month < 10 {
-            shifted_month + 3
+            shifted_month.saturating_add(3)
         } else {
-            shifted_month - 9
+            shifted_month.saturating_sub(9)
         } as u8;
-        let year = (year_of_era + era * 400 + i64::from(month <= 2)) as i32;
+        let year = ((year_of_era.saturating_add(era.saturating_mul(400)))
+            .saturating_add(i64::from(month <= 2))) as i32;
         Self { year, month, day }
     }
 
     /// Day of the week, with Sunday as 0.
     #[must_use]
     pub fn weekday(self) -> u8 {
-        (self.to_days() + 4).rem_euclid(7) as u8
+        (self.to_days().saturating_add(4)).rem_euclid(7) as u8
     }
 
     /// The first and last days there are. Arithmetic stops at them.
@@ -120,7 +133,7 @@ impl Date {
         let index = self
             .year
             .saturating_mul(12)
-            .saturating_add(i32::from(self.month) - 1)
+            .saturating_add(i32::from(self.month).saturating_sub(1))
             .saturating_add(months);
         if index < 12 {
             return Self::FIRST;
@@ -128,7 +141,10 @@ impl Date {
         if index > 9999 * 12 + 11 {
             return Self::LAST;
         }
-        let (year, month) = (index.div_euclid(12), index.rem_euclid(12) as u8 + 1);
+        let (year, month) = (
+            index.div_euclid(12),
+            (index.rem_euclid(12) as u8).saturating_add(1),
+        );
         Self {
             year,
             month,
@@ -138,7 +154,7 @@ impl Date {
 
     #[must_use]
     pub fn days_until(self, other: Self) -> i64 {
-        other.to_days() - self.to_days()
+        other.to_days().saturating_sub(self.to_days())
     }
 }
 
@@ -151,8 +167,8 @@ pub fn month_grid(year: i32, month: u8, week_start: u8) -> Vec<[Date; 7]> {
         month,
         day: 1,
     };
-    let lead = (first.weekday() + 7 - week_start % 7) % 7;
-    let mut day = first.add_days(-i64::from(lead));
+    let lead = ((first.weekday().saturating_add(7)).saturating_sub(week_start % 7)) % 7;
+    let mut day = first.add_days(i64::from(lead).saturating_neg());
     let last = Date {
         year,
         month,
@@ -196,16 +212,17 @@ pub fn date_for_key(
     dir: Dir,
     week_start: u8,
 ) -> Option<Date> {
-    let forward = if dir == Dir::Rtl { -1 } else { 1 };
-    let into_week = i64::from((date.weekday() + 7 - week_start % 7) % 7);
+    let forward: i64 = if dir == Dir::Rtl { -1 } else { 1 };
+    let into_week =
+        i64::from(((date.weekday().saturating_add(7)).saturating_sub(week_start % 7)) % 7);
     Some(match key {
-        Key::ArrowLeft => date.add_days(-forward),
+        Key::ArrowLeft => date.add_days(forward.saturating_neg()),
         Key::ArrowRight => date.add_days(forward),
         Key::ArrowUp if mods.ctrl => date.add_months(-1),
         Key::ArrowDown if mods.ctrl => date.add_months(1),
         Key::ArrowUp => date.add_days(-7),
         Key::ArrowDown => date.add_days(7),
-        Key::Home => date.add_days(-into_week),
+        Key::Home => date.add_days(into_week.saturating_neg()),
         Key::End => date.add_days(6 - into_week),
         _ => return None,
     })
@@ -238,7 +255,7 @@ const WEEKDAYS: [&str; 7] = [
 /// A month's English name, counting from 1. Other languages are the host's to supply.
 #[must_use]
 pub fn month_name(month: u8) -> &'static str {
-    MONTHS[(month.clamp(1, 12) - 1) as usize]
+    MONTHS[(month.clamp(1, 12).saturating_sub(1)) as usize]
 }
 
 /// A weekday's English name, with Sunday as 0.
@@ -267,7 +284,7 @@ pub fn first_day_of_week(locale: &str) -> u8 {
 impl Date {
     #[must_use]
     pub fn add_years(self, years: i32) -> Self {
-        self.add_months(years * 12)
+        self.add_months(years.saturating_mul(12))
     }
 
     /// The date brought within the earliest and latest allowed.
@@ -281,7 +298,10 @@ impl Date {
     /// `week_start` (Sunday is 0).
     #[must_use]
     pub fn start_of_week(self, week_start: u8) -> Self {
-        self.add_days(-i64::from((self.weekday() + 7 - week_start % 7) % 7))
+        self.add_days(
+            (i64::from(((self.weekday().saturating_add(7)).saturating_sub(week_start % 7)) % 7))
+                .saturating_neg(),
+        )
     }
 
     #[must_use]

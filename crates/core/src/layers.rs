@@ -93,7 +93,9 @@ impl LayerStack {
     pub fn is_inert(&self, id: &str) -> bool {
         match self.layers.iter().position(|layer| layer.id == id) {
             Some(at) if self.layers[at].persistent => false,
-            Some(at) => self.layers[at + 1..].iter().any(|layer| layer.modal),
+            Some(at) => self.layers[at.saturating_add(1)..]
+                .iter()
+                .any(|layer| layer.modal),
             None => self.layers.iter().any(|layer| layer.modal),
         }
     }
@@ -117,7 +119,7 @@ impl LayerStack {
         let mut closed = Vec::new();
         let mut index = self.layers.len();
         while index > at {
-            index -= 1;
+            index = index.saturating_sub(1);
             if index == at || !self.layers[index].persistent {
                 closed.push(self.layers.remove(index).id);
             }
@@ -133,11 +135,11 @@ impl LayerStack {
         if pressed.is_some_and(|at| self.layers[at].persistent) {
             return Vec::new();
         }
-        let keep = pressed.map_or(0, |at| at + 1);
+        let keep = pressed.map_or(0, |at| at.saturating_add(1));
         let mut closed = Vec::new();
         let mut index = self.layers.len();
         while index > keep {
-            index -= 1;
+            index = index.saturating_sub(1);
             if self.layers[index].persistent {
                 continue;
             }
@@ -153,15 +155,19 @@ impl LayerStack {
 /// The element Tab moves to inside a modal layer that traps focus: it wraps at both
 /// ends. `count` is how many tabbable elements the layer has.
 #[must_use]
-pub const fn trapped_focus(current: Option<usize>, count: usize, backwards: bool) -> Option<usize> {
+pub fn trapped_focus(current: Option<usize>, count: usize, backwards: bool) -> Option<usize> {
     if count == 0 {
         return None;
     }
     Some(match (current, backwards) {
         (None, false) => 0,
-        (None, true) => count - 1,
-        (Some(at), false) => (at + 1) % count,
-        (Some(at), true) => (at + count - 1) % count,
+        (None, true) => count.saturating_sub(1),
+        (Some(at), false) => (at.saturating_add(1))
+            .checked_rem(count)
+            .unwrap_or_default(),
+        (Some(at), true) => ((at.saturating_add(count)).saturating_sub(1))
+            .checked_rem(count)
+            .unwrap_or_default(),
     })
 }
 

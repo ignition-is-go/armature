@@ -55,9 +55,13 @@ pub fn step(
     let enabled = |cell: &Cell| enabled(*cell);
     match nav {
         GridNav::Up => in_col(from.col).take(from.row).filter(enabled).last(),
-        GridNav::Down => in_col(from.col).skip(from.row + 1).find(enabled),
+        GridNav::Down => in_col(from.col)
+            .skip(from.row.saturating_add(1))
+            .find(enabled),
         GridNav::Left => in_row(from.row).take(from.col).filter(enabled).last(),
-        GridNav::Right => in_row(from.row).skip(from.col + 1).find(enabled),
+        GridNav::Right => in_row(from.row)
+            .skip(from.col.saturating_add(1))
+            .find(enabled),
         GridNav::RowStart => in_row(from.row).find(enabled),
         GridNav::RowEnd => in_row(from.row).filter(enabled).last(),
         GridNav::First => all().find(enabled),

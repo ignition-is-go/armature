@@ -218,11 +218,13 @@ impl DateInput {
             // Morning or afternoon moves the hour to the other half of the day.
             Segment::Period => {
                 let pm = number == Some(1);
-                fields[3] = fields[3].map(|hour| hour % 12 + if pm { 12 } else { 0 });
+                fields[3] =
+                    fields[3].map(|hour| (hour % 12).saturating_add(if pm { 12 } else { 0 }));
                 self.pm = pm;
             }
             Segment::Hour if self.twelve => {
-                fields[3] = number.map(|shown| shown % 12 + if self.pm { 12 } else { 0 });
+                fields[3] =
+                    number.map(|shown| (shown % 12).saturating_add(if self.pm { 12 } else { 0 }));
             }
             other => fields[other as usize] = number,
         }
@@ -262,7 +264,7 @@ impl DateInput {
             .iter()
             .position(|segment| *segment == self.focused)?;
         if forward {
-            segments.get(at + 1).copied()
+            segments.get(at.saturating_add(1)).copied()
         } else {
             at.checked_sub(1).map(|at| segments[at])
         }
@@ -361,14 +363,14 @@ impl Primitive for DateInput {
                                 if now >= max {
                                     min
                                 } else {
-                                    now + 1
+                                    now.saturating_add(1)
                                 }
                             }
                             (Some(now), false) => {
                                 if now <= min {
                                     max
                                 } else {
-                                    now - 1
+                                    now.saturating_sub(1)
                                 }
                             }
                         };
@@ -405,7 +407,8 @@ impl Primitive for DateInput {
                         // could ever hold. What was typed is then brought within what this
                         // month allows.
                         let most = if segment == Segment::Day { 31 } else { max };
-                        let full = self.typed.len() >= segment.width() || number * 10 > most;
+                        let full =
+                            self.typed.len() >= segment.width() || number.saturating_mul(10) > most;
                         let stored = match (full, number >= min) {
                             (true, _) => Some(number.clamp(min, max)),
                             (false, true) => Some(number.min(max)),

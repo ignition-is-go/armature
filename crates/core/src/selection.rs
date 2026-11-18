@@ -74,14 +74,14 @@ pub fn toggle_all(mode: Mode, selected: &[String], order: &[&str]) -> Vec<String
 #[must_use]
 pub fn format_labels(labels: &[&str], most: usize) -> String {
     let shown = &labels[..labels.len().min(most.max(1))];
-    let rest = labels.len() - shown.len();
+    let rest = labels.len().saturating_sub(shown.len());
     match (shown, rest) {
         ([], _) => String::new(),
         (shown, 0) if shown.len() == 1 => shown[0].to_string(),
         (shown, 0) => format!(
             "{} and {}",
-            shown[..shown.len() - 1].join(", "),
-            shown[shown.len() - 1]
+            shown[..shown.len().saturating_sub(1)].join(", "),
+            shown[shown.len().saturating_sub(1)]
         ),
         (shown, rest) => format!("{} and {rest} more", shown.join(", ")),
     }

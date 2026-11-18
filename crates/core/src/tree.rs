@@ -69,7 +69,7 @@ impl Tree {
             end: 0,
         });
         for child in &item.children {
-            let child = self.insert(child, Some(at), level + 1);
+            let child = self.insert(child, Some(at), level.saturating_add(1));
             self.nodes[at].children.push(child);
         }
         self.nodes[at].end = self.nodes.len();
@@ -131,12 +131,15 @@ impl Tree {
             rows.push(Row {
                 key: node.key.clone(),
                 level: node.level,
-                position: siblings.iter().position(|s| *s == at).map_or(1, |p| p + 1),
+                position: siblings
+                    .iter()
+                    .position(|s| *s == at)
+                    .map_or(1, |p| p.saturating_add(1)),
                 siblings: siblings.len(),
                 has_children: !node.children.is_empty(),
                 expanded: open,
             });
-            at = if open { at + 1 } else { node.end };
+            at = if open { at.saturating_add(1) } else { node.end };
         }
         rows
     }
@@ -287,7 +290,7 @@ pub fn move_node(
         if let Some(at) = items.iter().position(|item| item.key == target) {
             match position {
                 DropPosition::Before => items.insert(at, node),
-                DropPosition::After => items.insert(at + 1, node),
+                DropPosition::After => items.insert(at.saturating_add(1), node),
                 DropPosition::Inside => items[at].children.push(node),
             }
             return Ok(());
@@ -336,7 +339,7 @@ pub fn drop_depth(
     below: Option<usize>,
 ) -> usize {
     let wanted = start as f64 + (sideways / indent.max(f64::MIN_POSITIVE)).round();
-    let deepest = above.map_or(1, |above| above + 1);
+    let deepest = above.map_or(1, |above| above.saturating_add(1));
     let shallowest = below.unwrap_or(1).min(deepest);
     (wanted.max(1.0) as usize).clamp(shallowest, deepest)
 }
@@ -357,7 +360,7 @@ pub fn slot_target(
         .iter()
         .rev()
         .find(|row| row.level < depth)
-        .filter(|row| row.level + 1 == depth);
+        .filter(|row| row.level.saturating_add(1) == depth);
     let siblings: Vec<&str> = match parent {
         Some(parent) => tree.children(&parent.key),
         None => tree
@@ -467,7 +470,7 @@ pub fn tree_from_paths(paths: &[&str]) -> Vec<TreeItem> {
                     label: segment.to_string(),
                     children: Vec::new(),
                 });
-                level.len() - 1
+                level.len().saturating_sub(1)
             };
             level = &mut level[at].children;
         }

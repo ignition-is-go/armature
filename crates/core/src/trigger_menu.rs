@@ -75,7 +75,7 @@ impl TriggerMenu {
             })?;
             Some((at, &entry.1))
         })?;
-        let given = words.len() - at - 1;
+        let given = (words.len().saturating_sub(at)).saturating_sub(1);
         // A word still being typed is the argument in progress, not one given.
         let given = if complete {
             given
@@ -98,7 +98,7 @@ impl TriggerMenu {
             .collect();
         let found = find_trigger_match(&self.text, 0, &rules)?;
         let (start, written) = self.text.char_indices().nth(found.start)?;
-        let typed = &self.text[start + written.len_utf8()..];
+        let typed = &self.text[start.saturating_add(written.len_utf8())..];
         (self.dismissed != Some(start)).then_some((start, self.triggers[found.rule], typed))
     }
 

@@ -83,11 +83,11 @@ impl TextEdit {
         match edit {
             Edit::Insert(ch) => {
                 self.text.insert(self.byte_at(self.caret), ch);
-                self.caret += 1;
+                self.caret = self.caret.saturating_add(1);
                 true
             }
             Edit::Backspace if self.caret > 0 => {
-                self.caret -= 1;
+                self.caret = self.caret.saturating_sub(1);
                 self.text.remove(self.byte_at(self.caret));
                 true
             }
@@ -100,7 +100,7 @@ impl TextEdit {
                 false
             }
             Edit::Right => {
-                self.caret = (self.caret + 1).min(length);
+                self.caret = (self.caret.saturating_add(1)).min(length);
                 false
             }
             Edit::Home => {
@@ -122,7 +122,7 @@ impl TextEdit {
 pub fn text_diff(before: &str, after: &str) -> (usize, String, String) {
     let (old, new): (Vec<char>, Vec<char>) = (before.chars().collect(), after.chars().collect());
     let start = old.iter().zip(&new).take_while(|(a, b)| a == b).count();
-    let room = old.len().min(new.len()) - start;
+    let room = (old.len().min(new.len())).saturating_sub(start);
     let end = old
         .iter()
         .rev()
@@ -132,8 +132,8 @@ pub fn text_diff(before: &str, after: &str) -> (usize, String, String) {
         .count();
     (
         start,
-        old[start..old.len() - end].iter().collect(),
-        new[start..new.len() - end].iter().collect(),
+        old[start..old.len().saturating_sub(end)].iter().collect(),
+        new[start..new.len().saturating_sub(end)].iter().collect(),
     )
 }
 

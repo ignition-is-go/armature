@@ -71,8 +71,8 @@ impl Drag {
 
     pub fn moved(&mut self, at: Point) -> Option<DragEvent> {
         let press = self.press.as_mut()?;
-        let total = at - press.origin;
-        let delta = at - press.last;
+        let total = at.minus(press.origin);
+        let delta = at.minus(press.last);
         press.last = at;
         if press.dragging {
             return Some(DragEvent::Move { delta, total });
@@ -91,7 +91,7 @@ impl Drag {
         let press = self.press.take()?;
         Some(if press.dragging {
             DragEvent::End {
-                total: at - press.origin,
+                total: at.minus(press.origin),
             }
         } else {
             DragEvent::Click

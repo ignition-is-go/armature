@@ -239,7 +239,7 @@ impl Toaster {
             (false, Some(left)) => {
                 self.deadlines = left
                     .into_iter()
-                    .map(|(id, left)| (id, now_ms + left))
+                    .map(|(id, left)| (id, now_ms.saturating_add(left)))
                     .collect();
                 self.wake()
             }
@@ -386,7 +386,7 @@ impl Primitive for Toaster {
                     })
                     .collect();
                 for (id, lasts, title, assertive) in started {
-                    self.deadlines.push((id, now_ms + lasts));
+                    self.deadlines.push((id, now_ms.saturating_add(lasts)));
                     reaction = reaction.with(Effect::Announce {
                         message: title,
                         assertive,
