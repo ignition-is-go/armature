@@ -178,12 +178,15 @@ pub fn step_page(page: usize, by: i64, count: usize, wrap: bool) -> usize {
     if count <= 1 {
         return page;
     }
-    let next = (page.cast::<i64>()).saturating_add(by);
-    if wrap {
-        ((next.saturating_sub(1)).rem_euclid(count.cast::<i64>()) as usize).saturating_add(1)
+    let pages: i64 = count.cast();
+    let next = page.cast::<i64>().saturating_add(by);
+    let landed = if wrap {
+        // Pages count from 1, so the wrap is taken from 0 and put back.
+        next.saturating_sub(1).rem_euclid(pages).saturating_add(1)
     } else {
-        next.clamp(1, count.cast::<i64>()) as usize
-    }
+        next.clamp(1, pages)
+    };
+    landed.cast()
 }
 
 /// A track of slides as it is when slide 0 comes first: each slide's size, the

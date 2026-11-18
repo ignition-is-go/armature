@@ -343,7 +343,7 @@ pub fn slot_at(middles: &[f64], y: f64) -> usize {
 #[must_use]
 pub fn depth_at(start_depth: usize, moved_x: f64, indent: f64) -> usize {
     let levels = (moved_x / indent).round().cast::<i64>();
-    ((start_depth.cast::<i64>()).saturating_add(levels)).max(0) as usize
+    start_depth.cast::<i64>().saturating_add(levels).cast()
 }
 
 use crate::agent::{ActError, Snapshot, SnapshotItem};

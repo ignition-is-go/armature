@@ -98,6 +98,10 @@ impl Form {
     }
 
     /// The fields and their values if nothing is wrong, or what is wrong.
+    ///
+    /// # Errors
+    ///
+    /// With each field that is wrong and why, when any is.
     pub fn submit(&mut self) -> Result<Vec<(String, Vec<String>)>, Invalid> {
         self.tried = true;
         let problems: Vec<(String, String)> = self

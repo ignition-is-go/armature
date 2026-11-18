@@ -289,11 +289,11 @@ impl Rgb {
 
     /// Lightness from 0 to 100 and the two colour axes of CIE Lab.
     #[must_use]
+    #[expect(
+        clippy::many_single_char_names,
+        reason = "colour channels go by their letters"
+    )]
     pub fn to_lab(self) -> (f64, f64, f64) {
-        #[expect(
-            clippy::many_single_char_names,
-            reason = "colour channels go by their letters"
-        )]
         let [r, g, b] = [self.r, self.g, self.b].map(|part| to_linear(f64::from(part) / 255.0));
         // To XYZ under D65, then adapted to the D50 white Lab is measured against,
         // with the matrices CSS Color gives.
@@ -351,11 +351,11 @@ impl Rgb {
 
     /// Lightness from 0 to 1, colourfulness, and hue in degrees, in OKLCH.
     #[must_use]
+    #[expect(
+        clippy::many_single_char_names,
+        reason = "colour channels go by their letters"
+    )]
     pub fn to_oklch(self) -> (f64, f64, f64) {
-        #[expect(
-            clippy::many_single_char_names,
-            reason = "colour channels go by their letters"
-        )]
         let [r, g, b] = [self.r, self.g, self.b].map(|part| to_linear(f64::from(part) / 255.0));
         let l = 0.051_445_992_9_f64
             .mul_add(b, 0.536_332_536_3_f64.mul_add(g, 0.412_221_470_8 * r))

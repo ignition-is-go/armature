@@ -103,6 +103,10 @@ impl<Cx> Clone for Target<Cx> {
 impl<Cx> Target<Cx> {
     /// Runs one action. A component that needs approval refuses; use `run` with an
     /// approver for those.
+    ///
+    /// # Errors
+    ///
+    /// When the component needs approval, or refuses the action.
     pub fn act(&self, cx: &mut Cx, action: &str, item: Option<&str>) -> Result<Vec<String>, Error> {
         self.access.confirm.as_ref().map_or_else(
             || self.act_approved(cx, action, item),
@@ -276,6 +280,10 @@ impl<Cx> Registry<Cx> {
 
     /// The target behind a ref, cloned out so the registry is not borrowed while
     /// application code runs.
+    ///
+    /// # Errors
+    ///
+    /// When no component has that ref.
     pub fn target(&self, reference: &str) -> Result<Target<Cx>, Error> {
         self.targets
             .iter()
@@ -335,6 +343,10 @@ impl<Cx> Registry<Cx> {
 
     /// Tries `values` on the components they name, remembering what they replace.
     /// Nothing asks the owner, since the point is to look before deciding.
+    ///
+    /// # Errors
+    ///
+    /// When a ref names no component. What was already tried is put back first.
     pub fn stage(&self, cx: &mut Cx, values: &[(String, Vec<String>)]) -> Result<Staged, Error> {
         let mut previous = Vec::new();
         for (target, value) in values {

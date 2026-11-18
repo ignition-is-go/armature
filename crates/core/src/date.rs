@@ -52,46 +52,47 @@ impl Date {
     }
 
     /// Days since 1 January 1970.
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "a year is an i32 and a day count is clamped to the years 1 to 9999, so nothing here can overflow an i64"
+    )]
     fn to_days(self) -> i64 {
-        let year = i64::from(self.year).saturating_sub(i64::from(self.month <= 2));
+        // Counting years from March puts the leap day at the end of the year.
+        let year = i64::from(self.year) - i64::from(self.month <= 2);
         let era = year.div_euclid(400);
         let year_of_era = year.rem_euclid(400);
         let month = i64::from(self.month);
-        let day_of_year = ((((month.saturating_add(if month > 2 { -3 } else { 9 }))
-            .saturating_mul(153))
-        .saturating_add(2))
-            / 5)
-        .saturating_add(i64::from(self.day).saturating_sub(1));
-        let day_of_era = (((year_of_era.saturating_mul(365)).saturating_add(year_of_era / 4))
-            .saturating_sub(year_of_era / 100))
-        .saturating_add(day_of_year);
-        ((era.saturating_mul(146_097)).saturating_add(day_of_era)).saturating_sub(719_468)
+        let months_since_march = month + if month > 2 { -3 } else { 9 };
+        let day_of_year = (153 * months_since_march + 2) / 5 + i64::from(self.day) - 1;
+        let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+        era * 146_097 + day_of_era - 719_468
     }
 
+    #[expect(
+        clippy::arithmetic_side_effects,
+        reason = "callers pass a day count between the first and last dates, so nothing here can overflow an i64"
+    )]
     fn from_days(days: i64) -> Self {
-        let shifted = days.saturating_add(719_468);
+        let shifted = days + 719_468;
         let era = shifted.div_euclid(146_097);
         let day_of_era = shifted.rem_euclid(146_097);
-        let year_of_era = (((day_of_era.saturating_sub(day_of_era / 1460))
-            .saturating_add(day_of_era / 36_524))
-        .saturating_sub(day_of_era / 146_096))
-            / 365;
-        let day_of_year = day_of_era.saturating_sub(
-            ((year_of_era.saturating_mul(365)).saturating_add(year_of_era / 4))
-                .saturating_sub(year_of_era / 100),
-        );
-        let shifted_month = ((day_of_year.saturating_mul(5)).saturating_add(2)) / 153;
-        let day = ((day_of_year
-            .saturating_sub(((shifted_month.saturating_mul(153)).saturating_add(2)) / 5))
-        .saturating_add(1)) as u8;
+        let year_of_era =
+            (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+        let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+        // Months counted from March, as in `to_days`.
+        let shifted_month = (5 * day_of_year + 2) / 153;
+        let day = day_of_year - (153 * shifted_month + 2) / 5 + 1;
         let month = if shifted_month < 10 {
-            shifted_month.saturating_add(3)
+            shifted_month + 3
         } else {
-            shifted_month.saturating_sub(9)
-        } as u8;
-        let year = ((year_of_era.saturating_add(era.saturating_mul(400)))
-            .saturating_add(i64::from(month <= 2))) as i32;
-        Self { year, month, day }
+            shifted_month - 9
+        };
+        let year = year_of_era + era * 400 + i64::from(month <= 2);
+        Self {
+            year: year.cast(),
+            month: month.cast(),
+            day: day.cast(),
+        }
     }
 
     /// Day of the week, with Sunday as 0.
@@ -230,7 +231,7 @@ pub fn date_for_key(
         Key::ArrowUp => date.add_days(-7),
         Key::ArrowDown => date.add_days(7),
         Key::Home => date.add_days(into_week.saturating_neg()),
-        Key::End => date.add_days(6 - into_week),
+        Key::End => date.add_days(6_i64.saturating_sub(into_week)),
         _ => return None,
     })
 }

@@ -327,7 +327,9 @@ pub fn move_node(
     if !movable {
         return false;
     }
-    let node = take(items, key).expect("found above");
+    let Some(node) = take(items, key) else {
+        return false;
+    };
     place(items, node, target, position).is_ok()
 }
 
@@ -452,9 +454,14 @@ pub fn place_node(
     if parent.is_some_and(|parent| contains(node, parent) || find(items, parent).is_none()) {
         return false;
     }
-    let node = take(items, key).expect("found above");
+    let Some(node) = take(items, key) else {
+        return false;
+    };
     let siblings = match parent {
-        Some(parent) => children_of(items, parent).expect("found above"),
+        Some(parent) => match children_of(items, parent) {
+            Some(children) => children,
+            None => return false,
+        },
         None => items,
     };
     siblings.insert(index.min(siblings.len()), node);

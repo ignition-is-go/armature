@@ -1,5 +1,6 @@
 //! Matching typed text against labels, for filtering and for highlighting the match.
 
+use crate::convert::Cast;
 use std::ops::Range;
 
 /// The byte ranges of `text` that `query` matches, ignoring case.
@@ -55,9 +56,13 @@ pub fn fuzzy_score(query: &str, text: &str) -> Option<u32> {
             .saturating_sub(needle.len().saturating_sub(1)))
             .find(|at| haystack.get(*at..).unwrap_or_default().starts_with(&needle))
     };
-    let coverage = ((needle.len().saturating_mul(90))
+    // Up to 90 more for a query that covers the whole text.
+    let coverage: u32 = needle
+        .len()
+        .saturating_mul(90)
         .checked_div(haystack.len().max(1))
-        .unwrap_or_default()) as u32;
+        .unwrap_or_default()
+        .cast();
     match found_at(0) {
         Some(0) => return Some(coverage.saturating_add(900)),
         Some(first) => {

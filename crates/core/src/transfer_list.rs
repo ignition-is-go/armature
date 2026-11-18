@@ -86,7 +86,7 @@ impl TransferList {
         reason: Reason,
         gate: Gate,
     ) -> Option<Reaction<Part>> {
-        let from = 1 - to;
+        let from = 1_usize.saturating_sub(to);
         let moving: Vec<String> = self
             .side(from)
             .iter()

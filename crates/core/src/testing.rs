@@ -72,7 +72,10 @@ fn inputs<P: Primitive>(items: &[Item]) -> Vec<Input<P::Part>> {
     let mut all: Vec<Input<P::Part>> = vec![
         Input::PressOutside,
         Input::Hotkey {
-            shortcut: crate::shortcut::Shortcut::parse("f6").expect("a key"),
+            shortcut: crate::shortcut::Shortcut {
+                key: Key::F6,
+                mods: Modifiers::default(),
+            },
         },
         Input::DragOver { inside: true },
         Input::Files {
@@ -398,6 +401,10 @@ pub fn check<P: Primitive>(make: impl Fn() -> P, items: &[Item]) -> Vec<Violatio
 }
 
 /// Panics with every broken rule, for use in a test.
+///
+/// # Panics
+///
+/// When the primitive breaks any rule, listing each one.
 pub fn assert_conforms<P: Primitive>(make: impl Fn() -> P, items: &[Item]) {
     let violations = check(make, items);
     let listed: Vec<String> = violations.iter().map(Violation::to_string).collect();

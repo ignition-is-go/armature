@@ -614,5 +614,9 @@ pub trait Primitive: Clone + 'static {
     fn set_value(&mut self, value: Vec<String>);
     fn snapshot(&self, label: &str) -> Snapshot;
     /// Runs an agent action through the same change gate a user's input goes through.
+    ///
+    /// # Errors
+    ///
+    /// When the action or its item is unknown or disabled, or the gate refused.
     fn act(&mut self, action: &str, item: Option<&str>, gate: Gate) -> Result<(), ActError>;
 }

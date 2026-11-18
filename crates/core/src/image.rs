@@ -53,6 +53,10 @@ impl Crop {
     /// The pixel size of the cropped file. With neither dimension asked for it is the
     /// crop's own size; with one, the other keeps the crop's proportions. Each side is
     /// at least one pixel.
+    ///
+    /// # Errors
+    ///
+    /// When the crop has no area.
     pub fn output_size(
         &self,
         width: Option<f64>,

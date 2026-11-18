@@ -70,14 +70,8 @@ impl NumberRange {
             .parse::<f64>()
             .map_or(count, |rounded| {
                 // Fifteen significant digits, as far as a float can be trusted.
-                let scale = 10f64.powi(
-                    14 - rounded
-                        .abs()
-                        .log10()
-                        .floor()
-                        .clamp(-300.0, 300.0)
-                        .cast::<i32>(),
-                );
+                let magnitude: i32 = rounded.abs().log10().floor().clamp(-300.0, 300.0).cast();
+                let scale = 10f64.powi(14_i32.saturating_sub(magnitude));
                 if scale.is_finite() && scale > 0.0 {
                     (count * scale).round() / scale
                 } else {
