@@ -272,43 +272,39 @@ impl<P: Primitive + Send + Sync> Context<P> {
         request_animation_frame(attempt);
     }
 
+    /// Places a popup against its anchor, keeps it in the window, and tells its
+    /// styles where it went and where its arrow points.
     fn place(self, popup: &HtmlElement, placement: Placement<P::Part>) {
-        // A popup that belongs to an item sits against that item's own anchor.
-        let item = popup.get_attribute("data-value");
-        let own = item
-            .as_deref()
-            .and_then(|item| self.element_of(placement.anchor, Some(item)));
         // A popup called up at a point, as a context menu is, sits against that point.
+        // One that belongs to an item sits against that item's own anchor.
         let point = self
             .machine
             .with_untracked(armature_core::primitive::Primitive::popup_point);
-        let at_point = point.and_then(|point| {
-            web_sys::DomRect::new_with_x_and_y_and_width_and_height(point.x, point.y, 0.0, 0.0).ok()
-        });
-        let anchor = match at_point {
-            Some(rect) => rect,
-            None => match own.or_else(|| self.element_of(placement.anchor, None)) {
-                Some(anchor) => anchor.get_bounding_client_rect(),
-                None => return,
-            },
+        let item = popup.get_attribute("data-value");
+        let anchor = if let Some(point) = point {
+            Rect::new(point.x, point.y, 0.0, 0.0)
+        } else {
+            let own = item
+                .as_deref()
+                .and_then(|item| self.element_of(placement.anchor, Some(item)));
+            let Some(anchor) = own.or_else(|| self.element_of(placement.anchor, None)) else {
+                return;
+            };
+            box_of(&anchor)
         };
-        let size = popup.get_bounding_client_rect();
+        let drawn = box_of(popup);
+        let size = Size {
+            width: drawn.width,
+            height: drawn.height,
+        };
         let dimension = |value: Result<JsValue, JsValue>| value.ok().and_then(|v| v.as_f64());
         let viewport = Size {
             width: dimension(window().inner_width()).unwrap_or(f64::MAX),
             height: dimension(window().inner_height()).unwrap_or(f64::MAX),
         };
         let placed = popup::place(
-            Rect {
-                x: anchor.x(),
-                y: anchor.y(),
-                width: anchor.width(),
-                height: anchor.height(),
-            },
-            Size {
-                width: size.width(),
-                height: size.height(),
-            },
+            anchor,
+            size,
             viewport,
             placement.side,
             placement.align,
@@ -317,29 +313,14 @@ impl<P: Primitive + Send + Sync> Context<P> {
         let style = popup.style();
         let _ = style.set_property("left", &format!("{}px", placed.x));
         let _ = style.set_property("top", &format!("{}px", placed.y));
-        let anchor_box = Rect {
-            x: anchor.x(),
-            y: anchor.y(),
-            width: anchor.width(),
-            height: anchor.height(),
-        };
-        let popup_size = Size {
-            width: size.width(),
-            height: size.height(),
-        };
         // Where the arrow's middle goes, and whether it had to stop short of a
         // corner instead of pointing at the middle of the anchor.
-        let popup_box = Rect::new(placed.x, placed.y, popup_size.width, popup_size.height);
-        let (arrow, clamped) = popup::arrow_along(
-            anchor_box,
-            popup_box,
-            Size {
-                width: 0.0,
-                height: 0.0,
-            },
-            false,
-            12.0,
-        );
+        let placed_box = Rect::new(placed.x, placed.y, size.width, size.height);
+        let no_arrow_size = Size {
+            width: 0.0,
+            height: 0.0,
+        };
+        let (arrow, clamped) = popup::arrow_along(anchor, placed_box, no_arrow_size, false, 12.0);
         let _ = style.set_property("--armature-arrow-x", &format!("{arrow}px"));
         let _ = if clamped {
             popup.set_attribute("data-arrow-clamped", "")
