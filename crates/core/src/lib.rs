@@ -16,6 +16,7 @@ pub mod color_picker;
 pub mod combobox;
 pub mod command;
 pub mod connect;
+pub mod convert;
 pub mod data_grid;
 pub mod date;
 pub mod date_input;

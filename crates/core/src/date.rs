@@ -1,6 +1,7 @@
 //! Calendar dates without time zones: arithmetic, the grid a month view shows, and how
 //! keys move through it.
 
+use crate::convert::Cast;
 use crate::keys::{Dir, Key, Modifiers};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -96,7 +97,9 @@ impl Date {
     /// Day of the week, with Sunday as 0.
     #[must_use]
     pub fn weekday(self) -> u8 {
-        (self.to_days().saturating_add(4)).rem_euclid(7) as u8
+        (self.to_days().saturating_add(4))
+            .rem_euclid(7)
+            .cast::<u8>()
     }
 
     /// The first and last days there are. Arithmetic stops at them.
@@ -143,7 +146,7 @@ impl Date {
         }
         let (year, month) = (
             index.div_euclid(12),
-            (index.rem_euclid(12) as u8).saturating_add(1),
+            (index.rem_euclid(12).cast::<u8>()).saturating_add(1),
         );
         Self {
             year,
@@ -176,7 +179,9 @@ pub fn month_grid(year: i32, month: u8, week_start: u8) -> Vec<[Date; 7]> {
     };
     let mut weeks = Vec::new();
     while day <= last {
-        weeks.push(std::array::from_fn(|offset| day.add_days(offset as i64)));
+        weeks.push(std::array::from_fn(|offset| {
+            day.add_days(offset.cast::<i64>())
+        }));
         day = day.add_days(7);
     }
     weeks
@@ -196,7 +201,9 @@ pub fn month_grid_fixed(year: i32, month: u8, week_start: u8) -> Vec<[Date; 7]> 
             },
             |week| week[6].add_days(1),
         );
-        weeks.push(std::array::from_fn(|offset| next.add_days(offset as i64)));
+        weeks.push(std::array::from_fn(|offset| {
+            next.add_days(offset.cast::<i64>())
+        }));
     }
     weeks
 }
@@ -255,13 +262,13 @@ const WEEKDAYS: [&str; 7] = [
 /// A month's English name, counting from 1. Other languages are the host's to supply.
 #[must_use]
 pub fn month_name(month: u8) -> &'static str {
-    MONTHS[(month.clamp(1, 12).saturating_sub(1)) as usize]
+    MONTHS[(month.clamp(1, 12).saturating_sub(1)).cast::<usize>()]
 }
 
 /// A weekday's English name, with Sunday as 0.
 #[must_use]
-pub const fn weekday_name(weekday: u8) -> &'static str {
-    WEEKDAYS[(weekday % 7) as usize]
+pub fn weekday_name(weekday: u8) -> &'static str {
+    WEEKDAYS[(weekday % 7).cast::<usize>()]
 }
 
 /// The day a week starts on where a language is spoken, with Sunday as 0. It is

@@ -1,5 +1,6 @@
 use crate::agent::{ActError, Snapshot};
 use crate::change::{Gate, Reason, Source, ValueChange};
+use crate::convert::Cast;
 use crate::date::{Date, date_for_key, month_grid};
 use crate::keys::{Dir, Key};
 use crate::primitive::{Focusable, Input, Item, PartOf, Primitive, Reaction, Role, Semantics};
@@ -106,7 +107,7 @@ impl Calendar {
     /// months, so the view only changes when focus leaves the run.
     #[must_use]
     pub fn shown_months(&self) -> Vec<(i32, u8)> {
-        let run = self.opts.months.max(1) as i32;
+        let run = self.opts.months.max(1).cast::<i32>();
         let index = ((self.focused.year.saturating_mul(12))
             .saturating_add(i32::from(self.focused.month)))
         .saturating_sub(1);
@@ -115,7 +116,7 @@ impl Calendar {
             .map(|month| {
                 (
                     month.div_euclid(12),
-                    (month.rem_euclid(12).saturating_add(1)) as u8,
+                    (month.rem_euclid(12).saturating_add(1)).cast::<u8>(),
                 )
             })
             .collect()
@@ -130,7 +131,7 @@ impl Calendar {
     }
 
     fn page(&self) -> i32 {
-        self.opts.months.max(1) as i32
+        self.opts.months.max(1).cast::<i32>()
     }
 
     fn allowed(&self, date: Date) -> bool {

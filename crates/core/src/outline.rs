@@ -301,12 +301,13 @@ pub fn slot_at(middles: &[f64], y: f64) -> usize {
 /// sideways from where the drag began.
 #[must_use]
 pub fn depth_at(start_depth: usize, moved_x: f64, indent: f64) -> usize {
-    let levels = (moved_x / indent).round() as i64;
-    ((start_depth as i64).saturating_add(levels)).max(0) as usize
+    let levels = (moved_x / indent).round().cast::<i64>();
+    ((start_depth.cast::<i64>()).saturating_add(levels)).max(0) as usize
 }
 
 use crate::agent::{ActError, Snapshot, SnapshotItem};
 use crate::change::{Gate, Reason, Source, ValueChange};
+use crate::convert::Cast;
 use crate::drag::{Drag, DragEvent};
 use crate::keys::{Dir, Key};
 use crate::primitive::{
@@ -542,7 +543,7 @@ impl Primitive for Outline {
             role: Some(Role::TreeItem),
             level: self
                 .depth_of(key)
-                .map(|depth| (depth as u32).saturating_add(1)),
+                .map(|depth| (depth.cast::<u32>()).saturating_add(1)),
             selected: Some(self.moving().iter().any(|moved| moved == key)),
             focusable: if stop == Some(key) {
                 Focusable::TabStop

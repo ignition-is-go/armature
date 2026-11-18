@@ -1,6 +1,7 @@
 use crate::agent::{ActError, Snapshot, SnapshotItem};
 use crate::carousel_layout::{Align, Geometry, Page, PerPage, SlideBox, carousel_pages, step_page};
 use crate::change::{Gate, Reason, Source, ValueChange};
+use crate::convert::Cast;
 use crate::gesture::VelocityTracker;
 use crate::items::Items;
 use crate::keys::{Dir, Key};
@@ -197,14 +198,14 @@ impl Carousel {
     pub fn position(&self) -> f64 {
         // A drag across the whole viewport is a whole page.
         let dragged = self.drag.map_or(0.0, |(_, moved, width)| {
-            moved / width.max(1.0) * self.opts.per_page.max(1) as f64
+            moved / width.max(1.0) * self.opts.per_page.max(1).cast::<f64>()
         });
         let dragged = if self.opts.dir == Dir::Rtl {
             -dragged
         } else {
             dragged
         };
-        self.current as f64 - dragged
+        self.current.cast::<f64>() - dragged
     }
 
     /// Where the pointer is along the way the slides run.
@@ -227,7 +228,7 @@ impl Carousel {
     }
 
     fn target(&self, by: isize) -> Option<usize> {
-        let count = self.count() as isize;
+        let count = self.count().cast::<isize>();
         if count == 0 {
             return None;
         }
@@ -240,7 +241,7 @@ impl Carousel {
                 .unwrap_or(0);
             let to = (step_page(
                 page.saturating_add(1),
-                by.signum() as i64,
+                by.signum().cast::<i64>(),
                 self.measured.len(),
                 self.opts.wrap,
             ))
@@ -248,14 +249,14 @@ impl Carousel {
             return (to != page).then(|| self.measured[to].leader);
         }
         // A step is a page of slides, and the last page never runs past the end.
-        let per_page = self.opts.per_page.max(1) as isize;
+        let per_page = self.opts.per_page.max(1).cast::<isize>();
         let last = (count.saturating_sub(per_page)).max(0);
-        let now = self.current as isize;
+        let now = self.current.cast::<isize>();
         let wanted = (now.saturating_add(by.signum().saturating_mul(per_page))).clamp(0, last);
         if wanted != now {
-            Some(wanted as usize)
+            Some(wanted.cast::<usize>())
         } else if self.opts.wrap && last > 0 {
-            Some(if by > 0 { 0 } else { last as usize })
+            Some(if by > 0 { 0 } else { last.cast::<usize>() })
         } else {
             None
         }
@@ -523,7 +524,7 @@ impl Primitive for Carousel {
                 let along = self.along(&pointer);
                 if let Some((from, moved, _)) = &mut self.drag {
                     *moved = along - *from;
-                    self.speed.push(pointer.now_ms as f64, along);
+                    self.speed.push(pointer.now_ms.cast::<f64>(), along);
                 }
                 Reaction::default()
             }
@@ -531,7 +532,7 @@ impl Primitive for Carousel {
                 let Some((_, moved, width)) = self.drag.take() else {
                     return Reaction::default();
                 };
-                let velocity = self.speed.velocity_at(pointer.now_ms as f64);
+                let velocity = self.speed.velocity_at(pointer.now_ms.cast::<f64>());
                 // Dragging towards the start of the line brings the next slide in.
                 let far = moved.abs() >= width * DRAG_SHARE || velocity.abs() >= FLICK;
                 let towards_start = if velocity.abs() >= FLICK {

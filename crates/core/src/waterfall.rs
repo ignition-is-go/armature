@@ -1,3 +1,4 @@
+use crate::convert::Cast;
 use std::collections::HashSet;
 
 use crate::agent::{ActError, Snapshot, SnapshotItem};
@@ -148,16 +149,16 @@ impl Waterfall {
     #[must_use]
     pub fn ticks(&self, most: usize) -> Vec<(f64, f64)> {
         let (start, end) = self.domain;
-        let rough = (end - start) / most.max(1) as f64;
+        let rough = (end - start) / most.max(1).cast::<f64>();
         let magnitude = 10f64.powf(rough.log10().floor());
         let step = [1.0, 2.0, 5.0, 10.0]
             .into_iter()
             .map(|round| round * magnitude)
             .find(|step| *step >= rough)
             .unwrap_or(rough);
-        let first = (start / step).ceil() as i64;
+        let first = (start / step).ceil().cast::<i64>();
         (first..)
-            .map(|n| n as f64 * step)
+            .map(|n| n.cast::<f64>() * step)
             .take_while(|time| *time <= end)
             .map(|time| ((time - start) / (end - start), time))
             .collect()
@@ -239,7 +240,7 @@ impl Primitive for Waterfall {
             (Part::Axis, _) => Semantics::default(),
             (Part::Row, Some(row)) => Semantics {
                 role: Some(Role::TreeItem),
-                level: Some(row.level as u32),
+                level: Some(row.level.cast::<u32>()),
                 expanded: row.has_children.then_some(row.expanded),
                 selected: Some(self.selected.as_deref() == Some(row.key.as_str())),
                 focusable: if self.current(&rows).as_deref() == Some(row.key.as_str()) {

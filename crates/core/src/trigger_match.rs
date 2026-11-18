@@ -1,6 +1,8 @@
 //! Finding a trigger such as `@` or `/` in the text before the caret, and the query
 //! typed after it. Offsets count characters.
 
+use crate::convert::Cast;
+
 /// Where a trigger may sit.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Boundary {
@@ -59,7 +61,15 @@ impl TriggerRule {
 }
 
 const fn is_mark(ch: char) -> bool {
-    matches!(ch as u32, 0x0300..=0x036F | 0x1AB0..=0x1AFF | 0x1DC0..=0x1DFF | 0x20D0..=0x20FF | 0x3099..=0x309A | 0xFE20..=0xFE2F)
+    matches!(
+        ch,
+        '\u{0300}'..='\u{036F}'
+            | '\u{1AB0}'..='\u{1AFF}'
+            | '\u{1DC0}'..='\u{1DFF}'
+            | '\u{20D0}'..='\u{20FF}'
+            | '\u{3099}'..='\u{309A}'
+            | '\u{FE20}'..='\u{FE2F}'
+    )
 }
 
 /// A trigger found before the caret.

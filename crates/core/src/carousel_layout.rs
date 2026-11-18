@@ -2,6 +2,8 @@
 //! any width, grouped into pages, lined up at the start, middle or end of the
 //! view. Lengths are along the scrolling axis.
 
+use crate::convert::Cast;
+
 /// A slide's place along the track.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SlideBox {
@@ -153,11 +155,11 @@ pub fn step_page(page: usize, by: i64, count: usize, wrap: bool) -> usize {
     if count <= 1 {
         return page;
     }
-    let next = (page as i64).saturating_add(by);
+    let next = (page.cast::<i64>()).saturating_add(by);
     if wrap {
-        ((next.saturating_sub(1)).rem_euclid(count as i64) as usize).saturating_add(1)
+        ((next.saturating_sub(1)).rem_euclid(count.cast::<i64>()) as usize).saturating_add(1)
     } else {
-        next.clamp(1, count as i64) as usize
+        next.clamp(1, count.cast::<i64>()) as usize
     }
 }
 

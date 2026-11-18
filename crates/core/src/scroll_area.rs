@@ -1,5 +1,6 @@
 use crate::agent::{ActError, Snapshot};
 use crate::change::Gate;
+use crate::convert::Cast;
 use crate::keys::Orientation;
 use crate::primitive::{
     Effect, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction, Role,
@@ -193,7 +194,7 @@ impl Primitive for ScrollArea {
                 if self.stick_to_end && was_at_end && grew && !moved {
                     let end = (content - viewport).max(0.0);
                     return Reaction::default().with(Effect::ScrollTo {
-                        offset: end.round() as u32,
+                        offset: end.round().cast::<u32>(),
                     });
                 }
                 if !moved {
@@ -241,7 +242,7 @@ impl Primitive for ScrollArea {
         let (start, _) = self.thumb(length);
         let scroll_to = |offset: f64| {
             Reaction::handled().with(Effect::ScrollTo {
-                offset: offset.round() as u32,
+                offset: offset.round().cast::<u32>(),
             })
         };
         match (pointer.phase, pointer.part) {

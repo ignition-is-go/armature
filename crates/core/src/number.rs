@@ -1,6 +1,8 @@
 //! A numeric range with a step, for sliders, steppers and anything else that picks a
 //! number.
 
+use crate::convert::Cast;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NumberRange {
     pub min: f64,
@@ -68,8 +70,14 @@ impl NumberRange {
             .parse::<f64>()
             .map_or(count, |rounded| {
                 // Fifteen significant digits, as far as a float can be trusted.
-                let scale =
-                    10f64.powi(14 - rounded.abs().log10().floor().clamp(-300.0, 300.0) as i32);
+                let scale = 10f64.powi(
+                    14 - rounded
+                        .abs()
+                        .log10()
+                        .floor()
+                        .clamp(-300.0, 300.0)
+                        .cast::<i32>(),
+                );
                 if scale.is_finite() && scale > 0.0 {
                     (count * scale).round() / scale
                 } else {
@@ -248,7 +256,7 @@ pub fn format_grouped(value: f64, decimals: usize) -> String {
 #[must_use]
 pub fn format_file_size(bytes: u64) -> String {
     const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
-    let mut size = bytes as f64;
+    let mut size = bytes.cast::<f64>();
     let mut unit = 0;
     while size >= 1024.0 && unit < UNITS.len().saturating_sub(1) {
         size /= 1024.0;

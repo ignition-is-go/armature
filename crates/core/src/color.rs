@@ -1,6 +1,8 @@
 //! Colours as values: conversion between the models a picker works in, hex text, and
 //! contrast.
 
+use crate::convert::Cast;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Rgb {
     pub r: u8,
@@ -67,7 +69,7 @@ impl Rgb {
     }
 
     fn from_unit(r: f64, g: f64, b: f64) -> Self {
-        let byte = |value: f64| (value.clamp(0.0, 1.0) * 255.0).round() as u8;
+        let byte = |value: f64| (value.clamp(0.0, 1.0) * 255.0).round().cast::<u8>();
         Self::new(byte(r), byte(g), byte(b))
     }
 
@@ -134,7 +136,7 @@ impl Rgb {
 fn from_hue(h: f64, chroma: f64, floor: f64) -> Rgb {
     let sector = h.rem_euclid(360.0) / 60.0;
     let x = chroma * (1.0 - (sector % 2.0 - 1.0).abs());
-    let (r, g, b) = match sector as u8 {
+    let (r, g, b) = match sector.cast::<u8>() {
         0 => (chroma, x, 0.0),
         1 => (x, chroma, 0.0),
         2 => (0.0, chroma, x),
@@ -167,7 +169,7 @@ impl Rgb {
     pub fn mix(self, other: Self, amount: f64) -> Self {
         let amount = amount.clamp(0.0, 1.0);
         let blend = |a: u8, b: u8| {
-            f64::mul_add(f64::from(b) - f64::from(a), amount, f64::from(a)).round() as u8
+            (f64::mul_add(f64::from(b) - f64::from(a), amount, f64::from(a)).round()).cast::<u8>()
         };
         Self::new(
             blend(self.r, other.r),
@@ -367,7 +369,7 @@ impl Rgb {
             return plain;
         }
         match notation {
-            Notation::Hex => format!("{plain}{:02x}", (alpha * 255.0).round() as u8),
+            Notation::Hex => format!("{plain}{:02x}", (alpha * 255.0).round().cast::<u8>()),
             _ => format!(
                 "{} / {})",
                 plain.trim_end_matches(')'),
@@ -421,9 +423,9 @@ impl Rgb {
             let n = numbers(body);
             return (n.len() >= 3).then(|| {
                 Self::new(
-                    n[0].clamp(0.0, 255.0) as u8,
-                    n[1].clamp(0.0, 255.0) as u8,
-                    n[2].clamp(0.0, 255.0) as u8,
+                    (n[0].clamp(0.0, 255.0)).cast::<u8>(),
+                    (n[1].clamp(0.0, 255.0)).cast::<u8>(),
+                    (n[2].clamp(0.0, 255.0)).cast::<u8>(),
                 )
             });
         }
@@ -503,9 +505,11 @@ impl P3 {
     /// The nearest colour an ordinary screen can show.
     #[must_use]
     pub fn to_rgb(self) -> Rgb {
-        let [r, g, b] = self
-            .in_srgb()
-            .map(|part| (from_linear(part.clamp(0.0, 1.0)) * 255.0).round() as u8);
+        let [r, g, b] = self.in_srgb().map(|part| {
+            (from_linear(part.clamp(0.0, 1.0)) * 255.0)
+                .round()
+                .cast::<u8>()
+        });
         Rgb::new(r, g, b)
     }
 

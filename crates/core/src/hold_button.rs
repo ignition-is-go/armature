@@ -1,5 +1,6 @@
 use crate::agent::{ActError, Snapshot};
 use crate::change::{Gate, Reason, Source, ValueChange};
+use crate::convert::Cast;
 use crate::geometry::Point;
 use crate::keys::Key;
 use crate::primitive::{
@@ -47,9 +48,9 @@ impl HoldButton {
     #[must_use]
     pub fn progress(&self, now_ms: u64) -> f64 {
         match self.pressed {
-            Some((since, _)) => {
-                (now_ms.saturating_sub(since) as f64 / self.delay_ms.max(1) as f64).min(1.0)
-            }
+            Some((since, _)) => (now_ms.saturating_sub(since).cast::<f64>()
+                / self.delay_ms.max(1).cast::<f64>())
+            .min(1.0),
             None => 0.0,
         }
     }

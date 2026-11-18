@@ -1,6 +1,8 @@
 //! Laying out panels that share a space and are resized by the handles between
 //! them. Sizes are percentages of the space and always add up to a hundred.
 
+use crate::convert::Cast;
+
 const EPSILON: f64 = 1e-6;
 
 fn same(a: f64, b: f64) -> bool {
@@ -317,7 +319,7 @@ pub fn initial_layout(panels: &[PanelConstraints]) -> Vec<f64> {
     let given: Vec<f64> = panels.iter().filter_map(|panel| panel.initial).collect();
     let left = (100.0 - given.iter().sum::<f64>()).max(0.0);
     let share = if panels.len() > given.len() {
-        left / (panels.len().saturating_sub(given.len())) as f64
+        left / (panels.len().saturating_sub(given.len())).cast::<f64>()
     } else {
         0.0
     };
@@ -346,7 +348,7 @@ pub fn carry_layout(
         return initial_layout(panels);
     }
     // A new panel takes its default, or an even share.
-    let even_share = 100.0 / ids.len() as f64;
+    let even_share = 100.0 / ids.len().cast::<f64>();
     let new_size = |panel: &PanelConstraints| panel.initial.unwrap_or(even_share);
     let new_total: f64 = ids
         .iter()

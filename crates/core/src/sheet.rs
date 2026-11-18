@@ -1,5 +1,6 @@
 use crate::agent::{ActError, Snapshot};
 use crate::change::{Gate, Reason, Source, ValueChange};
+use crate::convert::Cast;
 use crate::gesture::{DECELERATION, VelocityTracker, project_distance, rubber_band};
 use crate::keys::Key;
 use crate::primitive::{
@@ -327,7 +328,7 @@ impl Primitive for Sheet {
                 let landing = self.landing(offset, 0.0);
                 let settled = self.settle(landing, Source::User, Reason::Drag, gate);
                 let rest = Effect::ScrollTo {
-                    offset: self.at.map_or(0.0, |at| self.detents[at]) as u32,
+                    offset: self.at.map_or(0.0, |at| self.detents[at]).cast::<u32>(),
                 };
                 if settled && landing.is_none() {
                     return Reaction::focusing(Part::Trigger).with(rest);
@@ -425,15 +426,17 @@ impl Primitive for Sheet {
                 } else {
                     wanted
                 };
-                self.speed.push(pointer.now_ms as f64, self.height);
+                self.speed.push(pointer.now_ms.cast::<f64>(), self.height);
                 Reaction::handled()
             }
             (PointerPhase::Up, _) => {
                 if self.grabbed.take().is_none() {
                     return Reaction::default();
                 }
-                let landing =
-                    self.landing(self.height, self.speed.velocity_at(pointer.now_ms as f64));
+                let landing = self.landing(
+                    self.height,
+                    self.speed.velocity_at(pointer.now_ms.cast::<f64>()),
+                );
                 if self.settle(landing, Source::User, Reason::Drag, gate) && landing.is_none() {
                     return Reaction::focusing(Part::Trigger);
                 }

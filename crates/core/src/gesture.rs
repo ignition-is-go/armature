@@ -1,6 +1,8 @@
 //! The arithmetic behind gestures: how fast a pointer is moving, where a flick will
 //! land, how a spring settles, and how far to give when pulled past an edge.
 
+use crate::convert::Cast;
+
 /// How far back samples count, so a fast flick after a slow drag is not diluted.
 const WINDOW_MS: f64 = 70.0;
 /// How old the newest sample may be before the pointer counts as stopped.
@@ -24,7 +26,7 @@ impl VelocityTracker {
     /// recent samples. Zero without two samples apart in time.
     #[must_use]
     pub fn velocity(&self) -> f64 {
-        let count = self.samples.len() as f64;
+        let count = self.samples.len().cast::<f64>();
         if count < 2.0 {
             return 0.0;
         }
@@ -91,8 +93,8 @@ pub fn rubber_band(overshoot: f64, dimension: f64, stiffness: f64) -> f64 {
 pub fn sector_of(dx: f64, dy: f64, sectors: usize) -> usize {
     let sectors = sectors.max(1);
     let clockwise_from_up = dx.atan2(-dy).rem_euclid(std::f64::consts::TAU);
-    let slice = std::f64::consts::TAU / sectors as f64;
-    (((clockwise_from_up + slice / 2.0) / slice) as usize)
+    let slice = std::f64::consts::TAU / sectors.cast::<f64>();
+    (((clockwise_from_up + slice / 2.0) / slice).cast::<usize>())
         .checked_rem(sectors)
         .unwrap_or_default()
 }
@@ -218,11 +220,15 @@ impl Spring {
             return "linear".to_string();
         }
         let duration = self.settle_time(from, to, velocity);
-        let steps = ((duration * 60.0).ceil() as usize).clamp(2, 120);
+        let steps = ((duration * 60.0).ceil().cast::<usize>()).clamp(2, 120);
         let stops: Vec<String> = (0..steps)
             .map(|step| {
-                let (position, _) =
-                    self.solve(from, to, velocity, duration * step as f64 / steps as f64);
+                let (position, _) = self.solve(
+                    from,
+                    to,
+                    velocity,
+                    duration * step.cast::<f64>() / steps.cast::<f64>(),
+                );
                 format!(
                     "{}",
                     (((position - from) / distance) * 10_000.0).round() / 10_000.0

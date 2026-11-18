@@ -1,5 +1,6 @@
 use crate::agent::{ActError, Snapshot, SnapshotItem};
 use crate::change::{Gate, Reason, Source, ValueChange};
+use crate::convert::Cast;
 use crate::items::Items;
 use crate::keys::Key;
 use crate::primitive::{
@@ -65,7 +66,7 @@ impl Picker {
             .as_deref()
             .and_then(|key| self.items.index_of(key))
             .unwrap_or(0);
-        index as f64 * self.option_size
+        index.cast::<f64>() * self.option_size
     }
 
     /// The enabled option nearest an index, looking outwards from it.
@@ -124,7 +125,7 @@ impl Picker {
             gate,
         );
         Reaction::handled().with(Effect::ScrollTo {
-            offset: self.offset() as u32,
+            offset: self.offset().cast::<u32>(),
         })
     }
 }
@@ -186,8 +187,9 @@ impl Primitive for Picker {
 
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
         // A page is the options on show, less one kept in view as context.
-        let page =
-            (((self.viewport / self.option_size.max(1.0)) as isize).saturating_sub(1)).max(1);
+        let page = (((self.viewport / self.option_size.max(1.0)).cast::<isize>())
+            .saturating_sub(1))
+        .max(1);
         match input {
             Input::Scrolled {
                 offset,
@@ -204,7 +206,10 @@ impl Primitive for Picker {
                 {
                     return Reaction::default();
                 }
-                let middle = (offset / self.option_size.max(1.0)).round().max(0.0) as usize;
+                let middle = (offset / self.option_size.max(1.0))
+                    .round()
+                    .max(0.0)
+                    .cast::<usize>();
                 let nearest = self.nearest_enabled(middle);
                 self.choose(nearest, Source::User, Reason::Drag, gate);
                 // Each movement puts the settling off again.
@@ -216,7 +221,7 @@ impl Primitive for Picker {
                 Some(at_ms) if now_ms >= at_ms => {
                     self.settle_at = None;
                     Reaction::default().with(Effect::ScrollTo {
-                        offset: self.offset() as u32,
+                        offset: self.offset().cast::<u32>(),
                     })
                 }
                 _ => Reaction::default(),
@@ -228,7 +233,7 @@ impl Primitive for Picker {
             } => {
                 self.choose(item, Source::User, Reason::Press, gate);
                 Reaction::handled().with(Effect::ScrollTo {
-                    offset: self.offset() as u32,
+                    offset: self.offset().cast::<u32>(),
                 })
             }
             Input::Key { key, mods, now_ms } if !mods.ctrl && !mods.alt => match key {
@@ -254,7 +259,7 @@ impl Primitive for Picker {
                     let key = self.items.key_at(found);
                     self.choose(Some(key), Source::User, Reason::Keyboard, gate);
                     Reaction::handled().with(Effect::ScrollTo {
-                        offset: self.offset() as u32,
+                        offset: self.offset().cast::<u32>(),
                     })
                 }
                 _ => Reaction::default(),

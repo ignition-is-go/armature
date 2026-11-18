@@ -1,5 +1,6 @@
 use crate::agent::{ActError, Snapshot};
 use crate::change::{Gate, Reason, Source, ValueChange};
+use crate::convert::Cast;
 use crate::keys::{Dir, Key, Orientation};
 use crate::panel_layout::{
     PanelConstraints, PanelSizes, constraints_of, end_delta, fit_layout, handle_bounds, home_delta,
@@ -82,7 +83,7 @@ impl PanelGroup {
                 if total > 0.0 {
                     size / total * 100.0
                 } else {
-                    100.0 / sizes.len() as f64
+                    100.0 / sizes.len().cast::<f64>()
                 }
             })
             .collect();

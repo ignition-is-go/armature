@@ -1,5 +1,6 @@
 use crate::agent::{ActError, Snapshot};
 use crate::change::{Gate, Reason, Source, ValueChange};
+use crate::convert::Cast;
 use crate::keys::Key;
 use crate::primitive::{
     Effect, Focusable, Input, Item, PartOf, Primitive, Reaction, Role, Semantics,
@@ -114,7 +115,7 @@ impl VirtualList {
             Some(offset) => {
                 self.offset = offset;
                 reaction.with(Effect::ScrollTo {
-                    offset: offset.round() as u32,
+                    offset: offset.round().cast::<u32>(),
                 })
             }
             None => reaction,
@@ -194,7 +195,7 @@ impl Primitive for VirtualList {
             return Reaction::default();
         }
         // A page is the rows that fit, less one so the last stays in view as context.
-        let page = ((self.viewport / self.rows.offset_of(1).max(1.0)) as usize)
+        let page = ((self.viewport / self.rows.offset_of(1).max(1.0)).cast::<usize>())
             .saturating_sub(1)
             .max(1);
         match input {

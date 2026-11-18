@@ -1,6 +1,8 @@
 //! The geometry of cropping an image. Reading and writing pixels belongs to the
 //! platform; this decides what to cut and how large the result is.
 
+use crate::convert::Cast;
+
 /// A quarter turn clockwise.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Rotation {
@@ -62,7 +64,7 @@ impl Crop {
         let ratio = self.width / self.height;
         let out_width = width.unwrap_or_else(|| height.map_or(self.width, |height| height * ratio));
         let out_height = height.unwrap_or(out_width / ratio);
-        let pixels = |side: f64| side.round().max(1.0) as u32;
+        let pixels = |side: f64| side.round().max(1.0).cast::<u32>();
         Ok((pixels(out_width), pixels(out_height)))
     }
 

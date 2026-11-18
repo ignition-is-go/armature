@@ -1,5 +1,6 @@
 use crate::agent::{ActError, Snapshot};
 use crate::change::{Gate, Reason, Source, ValueChange};
+use crate::convert::Cast;
 use crate::date::{Date, days_in_month};
 use crate::keys::Key;
 use crate::primitive::{
@@ -20,6 +21,19 @@ pub enum Segment {
 }
 
 impl Segment {
+    /// Where this segment's value is kept among a date's fields.
+    const fn index(self) -> usize {
+        match self {
+            Self::Year => 0,
+            Self::Month => 1,
+            Self::Day => 2,
+            Self::Hour => 3,
+            Self::Minute => 4,
+            Self::Second => 5,
+            Self::Period => 6,
+        }
+    }
+
     pub const DATE: [Self; 3] = [Self::Year, Self::Month, Self::Day];
     pub const DATE_TIME: [Self; 5] = [Self::Year, Self::Month, Self::Day, Self::Hour, Self::Minute];
     const ALL: [Self; 7] = [
@@ -115,13 +129,13 @@ impl DateInput {
     /// Whether a complete date lies outside the earliest and latest taken.
     #[must_use]
     pub fn out_of_range(&self, fields: &[Option<u32>; 6]) -> bool {
-        let get = |segment: Segment| fields[segment as usize];
+        let get = |segment: Segment| fields[segment.index()];
         let (Some(year), Some(month), Some(day)) =
             (get(Segment::Year), get(Segment::Month), get(Segment::Day))
         else {
             return false;
         };
-        let Some(date) = Date::new(year as i32, month as u8, day as u8) else {
+        let Some(date) = Date::new(year.cast::<i32>(), month.cast::<u8>(), day.cast::<u8>()) else {
             return true;
         };
         self.limits.0.is_some_and(|earliest| date < earliest)
@@ -162,7 +176,7 @@ impl DateInput {
             Segment::Hour if self.twelve => {
                 self.fields[3].map(|hour| if hour % 12 == 0 { 12 } else { hour % 12 })
             }
-            other => self.fields[other as usize],
+            other => self.fields[other.index()],
         }
     }
 
@@ -174,7 +188,10 @@ impl DateInput {
             Segment::Day => match (self.get(Segment::Year), self.get(Segment::Month)) {
                 (year, Some(month)) => (
                     1,
-                    u32::from(days_in_month(year.unwrap_or(2000) as i32, month as u8)),
+                    u32::from(days_in_month(
+                        year.unwrap_or(2000).cast::<i32>(),
+                        month.cast::<u8>(),
+                    )),
                 ),
                 _ => (1, 31),
             },
@@ -186,7 +203,7 @@ impl DateInput {
     }
 
     fn written(&self, fields: &[Option<u32>; 6]) -> Vec<String> {
-        let get = |segment: Segment| fields[segment as usize];
+        let get = |segment: Segment| fields[segment.index()];
         let (Some(year), Some(month), Some(day)) =
             (get(Segment::Year), get(Segment::Month), get(Segment::Day))
         else {
@@ -226,14 +243,14 @@ impl DateInput {
                 fields[3] =
                     number.map(|shown| (shown % 12).saturating_add(if self.pm { 12 } else { 0 }));
             }
-            other => fields[other as usize] = number,
+            other => fields[other.index()] = number,
         }
         let trial = Self {
             fields,
             ..self.clone()
         };
         let (_, longest) = trial.limits(Segment::Day);
-        fields[Segment::Day as usize] = fields[Segment::Day as usize].map(|day| day.min(longest));
+        fields[Segment::Day.index()] = fields[Segment::Day.index()].map(|day| day.min(longest));
         // A date outside the limits is kept on screen to be corrected, but is not a value.
         let after = if self.out_of_range(&fields) {
             Vec::new()
@@ -476,7 +493,7 @@ impl Primitive for DateInput {
         );
         self.pm = hour.is_some_and(|hour| hour >= 12);
         self.fields = [
-            Some(date.year as u32),
+            Some(date.year.cast::<u32>()),
             Some(u32::from(date.month)),
             Some(u32::from(date.day)),
             hour,

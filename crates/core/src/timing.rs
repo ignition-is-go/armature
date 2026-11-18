@@ -1,6 +1,8 @@
 //! Presses that mean something over time. Both are driven by the adapter's clock: start
 //! them, then call `tick` when the time they ask for arrives.
 
+use crate::convert::Cast;
+
 /// A press that fires once it has been held long enough, as a long-press does.
 #[derive(Clone, Copy, Debug)]
 pub struct Hold {
@@ -110,7 +112,7 @@ impl Repeat {
         .saturating_add(1);
         let following = next_at.saturating_add(steps.saturating_mul(self.interval_ms));
         self.next_at = Some(following);
-        (steps as u32, Some(following))
+        (steps.cast::<u32>(), Some(following))
     }
 
     pub const fn release(&mut self) {

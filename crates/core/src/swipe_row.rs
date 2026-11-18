@@ -1,5 +1,6 @@
 use crate::agent::{ActError, Snapshot, SnapshotItem};
 use crate::change::{Gate, Reason, Source, ValueChange};
+use crate::convert::Cast;
 use crate::geometry::Point;
 use crate::gesture::VelocityTracker;
 use crate::items::Items;
@@ -221,7 +222,7 @@ impl Primitive for SwipeRow {
                     0.0
                 };
                 self.dragged = (base + dx).max(0.0);
-                self.speed.push(pointer.now_ms as f64, self.dragged);
+                self.speed.push(pointer.now_ms.cast::<f64>(), self.dragged);
                 Reaction::handled()
             }
             PointerPhase::Up => {
@@ -234,10 +235,10 @@ impl Primitive for SwipeRow {
                     self.revealed = false;
                     return Reaction::handled();
                 }
-                match self
-                    .shape
-                    .settle(self.dragged, self.speed.velocity_at(pointer.now_ms as f64))
-                {
+                match self.shape.settle(
+                    self.dragged,
+                    self.speed.velocity_at(pointer.now_ms.cast::<f64>()),
+                ) {
                     Swipe::Full => {
                         self.revealed = false;
                         if let Some(first) = self.actions.first_enabled().map(str::to_string) {

@@ -2,6 +2,7 @@
 //! render, when to follow new content, where a wheel picker rests, and how fast to
 //! scroll while dragging near an edge.
 
+use crate::convert::Cast;
 use std::ops::Range;
 
 use crate::geometry::{Point, Rect};
@@ -151,7 +152,7 @@ pub fn picker_index(offset: f64, item_size: f64, count: usize) -> usize {
     if count == 0 || item_size <= 0.0 {
         return 0;
     }
-    ((offset / item_size).round().max(0.0) as usize).min(count.saturating_sub(1))
+    ((offset / item_size).round().max(0.0).cast::<usize>()).min(count.saturating_sub(1))
 }
 
 /// The option a wheel picker comes to rest on when released moving at `velocity`

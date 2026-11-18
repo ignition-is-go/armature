@@ -1,6 +1,7 @@
 //! A tree as data: lookups, the rows visible for a set of open branches, and checked
 //! states that roll up from leaves.
 
+use crate::convert::Cast;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -338,10 +339,10 @@ pub fn drop_depth(
     above: Option<usize>,
     below: Option<usize>,
 ) -> usize {
-    let wanted = start as f64 + (sideways / indent.max(f64::MIN_POSITIVE)).round();
+    let wanted = start.cast::<f64>() + (sideways / indent.max(f64::MIN_POSITIVE)).round();
     let deepest = above.map_or(1, |above| above.saturating_add(1));
     let shallowest = below.unwrap_or(1).min(deepest);
-    (wanted.max(1.0) as usize).clamp(shallowest, deepest)
+    (wanted.max(1.0).cast::<usize>()).clamp(shallowest, deepest)
 }
 
 /// Where a row dropped at `slot` among `rows`, at `depth`, belongs: its parent and its

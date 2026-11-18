@@ -1,5 +1,6 @@
 use crate::agent::{ActError, Snapshot, SnapshotItem};
 use crate::change::{Gate, Reason, Source, ValueChange};
+use crate::convert::Cast;
 use crate::drag::{Drag, DragEvent};
 use crate::geometry::{Point, Rect};
 use crate::items::Items;
@@ -147,8 +148,8 @@ impl Sortable {
                 let steps = match nav {
                     roving::Nav::Next => 1,
                     roving::Nav::Prev => -1,
-                    roving::Nav::First => (count as isize).saturating_neg(),
-                    roving::Nav::Last => count as isize,
+                    roving::Nav::First => (count.cast::<isize>()).saturating_neg(),
+                    roving::Nav::Last => count.cast::<isize>(),
                 };
                 self.session.step(steps, count);
                 let now = self.session.current().unwrap_or(reorder);

@@ -1,3 +1,4 @@
+use crate::convert::Cast;
 use std::collections::{HashMap, HashSet};
 
 use crate::agent::{ActError, Snapshot, SnapshotItem};
@@ -491,7 +492,7 @@ impl Primitive for TreeView {
         let current = self.current(&rows);
         Semantics {
             role: Some(Role::TreeItem),
-            level: Some(row.level as u32),
+            level: Some(row.level.cast::<u32>()),
             expanded: row.has_children.then_some(row.expanded),
             selected: self.check.is_none().then(|| self.is_selected(key)),
             checked: self
