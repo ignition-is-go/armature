@@ -41,6 +41,10 @@ impl Default for ColorPicker {
     }
 }
 
+/// The highest hue the strip goes to, in degrees: 360 would be red again.
+const MAX_HUE: f64 = 359.0;
+
+/// The square of saturation across and brightness up, both in percent.
 const fn pad() -> Area {
     Area {
         x: NumberRange::new(0.0, 100.0, 1.0),
@@ -104,21 +108,25 @@ impl ColorPicker {
         allowed
     }
 
+    /// This colour moved to a point on the pad, given as saturation and brightness
+    /// in percent.
+    fn at_pad(&self, (saturation, brightness): (f64, f64)) -> Hsv {
+        Hsv {
+            s: saturation / 100.0,
+            v: brightness / 100.0,
+            ..self.color
+        }
+    }
+
     fn drag(&mut self, part: Part, pointer: &Pointer<Part>, measure: Measure<Part>, gate: Gate) {
         let color = match part {
-            Part::Area | Part::AreaThumb => measure(Part::Area, None).map(|bounds| {
-                let (s, v) = pad().value_at(bounds, pointer.at, Dir::Ltr);
-                Hsv {
-                    s: s / 100.0,
-                    v: v / 100.0,
-                    ..self.color
-                }
-            }),
+            Part::Area | Part::AreaThumb => measure(Part::Area, None)
+                .map(|bounds| self.at_pad(pad().value_at(bounds, pointer.at, Dir::Ltr))),
             _ => measure(Part::Hue, None).map(|bounds| {
                 let along = ((pointer.at.x - bounds.x) / bounds.width.max(f64::MIN_POSITIVE))
                     .clamp(0.0, 1.0);
                 Hsv {
-                    h: (along * 360.0).round().min(359.0),
+                    h: (along * 360.0).round().min(MAX_HUE),
                     ..self.color
                 }
             }),
@@ -182,7 +190,7 @@ impl Primitive for ColorPicker {
                 range: Some(ValueRange {
                     now: self.color.h.round(),
                     min: 0.0,
-                    max: 359.0,
+                    max: MAX_HUE,
                 }),
                 focusable: Focusable::TabStop,
                 active: matches!(self.dragging, Some(Part::Hue | Part::HueThumb)),
@@ -219,16 +227,7 @@ impl Primitive for ColorPicker {
                 let Some((s, v)) = pad().nudge(now, key, mods, Dir::Ltr) else {
                     return Reaction::default();
                 };
-                self.set(
-                    Hsv {
-                        s: s / 100.0,
-                        v: v / 100.0,
-                        ..self.color
-                    },
-                    Source::User,
-                    Reason::Keyboard,
-                    gate,
-                );
+                self.set(self.at_pad((s, v)), Source::User, Reason::Keyboard, gate);
                 Reaction::handled()
             }
             Input::Key { key, mods, .. } if self.focused == Some(Part::HueThumb) => {
@@ -237,12 +236,12 @@ impl Primitive for ColorPicker {
                     Key::ArrowRight | Key::ArrowUp => self.color.h + step,
                     Key::ArrowLeft | Key::ArrowDown => self.color.h - step,
                     Key::Home => 0.0,
-                    Key::End => 359.0,
+                    Key::End => MAX_HUE,
                     _ => return Reaction::default(),
                 };
                 self.set(
                     Hsv {
-                        h: hue.clamp(0.0, 359.0),
+                        h: hue.clamp(0.0, MAX_HUE),
                         ..self.color
                     },
                     Source::User,
