@@ -1,4 +1,5 @@
 use crate::agent::{ActError, Snapshot, SnapshotItem};
+use crate::carousel_layout::{Align, Geometry, Page, PerPage, SlideBox, carousel_pages, step_page};
 use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::gesture::VelocityTracker;
 use crate::items::Items;
@@ -35,6 +36,12 @@ pub struct Options {
     pub per_page: usize,
     /// Whether the slides run across or down.
     pub orientation: crate::keys::Orientation,
+    /// Where a page lines up in the viewport, once the slides have been measured.
+    pub align: Align,
+    /// Makes a page of as many slides as the viewport shows, whatever their
+    /// widths, in place of `per_page`. It takes effect once the slides have been
+    /// measured, which a drag does.
+    pub fit_pages: bool,
 }
 
 impl Default for Options {
@@ -45,6 +52,8 @@ impl Default for Options {
             dir: Dir::Ltr,
             per_page: 1,
             orientation: crate::keys::Orientation::Horizontal,
+            align: Align::Start,
+            fit_pages: false,
         }
     }
 }
@@ -71,6 +80,8 @@ pub struct Carousel {
     /// Where a drag began, how far it has gone, and how wide the viewport is.
     drag: Option<(f64, f64, f64)>,
     speed: VelocityTracker,
+    /// The pages as last measured, when the slides have been.
+    measured: Vec<Page>,
 }
 
 impl Carousel {
@@ -84,6 +95,76 @@ impl Carousel {
 
     pub fn index(&self) -> usize {
         self.current
+    }
+
+    /// The pages worked out from where the slides and the viewport are drawn:
+    /// slides of any width, grouped and lined up as the options say. Empty until
+    /// both are rendered.
+    pub fn measured_pages(&self, measure: Measure<Part>) -> Vec<Page> {
+        let down = self.opts.orientation == crate::keys::Orientation::Vertical;
+        let along = |rect: crate::geometry::Rect| {
+            if down {
+                (rect.y, rect.height)
+            } else {
+                (rect.x, rect.width)
+            }
+        };
+        let Some((_, viewport)) = measure(Part::Viewport, None).map(along) else {
+            return Vec::new();
+        };
+        let boxes: Option<Vec<(f64, f64)>> = self
+            .slides
+            .iter()
+            .map(|slide| measure(Part::Slide, Some(&slide.key)).map(along))
+            .collect();
+        let Some(boxes) = boxes.filter(|boxes| !boxes.is_empty()) else {
+            return Vec::new();
+        };
+        // Along the track, from its first slide, wherever the track has been moved to.
+        let origin = boxes
+            .iter()
+            .map(|(start, _)| *start)
+            .fold(f64::INFINITY, f64::min);
+        let slides: Vec<SlideBox> = boxes
+            .iter()
+            .map(|(start, size)| SlideBox {
+                start: start - origin,
+                size: *size,
+            })
+            .collect();
+        // Slides drawn on top of one another are not a track that can be read.
+        if slides
+            .windows(2)
+            .any(|pair| (pair[1].start - pair[0].start).abs() < 1.0)
+        {
+            return Vec::new();
+        }
+        let end = slides
+            .iter()
+            .map(|slide| slide.start + slide.size)
+            .fold(0.0, f64::max);
+        let geometry = Geometry {
+            slides: &slides,
+            snapport: viewport,
+            padding_start: 0.0,
+            max_scroll: (end - viewport).max(0.0),
+        };
+        let per_page = if self.opts.fit_pages {
+            PerPage::Auto
+        } else {
+            PerPage::Count(self.opts.per_page.max(1))
+        };
+        carousel_pages(&geometry, self.opts.align, per_page)
+    }
+
+    /// How far to move the strip of slides back to show the current page, in the
+    /// units the slides are measured in. `None` until they are rendered.
+    pub fn offset(&self, measure: Measure<Part>) -> Option<f64> {
+        let pages = self.measured_pages(measure);
+        pages
+            .iter()
+            .find(|page| page.slides.contains(&self.current))
+            .map(|page| page.position)
     }
 
     pub fn is_playing(&self) -> bool {
@@ -127,6 +208,21 @@ impl Carousel {
         let count = self.count() as isize;
         if count == 0 {
             return None;
+        }
+        // Once the slides are measured, a step goes to the next page as measured.
+        if !self.measured.is_empty() {
+            let page = self
+                .measured
+                .iter()
+                .position(|page| page.slides.contains(&self.current))
+                .unwrap_or(0);
+            let to = step_page(
+                page + 1,
+                by.signum() as i64,
+                self.measured.len(),
+                self.opts.wrap,
+            ) - 1;
+            return (to != page).then(|| self.measured[to].leader);
         }
         // A step is a page of slides, and the last page never runs past the end.
         let per_page = self.opts.per_page.max(1) as isize;
@@ -380,6 +476,7 @@ impl Primitive for Carousel {
                 let length = measure(Part::Viewport, None)
                     .map_or(1.0, |rect| if down { rect.height } else { rect.width });
                 self.drag = Some((self.along(&pointer), 0.0, length));
+                self.measured = self.measured_pages(measure);
                 self.speed = VelocityTracker::default();
                 self.advance_at = None;
                 Reaction::default().with(Effect::CapturePointer)
@@ -609,6 +706,60 @@ mod tests {
         tick(&mut carousel, 7000);
         tick(&mut carousel, 10_000);
         assert_eq!(carousel.index(), 2);
+    }
+
+    #[test]
+    fn measured_slides_of_any_width_make_the_pages() {
+        use crate::geometry::{Point, Rect};
+        let mut carousel = Carousel::new(Options {
+            fit_pages: true,
+            ..Default::default()
+        });
+        // Seven slides 100 wide with a gap of 10, in a viewport 320 wide.
+        let keys = ["a", "b", "c", "d", "e", "f", "g"];
+        for key in keys {
+            carousel.upsert_item(Item {
+                key: key.into(),
+                label: key.into(),
+                disabled: false,
+            });
+        }
+        let measure = |part: Part, item: Option<&str>| match part {
+            Part::Viewport => Some(Rect::new(0.0, 0.0, 320.0, 100.0)),
+            Part::Slide => keys
+                .iter()
+                .position(|key| Some(*key) == item)
+                .map(|at| Rect::new(at as f64 * 110.0, 0.0, 100.0, 100.0)),
+            _ => None,
+        };
+        let pages = carousel.measured_pages(&measure);
+        assert_eq!(
+            pages
+                .iter()
+                .map(|page| page.slides.clone())
+                .collect::<Vec<_>>(),
+            [vec![0, 1, 2], vec![3, 4, 5], vec![6]]
+        );
+        assert_eq!(carousel.offset(&measure), Some(0.0));
+        // A flick towards the start goes to the next page as measured, not three slides on by count.
+        let at = |phase, x: f64, now_ms| Pointer {
+            phase,
+            part: Part::Viewport,
+            item: None,
+            at: Point::new(x, 50.0),
+            mods: Default::default(),
+            now_ms,
+        };
+        carousel.pointer(at(PointerPhase::Down, 300.0, 0), &measure, &mut |_| true);
+        carousel.pointer(at(PointerPhase::Move, 100.0, 16), &measure, &mut |_| true);
+        carousel.pointer(at(PointerPhase::Up, 100.0, 32), &measure, &mut |_| true);
+        assert_eq!(carousel.value(), ["d"]);
+        assert_eq!(carousel.offset(&measure), Some(330.0));
+        // The buttons now step by measured pages too, and stop at the last one.
+        carousel.act("next", None, &mut |_| true).unwrap();
+        assert_eq!(carousel.value(), ["g"]);
+        let _ = carousel.act("next", None, &mut |_| true);
+        assert_eq!(carousel.value(), ["g"]);
     }
 
     #[test]
