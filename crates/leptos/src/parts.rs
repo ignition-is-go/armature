@@ -1282,6 +1282,15 @@ fn text_field_view<P: Primitive + Send + Sync>(
     .into_any()
 }
 
+/// The element a part is drawn as: its `div`, or the native field a text part uses.
+fn drawn_element(
+    element: NodeRef<leptos::html::Div>,
+    field: NodeRef<leptos::html::Input>,
+) -> Option<web_sys::Element> {
+    let div = element.get().map(|node| web_sys::Element::clone(&node));
+    div.or_else(|| field.get().map(|node| web_sys::Element::clone(&node)))
+}
+
 /// The ids of the parts this one controls, is named by and is described by.
 struct RelatedIds {
     controls: Option<String>,
@@ -1304,8 +1313,7 @@ fn sync_attributes(
     } = related;
     Effect::new(move |_| {
         let state = semantics.get();
-        let node = element.get().map(|node| web_sys::Element::clone(&node));
-        let node = node.or_else(|| field.get().map(|node| web_sys::Element::clone(&node)));
+        let node = drawn_element(element, field);
         let Some(element) = node else { return };
         let flag = |on: Option<bool>| on.map(|on| on.to_string());
         let number = |value: Option<f64>| value.map(|value| value.to_string());
@@ -1481,8 +1489,7 @@ fn listen_on_element<P: Primitive + Send + Sync>(
     field: NodeRef<leptos::html::Input>,
 ) {
     Effect::new(move |_| {
-        let node = element.get().map(|node| web_sys::Element::clone(&node));
-        let node = node.or_else(|| field.get().map(|node| web_sys::Element::clone(&node)));
+        let node = drawn_element(element, field);
         let Some(element) = node else { return };
         let item = item.clone();
         let for_context = item.clone();
