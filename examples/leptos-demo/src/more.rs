@@ -255,7 +255,16 @@ fn ShelfSlides() -> impl IntoView {
 #[component]
 fn ScrollParts() -> impl IntoView {
     let area = use_primitive::<ScrollArea>();
+    // Where the thumb starts along its bar, and how long it is.
     let thumb = move || area.with(|a| a.thumb(120.0));
+    let thumb_start = move || {
+        let (start, _) = thumb();
+        format!("{start}px")
+    };
+    let thumb_length = move || {
+        let (_, length) = thumb();
+        format!("{length}px")
+    };
     view! {
         <Part part=scroll_area::Part::Root>
             <div class="scroll-area">
@@ -263,7 +272,7 @@ fn ScrollParts() -> impl IntoView {
                     {(1..=30).map(|n| view! { <p>"Line " {n}</p> }).collect_view()}
                 </Part>
                 <Part part=scroll_area::Part::Scrollbar>
-                    <div class="thumb-place" style:top=move || format!("{}px", thumb().0) style:height=move || format!("{}px", thumb().1)>
+                    <div class="thumb-place" style:top=thumb_start style:height=thumb_length>
                         <Part part=scroll_area::Part::Thumb />
                     </div>
                 </Part>
@@ -275,7 +284,16 @@ fn ScrollParts() -> impl IntoView {
 #[component]
 fn WideParts() -> impl IntoView {
     let area = use_primitive::<ScrollArea>();
+    // Where the thumb starts along its bar, and how long it is.
     let thumb = move || area.with(|a| a.thumb(192.0));
+    let thumb_start = move || {
+        let (start, _) = thumb();
+        format!("{start}px")
+    };
+    let thumb_length = move || {
+        let (_, length) = thumb();
+        format!("{length}px")
+    };
     view! {
         <Part part=scroll_area::Part::Root>
             <div class="scroll-wide">
@@ -283,7 +301,7 @@ fn WideParts() -> impl IntoView {
                     <div class="wide-strip">{(1..=20).map(|n| view! { <span>"Day " {n}</span> }).collect_view()}</div>
                 </Part>
                 <Part part=scroll_area::Part::Scrollbar>
-                    <div class="thumb-across" style:left=move || format!("{}px", thumb().0) style:width=move || format!("{}px", thumb().1)>
+                    <div class="thumb-across" style:left=thumb_start style:width=thumb_length>
                         <Part part=scroll_area::Part::Thumb />
                     </div>
                 </Part>
@@ -295,17 +313,17 @@ fn WideParts() -> impl IntoView {
 #[component]
 fn CropParts() -> impl IntoView {
     let cropper = use_primitive::<ImageCropper>();
-    let side = move |at: usize| {
-        move || {
-            format!(
-                "{}%",
-                cropper.with(|c| c.fractions().get(at).copied().unwrap_or_default()) * 100.0
-            )
-        }
+    // One of the selection's left, top, width and height, as a share of the picture.
+    let share = move |pick: fn([f64; 4]) -> f64| {
+        move || format!("{}%", cropper.with(|c| pick(c.fractions())) * 100.0)
     };
+    let left = share(|[left, _, _, _]| left);
+    let top = share(|[_, top, _, _]| top);
+    let width = share(|[_, _, width, _]| width);
+    let height = share(|[_, _, _, height]| height);
     view! {
         <Part part=image_cropper::Part::Area>
-            <div class="crop-box" style:left=side(0) style:top=side(1) style:width=side(2) style:height=side(3)>
+            <div class="crop-box" style:left=left style:top=top style:width=width style:height=height>
                 <Part part=image_cropper::Part::Selection label="Crop">
                     {HANDLES.map(|name| view! { <Part part=image_cropper::Part::Handle item=name label=name /> }).collect_view()}
                 </Part>
