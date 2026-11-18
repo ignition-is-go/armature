@@ -156,54 +156,66 @@ fn inputs<P: Primitive>(items: &[Item]) -> Vec<Input<P::Part>> {
     all
 }
 
-/// Checks a primitive against the rules every primitive must keep. `make` builds a
-/// fresh instance and `items` are registered on it. An empty result means it conforms.
-#[expect(
-    clippy::too_many_lines,
-    reason = "one arm for each input the primitive answers"
-)]
-pub fn check<P: Primitive>(make: impl Fn() -> P, items: &[Item]) -> Vec<Violation> {
-    let build = |with_items: bool| {
-        let mut primitive = make();
+/// One run of the conformance rules over a primitive, collecting what it breaks.
+struct Checker<'a, P, M> {
+    make: M,
+    items: &'a [Item],
+    violations: Vec<Violation>,
+    primitive: std::marker::PhantomData<P>,
+}
+
+impl<P: Primitive, M: Fn() -> P> Checker<'_, P, M> {
+    fn build(&self, with_items: bool) -> P {
+        let mut primitive = (self.make)();
         if with_items {
-            items
+            self.items
                 .iter()
                 .cloned()
                 .for_each(|item| primitive.upsert_item(item));
         }
         primitive
-    };
-    let mut violations = Vec::new();
-    let mut fail = |rule: &'static str, detail: String| violations.push(Violation { rule, detail });
-    let seen = |primitive: &P| -> Vec<(Instance<P>, Semantics)> {
-        instances::<P>(items)
+    }
+
+    fn fail(&mut self, rule: &'static str, detail: String) {
+        self.violations.push(Violation { rule, detail });
+    }
+
+    /// Every part and item, with what the primitive says of it.
+    fn seen(&self, primitive: &P) -> Vec<(Instance<P>, Semantics)> {
+        instances::<P>(self.items)
             .into_iter()
             .map(|(part, item)| {
                 let semantics = primitive.semantics(part, item.as_deref());
                 ((part, item), semantics)
             })
             .collect()
-    };
-
-    // What the interface offers at rest, and after every input the adapter can send.
-    let mut states = vec![("at rest".to_string(), build(true))];
-    for input in inputs::<P>(items) {
-        let mut primitive = build(true);
-        let described = format!("after {input:?}");
-        primitive.send(input, &mut |_| true);
-        states.push((described, primitive));
     }
-    for (when, primitive) in &states {
-        let parts = seen(primitive);
+
+    /// What the interface offers at rest, and after every input the adapter can send.
+    fn states(&self) -> Vec<(String, P)> {
+        let mut states = vec![("at rest".to_string(), self.build(true))];
+        for input in inputs::<P>(self.items) {
+            let mut primitive = self.build(true);
+            let described = format!("after {input:?}");
+            primitive.send(input, &mut |_| true);
+            states.push((described, primitive));
+        }
+        states
+    }
+
+    /// Focus rules, for one state: hidden and disabled parts are not tab stops, and a
+    /// composite control has one.
+    fn check_tab_stops(&mut self, when: &str, primitive: &P) {
+        let parts = self.seen(primitive);
         for ((part, item), semantics) in &parts {
             if semantics.hidden && semantics.focusable == Focusable::TabStop {
-                fail(
+                self.fail(
                     "a hidden part is never a tab stop",
                     format!("{part:?} {item:?} {when}"),
                 );
             }
             if semantics.disabled && semantics.focusable == Focusable::TabStop && item.is_some() {
-                fail(
+                self.fail(
                     "a disabled item is never the tab stop",
                     format!("{part:?} {item:?} {when}"),
                 );
@@ -219,11 +231,15 @@ pub fn check<P: Primitive>(make: impl Fn() -> P, items: &[Item]) -> Vec<Violatio
             })
             .count();
         if stops > 1 {
-            fail(
+            self.fail(
                 "a composite control has one tab stop",
                 format!("{stops} items are tab stops {when}"),
             );
         }
+    }
+
+    /// An item shown as selected is in the value.
+    fn check_selection(&mut self, when: &str, primitive: &P) {
         let selected: Vec<String> = primitive
             .snapshot("")
             .items
@@ -233,73 +249,78 @@ pub fn check<P: Primitive>(make: impl Fn() -> P, items: &[Item]) -> Vec<Violatio
             .collect();
         let value = primitive.value();
         if let Some(stray) = selected.iter().find(|key| !value.contains(key)) {
-            fail(
+            self.fail(
                 "an item shown as selected is in the value",
                 format!("{stray} is not in {value:?} {when}"),
             );
         }
     }
-    let reachable = seen(&build(true))
-        .iter()
-        .any(|(_, semantics)| !semantics.hidden && semantics.focusable == Focusable::TabStop);
-    let focusable = seen(&build(true))
-        .iter()
-        .any(|(_, semantics)| semantics.focusable != Focusable::No);
-    if focusable && !reachable {
-        fail(
-            "the keyboard can reach it",
-            "nothing is a tab stop at rest".into(),
-        );
-    }
 
-    // A button or switch that a press changes must answer Enter the same way, since
-    // an unstyled part gets no keyboard activation for free.
-    for (part, item) in instances::<P>(items) {
-        let at_rest = build(true).semantics(part, item.as_deref());
-        if !matches!(at_rest.role, Some(Role::Button | Role::Switch))
-            || at_rest.focusable == Focusable::No
-        {
-            continue;
-        }
-        let mods = Modifiers::default();
-        let mut pressed = build(true);
-        pressed.send(
-            Input::Press {
-                part,
-                item: item.clone(),
-                mods,
-            },
-            &mut |_| true,
-        );
-        let mut keyed = build(true);
-        keyed.send(
-            Input::Focus {
-                part,
-                item: item.clone(),
-            },
-            &mut |_| true,
-        );
-        keyed.send(
-            Input::Key {
-                key: Key::Enter,
-                mods,
-                now_ms: 0,
-            },
-            &mut |_| true,
-        );
-        if pressed.value() != keyed.value() {
-            fail(
-                "Enter presses a focused button",
-                format!("{part:?} {item:?}"),
+    fn check_keyboard_reach(&mut self) {
+        let at_rest = self.seen(&self.build(true));
+        let reachable = at_rest
+            .iter()
+            .any(|(_, semantics)| !semantics.hidden && semantics.focusable == Focusable::TabStop);
+        let focusable = at_rest
+            .iter()
+            .any(|(_, semantics)| semantics.focusable != Focusable::No);
+        if focusable && !reachable {
+            self.fail(
+                "the keyboard can reach it",
+                "nothing is a tab stop at rest".into(),
             );
         }
     }
 
-    // Robustness: no input may panic, with items or without, and a refused change
-    // leaves the value alone.
-    for with_items in [true, false] {
-        for input in inputs::<P>(items) {
-            let mut primitive = build(with_items);
+    /// A button or switch that a press changes must answer Enter the same way, since
+    /// an unstyled part gets no keyboard activation for free.
+    fn check_enter_presses(&mut self) {
+        for (part, item) in instances::<P>(self.items) {
+            let at_rest = self.build(true).semantics(part, item.as_deref());
+            if !matches!(at_rest.role, Some(Role::Button | Role::Switch))
+                || at_rest.focusable == Focusable::No
+            {
+                continue;
+            }
+            let mods = Modifiers::default();
+            let mut pressed = self.build(true);
+            pressed.send(
+                Input::Press {
+                    part,
+                    item: item.clone(),
+                    mods,
+                },
+                &mut |_| true,
+            );
+            let mut keyed = self.build(true);
+            keyed.send(
+                Input::Focus {
+                    part,
+                    item: item.clone(),
+                },
+                &mut |_| true,
+            );
+            keyed.send(
+                Input::Key {
+                    key: Key::Enter,
+                    mods,
+                    now_ms: 0,
+                },
+                &mut |_| true,
+            );
+            if pressed.value() != keyed.value() {
+                self.fail(
+                    "Enter presses a focused button",
+                    format!("{part:?} {item:?}"),
+                );
+            }
+        }
+    }
+
+    /// A refused change leaves the value alone, and a person's change is marked as theirs.
+    fn check_refusals(&mut self, with_items: bool) {
+        for input in inputs::<P>(self.items) {
+            let mut primitive = self.build(with_items);
             let before = primitive.value();
             let described = format!("{input:?}");
             let mut sources = Vec::new();
@@ -308,12 +329,16 @@ pub fn check<P: Primitive>(make: impl Fn() -> P, items: &[Item]) -> Vec<Violatio
                 false
             });
             if primitive.value() != before {
-                fail("a refused change leaves the value alone", described.clone());
+                self.fail("a refused change leaves the value alone", described.clone());
             }
             if sources.iter().any(|source| *source != Source::User) {
-                fail("a person's change is marked as theirs", described);
+                self.fail("a person's change is marked as theirs", described);
             }
         }
+    }
+
+    /// No pointer gesture may panic, on any part, in any order.
+    fn check_pointers(&self, with_items: bool) {
         for phase in [
             PointerPhase::Down,
             PointerPhase::Move,
@@ -321,8 +346,8 @@ pub fn check<P: Primitive>(make: impl Fn() -> P, items: &[Item]) -> Vec<Violatio
             PointerPhase::Cancel,
             PointerPhase::Move,
         ] {
-            for (part, item) in instances::<P>(items) {
-                let mut primitive = build(with_items);
+            for (part, item) in instances::<P>(self.items) {
+                let mut primitive = self.build(with_items);
                 let pointer = Pointer {
                     phase,
                     part,
@@ -336,68 +361,105 @@ pub fn check<P: Primitive>(make: impl Fn() -> P, items: &[Item]) -> Vec<Violatio
         }
     }
 
-    // The agent's side.
-    let actions = build(true).snapshot("").actions;
-    match build(true).act("no such action", None, &mut |_| true) {
-        // A read-only primitive, such as a meter, has no actions to name.
-        Err(ActError::UnknownAction { valid, .. }) if valid == actions => {}
-        other => fail(
-            "an unknown action names the valid ones",
-            format!("got {other:?}"),
-        ),
+    /// The agent's side: an unknown action names the valid ones, and every action
+    /// keeps the rules below on every target.
+    fn check_agent(&mut self) {
+        let actions = self.build(true).snapshot("").actions;
+        match self.build(true).act("no such action", None, &mut |_| true) {
+            // A read-only primitive, such as a meter, has no actions to name.
+            Err(ActError::UnknownAction { valid, .. }) if valid == actions => {}
+            other => self.fail(
+                "an unknown action names the valid ones",
+                format!("got {other:?}"),
+            ),
+        }
+        let mut targets: Vec<Option<&str>> = vec![None];
+        targets.extend(self.items.iter().map(|item| Some(item.key.as_str())));
+        for action in actions {
+            for target in &targets {
+                self.check_refused_action(action, *target);
+                self.check_owner_can_restore(action, *target);
+            }
+        }
     }
-    let mut targets: Vec<Option<&str>> = vec![None];
-    targets.extend(items.iter().map(|item| Some(item.key.as_str())));
-    for action in actions {
-        for target in &targets {
-            let mut refused = build(true);
-            let before = refused.value();
-            let mut sources = Vec::new();
-            let _ = refused.act(action, *target, &mut |change: &ValueChange| {
-                sources.push(change.source);
-                false
-            });
-            if refused.value() != before {
-                fail(
-                    "a refused agent action leaves the value alone",
-                    format!("{action} {target:?}"),
-                );
-            }
-            if sources.iter().any(|source| *source != Source::Agent) {
-                fail(
-                    "an agent's change is marked as an agent's",
-                    format!("{action} {target:?}"),
-                );
-            }
 
-            // Whatever value an action reaches, the owner can put back.
-            let mut acted = build(true);
-            if acted.act(action, *target, &mut |_| true).is_ok() {
-                let reached = acted.value();
-                let mut restored = build(true);
-                restored.set_value(reached.clone());
-                if restored.value() != reached {
-                    fail(
-                        "the owner can set any value an action can reach",
-                        format!(
-                            "{action} {target:?} reached {reached:?} but set_value gave {:?}",
-                            restored.value()
-                        ),
-                    );
-                }
+    fn check_refused_action(&mut self, action: &'static str, target: Option<&str>) {
+        let mut refused = self.build(true);
+        let before = refused.value();
+        let mut sources = Vec::new();
+        let _ = refused.act(action, target, &mut |change: &ValueChange| {
+            sources.push(change.source);
+            false
+        });
+        if refused.value() != before {
+            self.fail(
+                "a refused agent action leaves the value alone",
+                format!("{action} {target:?}"),
+            );
+        }
+        if sources.iter().any(|source| *source != Source::Agent) {
+            self.fail(
+                "an agent's change is marked as an agent's",
+                format!("{action} {target:?}"),
+            );
+        }
+    }
+
+    /// Whatever value an action reaches, the owner can put back.
+    fn check_owner_can_restore(&mut self, action: &'static str, target: Option<&str>) {
+        let mut acted = self.build(true);
+        if acted.act(action, target, &mut |_| true).is_ok() {
+            let reached = acted.value();
+            let mut restored = self.build(true);
+            restored.set_value(reached.clone());
+            if restored.value() != reached {
+                self.fail(
+                    "the owner can set any value an action can reach",
+                    format!(
+                        "{action} {target:?} reached {reached:?} but set_value gave {:?}",
+                        restored.value()
+                    ),
+                );
             }
         }
     }
-    // One report per rule, with how often it broke.
-    let mut reported: Vec<Violation> = Vec::new();
-    for violation in violations {
-        match reported.iter_mut().find(|seen| seen.rule == violation.rule) {
-            Some(seen) if seen.detail.ends_with(" more)") => {}
-            Some(seen) => seen.detail.push_str(" (and more)"),
-            None => reported.push(violation),
+
+    /// One report per rule, with a note when it broke more than once.
+    fn report(self) -> Vec<Violation> {
+        let mut reported: Vec<Violation> = Vec::new();
+        for violation in self.violations {
+            match reported.iter_mut().find(|seen| seen.rule == violation.rule) {
+                Some(seen) if seen.detail.ends_with(" more)") => {}
+                Some(seen) => seen.detail.push_str(" (and more)"),
+                None => reported.push(violation),
+            }
         }
+        reported
     }
-    reported
+}
+
+/// Checks a primitive against the rules every primitive must keep. `make` builds a
+/// fresh instance and `items` are registered on it. An empty result means it conforms.
+pub fn check<P: Primitive>(make: impl Fn() -> P, items: &[Item]) -> Vec<Violation> {
+    let mut checker = Checker {
+        make,
+        items,
+        violations: Vec::new(),
+        primitive: std::marker::PhantomData,
+    };
+    for (when, primitive) in &checker.states() {
+        checker.check_tab_stops(when, primitive);
+        checker.check_selection(when, primitive);
+    }
+    checker.check_keyboard_reach();
+    checker.check_enter_presses();
+    // Robustness: no input may panic, with items or without.
+    for with_items in [true, false] {
+        checker.check_refusals(with_items);
+        checker.check_pointers(with_items);
+    }
+    checker.check_agent();
+    checker.report()
 }
 
 /// Panics with every broken rule, for use in a test.
