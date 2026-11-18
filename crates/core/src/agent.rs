@@ -464,6 +464,36 @@ pub struct Entry {
     pub source: Source,
 }
 
+impl Entry {
+    /// The entry for a change that was committed, or `None` when nothing changed. A
+    /// secret component's values are redacted, so they are never kept.
+    #[must_use]
+    pub fn committed(
+        label: String,
+        before: Vec<String>,
+        after: Vec<String>,
+        source: Source,
+        secret: bool,
+    ) -> Option<Self> {
+        if before == after {
+            return None;
+        }
+        let shown = |value: Vec<String>| {
+            if secret {
+                vec![REDACTED.to_string()]
+            } else {
+                value
+            }
+        };
+        Some(Self {
+            label,
+            before: shown(before),
+            after: shown(after),
+            source,
+        })
+    }
+}
+
 /// A short sentence saying what an entry changed and who changed it.
 #[must_use]
 pub fn describe_entry(entry: &Entry) -> String {

@@ -43,23 +43,9 @@ pub(crate) fn record(
     secret: bool,
     cx: &mut App,
 ) {
-    if before == after {
-        return;
+    if let Some(entry) = Entry::committed(label, before, after, source, secret) {
+        cx.default_global::<Agents>().history.push(entry);
     }
-    let shown = |value: Vec<String>| {
-        if secret {
-            vec!["[redacted]".to_string()]
-        } else {
-            value
-        }
-    };
-    let entry = Entry {
-        label,
-        before: shown(before),
-        after: shown(after),
-        source,
-    };
-    cx.default_global::<Agents>().history.push(entry);
 }
 
 /// Every live component an agent may see, as `(ref, snapshot)`.

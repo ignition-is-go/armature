@@ -32,23 +32,9 @@ pub(crate) fn record(
     source: Source,
     secret: bool,
 ) {
-    if before == after {
-        return;
+    if let Some(entry) = Entry::committed(label, before, after, source, secret) {
+        HISTORY.with_borrow_mut(|history| history.push(entry));
     }
-    let shown = |value: Vec<String>| {
-        if secret {
-            vec!["[redacted]".to_string()]
-        } else {
-            value
-        }
-    };
-    let entry = Entry {
-        label,
-        before: shown(before),
-        after: shown(after),
-        source,
-    };
-    HISTORY.with_borrow_mut(|history| history.push(entry));
 }
 
 /// A copy of the registry, so no borrow is held while application code runs.
