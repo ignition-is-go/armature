@@ -97,7 +97,7 @@ impl Calendar {
         month_grid(self.focused.year, self.focused.month, self.opts.week_start)
     }
 
-    /// Whether a day belongs to the month on show, for dimming the padding days.
+    /// Whether a day belongs to a month on show, for dimming the padding days.
     #[must_use]
     pub fn in_month(&self, date: Date) -> bool {
         self.shown_months().contains(&(date.year, date.month))
@@ -123,8 +123,8 @@ impl Calendar {
     }
 
     /// One shown month's weeks, padded with its neighbours' days. Where several
-    /// months show, draw a padding day only if `in_month` says no for it, and leave
-    /// it out, so no day is drawn twice.
+    /// months show, a padding day that `in_month` says yes for has a month of its
+    /// own on show: leave it out here, so no day is drawn twice.
     #[must_use]
     pub fn weeks_of(&self, year: i32, month: u8) -> Vec<[Date; 7]> {
         month_grid(year, month, self.opts.week_start)

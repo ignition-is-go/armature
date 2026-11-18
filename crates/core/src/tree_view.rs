@@ -235,7 +235,8 @@ impl TreeView {
         Some((at, row.level))
     }
 
-    /// The depth allowed at `slot`, as near to `wanted` as the rows around it permit.
+    /// The depth allowed at `slot` for a row that began at depth `start` and was
+    /// carried `sideways`, as near to that as the rows around it permit.
     fn depth_at(others: &[Row], slot: usize, start: usize, sideways: f64) -> usize {
         let above = slot
             .checked_sub(1)
