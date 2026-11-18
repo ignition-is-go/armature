@@ -731,13 +731,17 @@ fn FormSection() -> impl IntoView {
     );
     let outcome = RwSignal::new("Not sent".to_string());
     let name_problem = RwSignal::new(String::new());
+    // What, if anything, stops the name being sent.
+    let show_name_problem = move || {
+        name_problem.set(
+            form.with_value(|form| form.error("name"))
+                .unwrap_or_default(),
+        );
+    };
     let field = move |name: &'static str| {
         Callback::new(move |change: ValueChange| {
             form.update_value(|form| form.set(name, change.value));
-            name_problem.set(
-                form.with_value(|form| form.error("name"))
-                    .unwrap_or_default(),
-            );
+            show_name_problem();
             true
         })
     };
@@ -755,10 +759,7 @@ fn FormSection() -> impl IntoView {
             Some(Err(invalid)) => format!("Fix: {}", invalid.first),
             None => String::new(),
         });
-        name_problem.set(
-            form.with_value(|form| form.error("name"))
-                .unwrap_or_default(),
-        );
+        show_name_problem();
         true
     });
     let reset = Callback::new(move |_: ValueChange| {
