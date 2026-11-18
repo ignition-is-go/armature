@@ -125,20 +125,38 @@ impl Combobox {
     /// the caret as a suggestion. Tab takes it.
     #[must_use]
     pub fn completion(&self) -> Option<String> {
-        let typed = self.text.to_lowercase();
-        if typed.is_empty() {
+        if self.text.is_empty() {
             return None;
         }
-        let first = self
-            .items
-            .iter()
-            .find(|item| !item.disabled && item.label.to_lowercase().starts_with(&typed))?;
-        let rest: String = first
-            .label
-            .chars()
-            .skip(self.text.chars().count())
-            .collect();
+        let typed = self.text.chars().count();
+        let rest: String = self.completing()?.label.chars().skip(typed).collect();
         (!rest.is_empty()).then_some(rest)
+    }
+
+    /// The first option that can be chosen and begins with what was typed.
+    fn completing(&self) -> Option<&Item> {
+        let typed = self.text.to_lowercase();
+        self.items
+            .iter()
+            .find(|item| !item.disabled && item.label.to_lowercase().starts_with(&typed))
+    }
+
+    fn is_chosen(&self, key: &str) -> bool {
+        self.selected.iter().any(|chosen| chosen == key)
+    }
+
+    /// The selection with one key taken out.
+    fn selected_without(&self, key: &str) -> Vec<String> {
+        self.selected
+            .iter()
+            .filter(|chosen| *chosen != key)
+            .cloned()
+            .collect()
+    }
+
+    fn close(&mut self) {
+        self.open = false;
+        self.active = None;
     }
 
     /// The options on show, in order.
@@ -206,8 +224,7 @@ impl Combobox {
         let done = self.commit(vec![value], source, reason, gate);
         if done {
             self.text = self.label(key);
-            self.open = false;
-            self.active = None;
+            self.close();
         }
         done
     }
@@ -215,8 +232,7 @@ impl Combobox {
     /// Leaves the field: text that names no option goes back to the chosen one, or
     /// becomes the value where free text is allowed.
     fn settle(&mut self, gate: Gate) {
-        self.open = false;
-        self.active = None;
+        self.close();
         if self.opts.multiple {
             self.text.clear();
         } else if self.opts.custom {
@@ -269,17 +285,7 @@ impl Combobox {
         self.text = value;
         self.open = true;
         if self.opts.remote {
-            match self.requests.begin(&self.text) {
-                Some(request) => {
-                    self.loading = Loading::Loading;
-                    gate(&ValueChange {
-                        value: vec![format!("load:{request}:{}", self.text)],
-                        source: Source::User,
-                        reason: Reason::Action,
-                    });
-                }
-                None => self.loading = Loading::Idle,
-            }
+            self.ask_for_results(gate);
         }
         let results = self.results();
         let first = results
@@ -298,6 +304,21 @@ impl Combobox {
             None
         };
         Reaction::handled().announcing(message)
+    }
+
+    /// Asks the owner for the options that match the text, as a numbered request, so
+    /// an answer to an earlier one can be told apart.
+    fn ask_for_results(&mut self, gate: Gate) {
+        let Some(request) = self.requests.begin(&self.text) else {
+            self.loading = Loading::Idle;
+            return;
+        };
+        self.loading = Loading::Loading;
+        gate(&ValueChange {
+            value: vec![format!("load:{request}:{}", self.text)],
+            source: Source::User,
+            reason: Reason::Action,
+        });
     }
 
     /// A key in the text field: stepping through the list, choosing, completing, and
@@ -329,13 +350,7 @@ impl Combobox {
             }
             // Tab takes the suggested completion, then moves on as usual.
             Key::Tab if self.open && self.completion().is_some() => {
-                let typed = self.text.to_lowercase();
-                let first = self
-                    .items
-                    .iter()
-                    .find(|item| !item.disabled && item.label.to_lowercase().starts_with(&typed))
-                    .map(|item| item.key.clone());
-                if let Some(key) = first {
+                if let Some(key) = self.completing().map(|item| item.key.clone()) {
                     self.choose(&key, Source::User, Reason::Keyboard, gate);
                 }
                 Reaction::default()
@@ -358,14 +373,12 @@ impl Combobox {
                 if self.commit(vec![back.clone()], Source::User, Reason::Keyboard, gate) {
                     self.text = self.label(&back);
                 }
-                self.open = false;
-                self.active = None;
+                self.close();
                 Reaction::handled()
             }
             // Escape closes the list first, and only then clears the field.
             Key::Escape if self.open => {
-                self.open = false;
-                self.active = None;
+                self.close();
                 Reaction::handled()
             }
             Key::Escape if !self.text.is_empty() => {
@@ -490,7 +503,7 @@ impl Primitive for Combobox {
                 let shown = self.open && self.items.get(key).is_some_and(|item| self.matches(item));
                 Semantics {
                     role: Some(Role::Option),
-                    selected: Some(self.selected.iter().any(|chosen| chosen == key)),
+                    selected: Some(self.is_chosen(key)),
                     disabled: !self.items.is_enabled(key),
                     hidden: !shown,
                     active: shown && self.active.as_deref() == Some(key),
@@ -503,7 +516,7 @@ impl Primitive for Combobox {
             },
             (Part::Chip, Some(key)) => Semantics {
                 role: Some(Role::Button),
-                hidden: !self.opts.multiple || !self.selected.iter().any(|chosen| chosen == key),
+                hidden: !self.opts.multiple || !self.is_chosen(key),
                 ..Default::default()
             },
             (Part::Chip, None) => Semantics {
@@ -540,6 +553,7 @@ impl Primitive for Combobox {
             },
         }
     }
+
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
         if self.opts.read_only && !matches!(input, Input::Focus { .. } | Input::Blur { .. }) {
             return Reaction::default();
@@ -576,12 +590,7 @@ impl Primitive for Combobox {
                 item: Some(key),
                 ..
             } => {
-                let next = self
-                    .selected
-                    .iter()
-                    .filter(|chosen| **chosen != key)
-                    .cloned()
-                    .collect();
+                let next = self.selected_without(&key);
                 self.commit(next, Source::User, Reason::Press, gate);
                 Reaction::focusing(Part::Input)
             }
@@ -679,16 +688,11 @@ impl Primitive for Combobox {
             Some(true) => return Err(ActError::Disabled(key.to_string())),
             Some(false) => {}
         }
-        let chosen = self.selected.iter().any(|c| c == key);
+        let chosen = self.is_chosen(key);
         let done = match (action, chosen) {
             ("remove", false) => true,
             ("remove", true) => {
-                let next = self
-                    .selected
-                    .iter()
-                    .filter(|c| *c != key)
-                    .cloned()
-                    .collect();
+                let next = self.selected_without(key);
                 self.commit(next, Source::Agent, Reason::Action, gate)
             }
             (_, true) if self.opts.multiple => true,
