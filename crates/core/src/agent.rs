@@ -226,6 +226,11 @@ pub struct Staged {
     previous: Vec<(String, Vec<String>)>,
 }
 
+/// The ref an agent knows a registered component by.
+fn reference_of(id: u32) -> String {
+    format!("e{id}")
+}
+
 /// Every mounted component, addressable by an agent through a stable ref.
 pub struct Registry<Cx> {
     next_id: u32,
@@ -274,7 +279,7 @@ impl<Cx> Registry<Cx> {
     pub fn snapshot(&self, cx: &Cx) -> Vec<(String, Snapshot)> {
         self.targets
             .iter()
-            .filter_map(|(id, target)| Some((format!("e{id}"), target.seen(cx)?)))
+            .filter_map(|(id, target)| Some((reference_of(*id), target.seen(cx)?)))
             .collect()
     }
 
@@ -287,7 +292,7 @@ impl<Cx> Registry<Cx> {
     pub fn target(&self, reference: &str) -> Result<Target<Cx>, Error> {
         self.targets
             .iter()
-            .find(|(id, target)| format!("e{id}") == reference && !target.access.hidden)
+            .find(|(id, target)| reference_of(*id) == reference && !target.access.hidden)
             .map(|(_, target)| target.clone())
             .ok_or_else(|| Error::UnknownRef(reference.to_string()))
     }
@@ -348,17 +353,27 @@ impl<Cx> Registry<Cx> {
     ///
     /// When a ref names no component. What was already tried is put back first.
     pub fn stage(&self, cx: &mut Cx, values: &[(String, Vec<String>)]) -> Result<Staged, Error> {
-        let mut previous = Vec::new();
+        let mut staged = Staged {
+            previous: Vec::new(),
+        };
         for (target, value) in values {
-            let reference = self.resolve(cx, target)?;
-            let target = self.target(&reference)?;
+            let found = self
+                .resolve(cx, target)
+                .and_then(|reference| Ok((self.target(&reference)?, reference)));
+            let (target, reference) = match found {
+                Ok(found) => found,
+                Err(error) => {
+                    self.revert(cx, staged);
+                    return Err(error);
+                }
+            };
             let before = (target.snapshot)(cx)
                 .map(|snapshot| snapshot.value)
                 .unwrap_or_default();
             (target.set)(cx, value.clone());
-            previous.push((reference, before));
+            staged.previous.push((reference, before));
         }
-        Ok(Staged { previous })
+        Ok(staged)
     }
 
     /// Puts back everything a stage replaced, last change first.
@@ -750,6 +765,21 @@ mod tests {
         );
         registry.revert(&mut (), staged);
         assert_eq!(values(&registry), [vec!["apple".to_string()], vec![]]);
+    }
+
+    #[test]
+    fn a_stage_that_names_no_component_puts_back_what_it_tried() {
+        let registry = registry();
+        let tried = registry.stage(
+            &mut (),
+            &[
+                ("Fruit".into(), vec!["cherry".into()]),
+                ("No such thing".into(), vec!["on".into()]),
+            ],
+        );
+        assert!(tried.is_err());
+        let fruit = registry.snapshot(&()).into_iter().next().unwrap().1.value;
+        assert_eq!(fruit, Vec::<String>::new(), "the fruit is as it was");
     }
 
     #[test]
