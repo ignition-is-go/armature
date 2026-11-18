@@ -355,14 +355,7 @@ mod tests {
     }
 
     fn key(picker: &mut DatePicker, key: Key) -> Reaction<Part> {
-        picker.send(
-            Input::Key {
-                key,
-                mods: Modifiers::default(),
-                now_ms: 0,
-            },
-            &mut |_| true,
-        )
+        crate::testing::press_key(picker, key)
     }
 
     #[test]

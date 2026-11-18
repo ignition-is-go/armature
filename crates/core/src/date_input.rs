@@ -583,17 +583,9 @@ impl Primitive for DateInput {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::keys::Modifiers;
 
     fn key(input: &mut DateInput, key: Key) -> Reaction<Part> {
-        input.send(
-            Input::Key {
-                key,
-                mods: Modifiers::default(),
-                now_ms: 0,
-            },
-            &mut |_| true,
-        )
+        crate::testing::press_key(input, key)
     }
 
     fn type_digits(input: &mut DateInput, digits: &str) {

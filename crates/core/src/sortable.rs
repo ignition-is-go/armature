@@ -440,14 +440,7 @@ mod tests {
     }
 
     fn key(list: &mut Sortable, key: Key) -> Reaction<Part> {
-        list.send(
-            Input::Key {
-                key,
-                mods: Modifiers::default(),
-                now_ms: 0,
-            },
-            &mut |_| true,
-        )
+        crate::testing::press_key(list, key)
     }
 
     fn spoken(reaction: &Reaction<Part>) -> &str {

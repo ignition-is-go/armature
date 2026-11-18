@@ -415,7 +415,6 @@ impl Primitive for TriggerMenu {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::keys::Modifiers;
 
     fn menu() -> TriggerMenu {
         let mut menu = TriggerMenu::new(&['@', '/']);
@@ -446,14 +445,7 @@ mod tests {
     }
 
     fn key(menu: &mut TriggerMenu, key: Key) -> Reaction<Part> {
-        menu.send(
-            Input::Key {
-                key,
-                mods: Modifiers::default(),
-                now_ms: 0,
-            },
-            &mut |_| true,
-        )
+        crate::testing::press_key(menu, key)
     }
 
     #[test]

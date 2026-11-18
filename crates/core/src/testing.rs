@@ -7,7 +7,9 @@ use crate::agent::ActError;
 use crate::change::{Source, ValueChange};
 use crate::geometry::Point;
 use crate::keys::{Key, Modifiers};
-use crate::primitive::{Focusable, Input, Item, Pointer, PointerPhase, Primitive, Role, Semantics};
+use crate::primitive::{
+    Focusable, Input, Item, Pointer, PointerPhase, Primitive, Reaction, Role, Semantics,
+};
 
 /// One rule a primitive broke.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -436,6 +438,19 @@ impl<P: Primitive, M: Fn() -> P> Checker<'_, P, M> {
         }
         reported
     }
+}
+
+/// Sends one key with no modifiers held, allowing whatever change it proposes, as
+/// tests do to step through a primitive.
+pub fn press_key<P: Primitive>(primitive: &mut P, key: Key) -> Reaction<P::Part> {
+    primitive.send(
+        Input::Key {
+            key,
+            mods: Modifiers::default(),
+            now_ms: 0,
+        },
+        &mut |_| true,
+    )
 }
 
 /// Checks a primitive against the rules every primitive must keep. `make` builds a

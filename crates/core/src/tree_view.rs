@@ -714,14 +714,7 @@ mod tests {
     }
 
     fn key(tree: &mut TreeView, key: Key) -> Reaction<Part> {
-        tree.send(
-            Input::Key {
-                key,
-                mods: Modifiers::default(),
-                now_ms: 0,
-            },
-            &mut |_| true,
-        )
+        crate::testing::press_key(tree, key)
     }
 
     fn visible(tree: &TreeView) -> Vec<String> {

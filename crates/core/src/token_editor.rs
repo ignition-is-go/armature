@@ -607,14 +607,7 @@ mod tests {
     use crate::keys::Modifiers;
 
     fn key(editor: &mut TokenEditor, key: Key) -> Reaction<Part> {
-        editor.send(
-            Input::Key {
-                key,
-                mods: Modifiers::default(),
-                now_ms: 0,
-            },
-            &mut |_| true,
-        )
+        crate::testing::press_key(editor, key)
     }
 
     fn word(editor: &mut TokenEditor, key: Key) {

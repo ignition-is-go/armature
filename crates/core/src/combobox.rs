@@ -736,14 +736,7 @@ mod tests {
     }
 
     fn key(combobox: &mut Combobox, key: Key) -> Reaction<Part> {
-        combobox.send(
-            Input::Key {
-                key,
-                mods: Modifiers::default(),
-                now_ms: 0,
-            },
-            &mut |_| true,
-        )
+        crate::testing::press_key(combobox, key)
     }
 
     #[test]

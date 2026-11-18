@@ -260,14 +260,7 @@ mod tests {
     }
 
     fn key(radio: &mut Radio, key: Key) -> Reaction<Part> {
-        radio.send(
-            Input::Key {
-                key,
-                mods: Modifiers::default(),
-                now_ms: 0,
-            },
-            &mut |_| true,
-        )
+        crate::testing::press_key(radio, key)
     }
 
     #[test]

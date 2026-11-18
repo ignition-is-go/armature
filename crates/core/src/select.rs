@@ -323,14 +323,7 @@ mod tests {
     }
 
     fn key(select: &mut Select, key: Key) -> Reaction<Part> {
-        select.send(
-            Input::Key {
-                key,
-                mods: Modifiers::default(),
-                now_ms: 0,
-            },
-            &mut |_| true,
-        )
+        crate::testing::press_key(select, key)
     }
 
     fn press(select: &mut Select, part: Part, item: Option<&str>) -> Reaction<Part> {

@@ -236,7 +236,6 @@ impl Primitive for EventList {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::keys::Modifiers;
 
     fn steps(opts: Options) -> EventList {
         let mut list = EventList::new(opts);
@@ -251,14 +250,7 @@ mod tests {
     }
 
     fn key(list: &mut EventList, key: Key) -> Reaction<Part> {
-        list.send(
-            Input::Key {
-                key,
-                mods: Modifiers::default(),
-                now_ms: 0,
-            },
-            &mut |_| true,
-        )
+        crate::testing::press_key(list, key)
     }
 
     #[test]

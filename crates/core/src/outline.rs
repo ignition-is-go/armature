@@ -799,14 +799,7 @@ mod tests {
     }
 
     fn key(outline: &mut Outline, key: Key) -> Reaction<Part> {
-        outline.send(
-            Input::Key {
-                key,
-                mods: Modifiers::default(),
-                now_ms: 0,
-            },
-            &mut |_| true,
-        )
+        crate::testing::press_key(outline, key)
     }
 
     fn focus(outline: &mut Outline, row: &str) {

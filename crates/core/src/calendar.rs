@@ -434,14 +434,7 @@ mod tests {
     }
 
     fn key(calendar: &mut Calendar, key: Key) -> Reaction<Part> {
-        calendar.send(
-            Input::Key {
-                key,
-                mods: Modifiers::default(),
-                now_ms: 0,
-            },
-            &mut |_| true,
-        )
+        crate::testing::press_key(calendar, key)
     }
 
     #[test]

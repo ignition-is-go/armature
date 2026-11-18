@@ -324,14 +324,7 @@ mod tests {
     }
 
     fn key(list: &mut VirtualList, key: Key) -> Reaction<Part> {
-        list.send(
-            Input::Key {
-                key,
-                mods: Modifiers::default(),
-                now_ms: 0,
-            },
-            &mut |_| true,
-        )
+        crate::testing::press_key(list, key)
     }
 
     #[test]

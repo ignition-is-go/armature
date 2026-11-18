@@ -330,7 +330,6 @@ impl Primitive for Picker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::keys::Modifiers;
 
     fn hours() -> Picker {
         let mut picker = Picker::new(30.0);
@@ -361,14 +360,7 @@ mod tests {
     }
 
     fn key(picker: &mut Picker, key: Key) -> Reaction<Part> {
-        picker.send(
-            Input::Key {
-                key,
-                mods: Modifiers::default(),
-                now_ms: 0,
-            },
-            &mut |_| true,
-        )
+        crate::testing::press_key(picker, key)
     }
 
     #[test]
