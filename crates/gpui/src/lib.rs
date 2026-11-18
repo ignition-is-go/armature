@@ -1151,8 +1151,12 @@ pub fn part<K: PartOf>(
         Box::new(move |bounds, node, window: &mut Window, cx: &mut App| {
             let mut wake = None;
             let mut listen = false;
+            let mut remeasure = false;
             let (scrolled, relinked) = state.update(cx, |state, _| {
-                state.bounds.insert(key.clone(), bounds);
+                // A primitive that lays itself out from where its parts are drawn
+                // hears of it when one of them moves.
+                remeasure = state.bounds.insert(key.clone(), bounds) != Some(bounds)
+                    && state.machine.measures();
                 let relinked =
                     node.is_some_and(|node| state.nodes.insert(key.clone(), node) != Some(node));
                 listen = state.hotkey_watch.is_none() && !state.machine.hotkeys().is_empty();
@@ -1211,6 +1215,21 @@ pub fn part<K: PartOf>(
                             });
                         })
                         .detach();
+                    });
+                });
+            }
+            if remeasure {
+                let state = state.clone();
+                window.defer(cx, move |window, cx| {
+                    state.update(cx, |state, cx| {
+                        let mut changed = false;
+                        state.run(window, cx, |machine, measure, _| {
+                            changed = machine.measured(measure);
+                            Reaction::default()
+                        });
+                        if changed {
+                            cx.notify();
+                        }
                     });
                 });
             }

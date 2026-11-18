@@ -122,5 +122,17 @@ async () => {
     out.tokenEditor = `${typed} | ${withToken} | afterBackspace=${prompt().value.join('')}`;
     a.act(prompt().ref, 'clear'); await frame();
   }
+  // A carousel that pages by its slides as measured, with no drag first.
+  {
+    const shelf = () => window.armature.snapshot().find(s => s.label === 'Shelf');
+    const next = document.querySelector('[aria-label="Next shelf"]');
+    const strip = document.getElementById('shelf-strip');
+    next.scrollIntoView(); await frame();
+    const before = `${shelf().value.join('')}@${strip.style.transform}`;
+    next.click(); await frame();
+    const second = `${shelf().value.join('')}@${strip.style.transform}`;
+    next.click(); await frame();
+    out.shelf = `${before} > ${second} > ${shelf().value.join('')}@${strip.style.transform}`;
+  }
   return out;
 }

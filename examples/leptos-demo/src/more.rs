@@ -227,6 +227,32 @@ fn Slides() -> impl IntoView {
 }
 
 #[component]
+fn ShelfSlides() -> impl IntoView {
+    let carousel = use_primitive::<Carousel>();
+    let moved = move || {
+        format!(
+            "translateX(-{}px)",
+            carousel.with(|c| c.strip_offset().unwrap_or(0.0))
+        )
+    };
+    view! {
+        <Part part=carousel::Part::Root>
+            <Part part=carousel::Part::Viewport>
+                <div>
+                    <div id="shelf-strip" style="display:flex;gap:10px" style:transform=moved>
+                        {["a", "b", "c", "d", "e", "f", "g"]
+                            .map(|key| view! { <Part part=carousel::Part::Slide item=key><span style="display:block;width:100px;flex:0 0 100px">{key}</span></Part> })
+                            .collect_view()}
+                    </div>
+                </div>
+            </Part>
+            <Part part=carousel::Part::Previous label="Previous shelf">"‹"</Part>
+            <Part part=carousel::Part::Next label="Next shelf">"›"</Part>
+        </Part>
+    }
+}
+
+#[component]
 fn ScrollParts() -> impl IntoView {
     let area = use_primitive::<ScrollArea>();
     let thumb = move || area.with(|a| a.thumb(120.0));
@@ -679,6 +705,11 @@ pub fn More() -> impl IntoView {
             // Text with tokens in it, edited at a caret.
             <Root machine=armature_core::token_editor::TokenEditor::default() label="Prompt">
                 <PromptContent />
+            </Root>
+            // A carousel whose pages come from its slides as measured: as many
+            // as the viewport shows.
+            <Root machine=Carousel::new(carousel::Options { fit_pages: true, ..Default::default() }) label="Shelf">
+                <ShelfSlides />
             </Root>
             // An outline reordered and nested with the keyboard or by dragging.
             <Root

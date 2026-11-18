@@ -2,8 +2,8 @@ use crate::agent::{ActError, Snapshot};
 use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::keys::{Dir, Key, Orientation};
 use crate::panel_layout::{
-    PanelConstraints, end_delta, fit_layout, handle_bounds, home_delta, initial_layout, resize_at,
-    resize_panel, toggle_target,
+    PanelConstraints, PanelSizes, constraints_of, end_delta, fit_layout, handle_bounds, home_delta,
+    initial_layout, resize_at, resize_panel, toggle_target,
 };
 use crate::primitive::{
     Effect, Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction,
@@ -56,6 +56,10 @@ pub struct PanelGroup {
     panels: Vec<PanelConstraints>,
     /// The dividers that cannot be moved.
     locked: Vec<bool>,
+    /// Each panel's limits as written, when some are in pixels.
+    written_sizes: Vec<PanelSizes>,
+    /// The length of the group as last measured.
+    space: f64,
     /// The divider being dragged, the sizes when the drag began, and where it began.
     drag: Option<(usize, Vec<f64>, f64)>,
     focused: usize,
@@ -93,6 +97,8 @@ impl PanelGroup {
             sizes,
             panels,
             locked: Vec::new(),
+            written_sizes: Vec::new(),
+            space: 0.0,
             drag: None,
             focused: 0,
         }
@@ -109,6 +115,20 @@ impl PanelGroup {
             } else {
                 fit_layout(&self.sizes, panels)
             };
+        }
+        self
+    }
+
+    /// Gives each panel its limits as written, which may be in pixels or rems.
+    /// Those take effect once the group has been measured.
+    pub fn with_sizes(mut self, sizes: &[PanelSizes]) -> Self {
+        if sizes.len() == self.sizes.len() {
+            self.written_sizes = sizes.to_vec();
+            let limits: Vec<PanelConstraints> = sizes
+                .iter()
+                .map(|sizes| constraints_of(*sizes, 0.0, 16.0))
+                .collect();
+            self = self.with_panels(&limits);
         }
         self
     }
@@ -195,6 +215,36 @@ impl Primitive for PanelGroup {
 
     fn named_part(&self) -> Option<Part> {
         Some(Part::Root)
+    }
+
+    fn measures(&self) -> bool {
+        !self.written_sizes.is_empty()
+    }
+
+    /// Pixel limits are a share of the group's length, so they are worked out
+    /// again whenever it changes, and the sizes brought back within them.
+    fn measured(&mut self, measure: Measure<Part>) -> bool {
+        let Some(rect) = measure(Part::Root, None) else {
+            return false;
+        };
+        let space = if self.opts.orientation == Orientation::Horizontal {
+            rect.width
+        } else {
+            rect.height
+        };
+        if (space - self.space).abs() < 0.5 {
+            return false;
+        }
+        self.space = space;
+        self.panels = self
+            .written_sizes
+            .iter()
+            .map(|sizes| constraints_of(*sizes, space, 16.0))
+            .collect();
+        let next = fit_layout(&self.sizes, &self.panels);
+        let changed = Self::written(&next) != Self::written(&self.sizes);
+        self.sizes = next;
+        changed
     }
 
     fn upsert_item(&mut self, _: Item) {}
@@ -528,6 +578,30 @@ mod tests {
         assert_eq!(group.sizes(), [100.0 - 20.0, 20.0, 0.0]);
         let range = group.semantics(Part::Handle, Some("0")).range.unwrap();
         assert_eq!((range.min, range.max), (0.0, 80.0));
+    }
+
+    #[test]
+    fn pixel_limits_hold_as_the_group_is_measured_and_shrinks() {
+        use crate::panel_layout::PanelSize;
+        let sidebar = PanelSizes {
+            min_size: Some(PanelSize::Px(200.0)),
+            ..Default::default()
+        };
+        let mut group = PanelGroup::new(Options::default(), &[10.0, 90.0])
+            .with_sizes(&[sidebar, PanelSizes::default()]);
+        assert!(group.measures());
+        assert_eq!(
+            group.sizes(),
+            [10.0, 90.0],
+            "pixels mean nothing until the group is measured"
+        );
+        let wide = |_: Part, _: Option<&str>| Some(Rect::new(0.0, 0.0, 1000.0, 100.0));
+        assert!(group.measured(&wide));
+        assert_eq!(group.sizes(), [20.0, 80.0], "200 of 1000 pixels");
+        assert!(!group.measured(&wide));
+        let narrow = |_: Part, _: Option<&str>| Some(Rect::new(0.0, 0.0, 500.0, 100.0));
+        assert!(group.measured(&narrow));
+        assert_eq!(group.sizes(), [40.0, 60.0], "200 of 500 pixels");
     }
 
     #[test]

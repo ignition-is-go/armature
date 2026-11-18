@@ -532,6 +532,19 @@ pub trait Primitive: Clone + 'static {
         None
     }
 
+    /// Whether the primitive lays itself out from where its parts are drawn, as a
+    /// carousel does from its slides. The adapter then calls `measured` whenever
+    /// that may have changed.
+    fn measures(&self) -> bool {
+        false
+    }
+
+    /// Takes the layout as drawn. Returns whether anything the renderer reads
+    /// changed, so it draws again; it must return `false` once nothing does.
+    fn measured(&mut self, _measure: Measure<Self::Part>) -> bool {
+        false
+    }
+
     /// Where the primitive wants its scrolling part scrolled to. The adapter brings the
     /// part there after an agent action, which has no other way to ask.
     fn wanted_scroll(&self) -> Option<f64> {

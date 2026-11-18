@@ -687,6 +687,29 @@ where
         }));
     }
 
+    // A primitive that lays itself out from where its parts are drawn hears of it
+    // after every change and whenever the window is resized.
+    if machine.with_untracked(|m| m.measures()) {
+        let report = move || {
+            let measure = move |part: P::Part, item: Option<&str>| {
+                let rect = ctx.element_of(part, item)?.get_bounding_client_rect();
+                Some(Rect::new(rect.x(), rect.y(), rect.width(), rect.height()))
+            };
+            let changed = machine
+                .try_update_untracked(|m| m.measured(&measure))
+                .unwrap_or(false);
+            if changed {
+                machine.notify();
+            }
+        };
+        Effect::new(move |_| {
+            machine.track();
+            request_animation_frame(report);
+        });
+        let resized = window_event_listener(leptos::ev::resize, move |_| report());
+        on_cleanup(move || resized.remove());
+    }
+
     // A primitive whose value was set from outside may have a timer to start.
     {
         let waking = StoredValue::new(false);

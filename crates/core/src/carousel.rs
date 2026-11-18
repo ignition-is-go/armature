@@ -167,6 +167,21 @@ impl Carousel {
             .map(|page| page.position)
     }
 
+    /// The pages as the adapter last measured them: which slides are on each and
+    /// how far the strip moves to show it. Empty until the slides are drawn.
+    pub fn layout(&self) -> &[Page] {
+        &self.measured
+    }
+
+    /// How far to move the strip to show the current page, from the last
+    /// measurement.
+    pub fn strip_offset(&self) -> Option<f64> {
+        self.measured
+            .iter()
+            .find(|page| page.slides.contains(&self.current))
+            .map(|page| page.position)
+    }
+
     pub fn is_playing(&self) -> bool {
         self.playing
     }
@@ -464,6 +479,17 @@ impl Primitive for Carousel {
         }
     }
 
+    fn measures(&self) -> bool {
+        true
+    }
+
+    fn measured(&mut self, measure: Measure<Part>) -> bool {
+        let pages = self.measured_pages(measure);
+        let changed = pages != self.measured;
+        self.measured = pages;
+        changed
+    }
+
     fn pointer(
         &mut self,
         pointer: Pointer<Part>,
@@ -750,6 +776,13 @@ mod tests {
             mods: Default::default(),
             now_ms,
         };
+        // The adapter reports the layout as soon as it is drawn, before any drag.
+        assert!(carousel.measures() && carousel.measured(&measure));
+        assert!(
+            !carousel.measured(&measure),
+            "nothing changed the second time"
+        );
+        assert_eq!(carousel.layout().len(), 3);
         carousel.pointer(at(PointerPhase::Down, 300.0, 0), &measure, &mut |_| true);
         carousel.pointer(at(PointerPhase::Move, 100.0, 16), &measure, &mut |_| true);
         carousel.pointer(at(PointerPhase::Up, 100.0, 32), &measure, &mut |_| true);
