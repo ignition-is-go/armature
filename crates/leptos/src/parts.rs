@@ -539,41 +539,11 @@ where
     leptos::tachys::reactive_graph::OwnedView::new_with_owner(view, owner)
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "the props of `Root`, passed straight through"
-)]
-#[expect(
-    clippy::too_many_lines,
-    reason = "one block for each thing a root sets up"
-)]
-fn root_view<P>(
-    machine: P,
-    label: String,
-    on_value_change: Option<ChangeGate>,
+/// A value the owner controls is followed whenever it changes.
+fn follow_controlled_value<P: Primitive + Send + Sync>(
+    machine: RwSignal<P>,
     value: Option<Signal<Vec<String>>>,
-    agent_hidden: bool,
-    agent_secret: bool,
-    agent_confirm: Option<String>,
-    settings: Option<Signal<Vec<(String, String)>>>,
-    children: Children,
-) -> AnyView
-where
-    P: Primitive + Send + Sync,
-{
-    let machine = RwSignal::new(machine);
-    let label = StoredValue::new(label);
-    let instance = NEXT_INSTANCE.replace(NEXT_INSTANCE.get().saturating_add(1));
-    let ctx = Context {
-        instance,
-        machine,
-        label,
-        gate: on_value_change,
-        captured: StoredValue::new(None),
-        secret: agent_secret,
-    };
-    provide_context(ctx);
-
+) {
     if let Some(value) = value {
         Effect::new(move |_| {
             let value = value.get();
@@ -582,7 +552,12 @@ where
             }
         });
     }
+}
 
+/// Makes the component known to agents for as long as it is on the page.
+fn register_with_agents<P: Primitive + Send + Sync>(ctx: Context<P>, access: Access) {
+    let (machine, label) = (ctx.machine, ctx.label);
+    let (on_value_change, agent_secret) = (ctx.gate, ctx.secret);
     let registration = agent::register(Target {
         snapshot: Rc::new(move |()| {
             Some(ctx.synced(&ctx.rendered())?.snapshot(&label.get_value()))
@@ -614,16 +589,16 @@ where
         set: Rc::new(move |(), value| {
             machine.try_update(|m| m.set_value(value));
         }),
-        access: Access {
-            hidden: agent_hidden,
-            secret: agent_secret,
-            confirm: agent_confirm,
-        },
+        access,
     });
     on_cleanup(move || agent::unregister(registration));
+}
 
-    let parts = P::parts();
-    if parts.iter().any(|part| P::popup_of(*part).is_some()) {
+/// A component with a popup hears of a press anywhere outside it, and of the
+/// window losing focus.
+fn watch_outside_presses<P: Primitive + Send + Sync>(ctx: Context<P>) {
+    let instance = ctx.instance;
+    if P::parts().iter().any(|part| P::popup_of(*part).is_some()) {
         let inside = format!("[data-armature=\"{instance}\"]");
         let listener = window_event_listener(leptos::ev::pointerdown, move |ev| {
             let target = ev
@@ -644,7 +619,13 @@ where
         });
         on_cleanup(move || away.remove());
     }
+}
 
+/// Settings the owner changes while the component runs are passed on as they change.
+fn follow_settings<P: Primitive + Send + Sync>(
+    machine: RwSignal<P>,
+    settings: Option<Signal<Vec<(String, String)>>>,
+) {
     if let Some(settings) = settings {
         Effect::new(move |_| {
             let settings = settings.get();
@@ -655,9 +636,12 @@ where
             });
         });
     }
+}
 
-    // A key that reaches the component from anywhere on the page.
-    // The keys are read as they stand when the key is pressed, since they may change.
+/// A key that reaches the component from anywhere on the page. The keys are read as
+/// they stand when the key is pressed, since they may change.
+fn listen_for_hotkeys<P: Primitive + Send + Sync>(ctx: Context<P>) {
+    let (machine, instance) = (ctx.machine, ctx.instance);
     if !machine
         .with_untracked(armature_core::primitive::Primitive::hotkeys)
         .is_empty()
@@ -692,9 +676,11 @@ where
             RETURN_TO.with_borrow_mut(|held| held.remove(&instance));
         });
     }
+}
 
-    // Whether the keyboard or a pointer is in use is noted on the page, once for
-    // every component, so focus can be styled for each.
+/// Whether the keyboard or a pointer is in use is noted on the page, once for every
+/// component, so focus can be styled for each.
+fn note_modality() {
     if !WATCHING_MODALITY.replace(true) {
         let note = |how: &'static str| {
             move || {
@@ -710,9 +696,12 @@ where
             pointer();
         }));
     }
+}
 
-    // A primitive that lays itself out from where its parts are drawn hears of it
-    // after every change and whenever the window is resized.
+/// A primitive that lays itself out from where its parts are drawn hears of it after
+/// every change and whenever the window is resized.
+fn report_measured_layout<P: Primitive + Send + Sync>(ctx: Context<P>) {
+    let machine = ctx.machine;
     if machine.with_untracked(armature_core::primitive::Primitive::measures) {
         let report = move || {
             let measure = move |part: P::Part, item: Option<&str>| {
@@ -733,8 +722,11 @@ where
         let resized = window_event_listener(leptos::ev::resize, move |_| report());
         on_cleanup(move || resized.remove());
     }
+}
 
-    // A primitive whose value was set from outside may have a timer to start.
+/// A primitive whose value was set from outside may have a timer to start.
+fn wake_when_asked<P: Primitive + Send + Sync>(ctx: Context<P>) {
+    let machine = ctx.machine;
     {
         let waking = StoredValue::new(false);
         Effect::new(move |_| {
@@ -756,8 +748,12 @@ where
             );
         });
     }
+}
 
-    // Anything that opens joins the stack of layers while it is open.
+/// Anything that opens joins the stack of layers while it is open.
+fn join_layers<P: Primitive + Send + Sync>(ctx: Context<P>) {
+    let (machine, instance) = (ctx.machine, ctx.instance);
+    let parts = P::parts();
     {
         let id = instance.to_string();
         let layer_id = id.clone();
@@ -781,10 +777,12 @@ where
         });
         on_cleanup(move || LAYERS.with_borrow_mut(|layers| drop(layers.close(&layer_id))));
     }
+}
 
-    // A captured gesture is followed on the window, so it continues when the pointer
-    // leaves the part it began on.
-    if parts.iter().any(|part| P::tracks_pointer(*part)) {
+/// A captured gesture is followed on the window, so it continues when the pointer
+/// leaves the part it began on.
+fn follow_captured_gesture<P: Primitive + Send + Sync>(ctx: Context<P>) {
+    if P::parts().iter().any(|part| P::tracks_pointer(*part)) {
         let follow = move |phase: PointerPhase, ev: &web_sys::MouseEvent| {
             let Some((part, item)) = ctx.captured.try_get_value().flatten() else {
                 return;
@@ -809,6 +807,54 @@ where
             cancelled.remove();
         });
     }
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the props of `Root`, passed straight through"
+)]
+fn root_view<P>(
+    machine: P,
+    label: String,
+    on_value_change: Option<ChangeGate>,
+    value: Option<Signal<Vec<String>>>,
+    agent_hidden: bool,
+    agent_secret: bool,
+    agent_confirm: Option<String>,
+    settings: Option<Signal<Vec<(String, String)>>>,
+    children: Children,
+) -> AnyView
+where
+    P: Primitive + Send + Sync,
+{
+    let machine = RwSignal::new(machine);
+    let label = StoredValue::new(label);
+    let instance = NEXT_INSTANCE.replace(NEXT_INSTANCE.get().saturating_add(1));
+    let ctx = Context {
+        instance,
+        machine,
+        label,
+        gate: on_value_change,
+        captured: StoredValue::new(None),
+        secret: agent_secret,
+    };
+    provide_context(ctx);
+
+    follow_controlled_value(machine, value);
+    let access = Access {
+        hidden: agent_hidden,
+        secret: agent_secret,
+        confirm: agent_confirm,
+    };
+    register_with_agents(ctx, access);
+    watch_outside_presses(ctx);
+    follow_settings(machine, settings);
+    listen_for_hotkeys(ctx);
+    note_modality();
+    report_measured_layout(ctx);
+    wake_when_asked(ctx);
+    join_layers(ctx);
+    follow_captured_gesture(ctx);
 
     children()
 }
