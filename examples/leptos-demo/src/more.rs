@@ -352,6 +352,8 @@ fn TraceRows() -> impl IntoView {
         <Part part=waterfall::Part::Root>
             <For each=move || trace.with(armature_core::waterfall::Waterfall::rows) key=|row| row.key.clone() let:row>
                 {
+                    // The markup takes the key in more places than it can be cloned for in
+                    // order, so the shown name is a copy of its own.
                     let (key, name) = (row.key.clone(), row.key.clone());
                     view! {
                         <div class="trace-row">
