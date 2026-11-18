@@ -2141,6 +2141,16 @@ fn pages_of(
     armature_core::carousel_layout::carousel_pages(&geometry, align, per_page)
 }
 
+/// Where a looping strip stands: scrolled to `position`, with slide `first` first.
+const fn at(position: f64, first: usize) -> armature_core::carousel_layout::LoopAt {
+    armature_core::carousel_layout::LoopAt { position, first }
+}
+
+/// A rotation that puts slide `first` first and moves the scroll by `delta`.
+const fn rotated(first: usize, delta: f64) -> armature_core::carousel_layout::Rotation {
+    armature_core::carousel_layout::Rotation { first, delta }
+}
+
 /// A 300px viewport over 1500px of slides, one slide to a page, lined up at the start.
 const fn one_slide_view() -> armature_core::carousel_layout::LoopView {
     use armature_core::carousel_layout::{Align, LoopView, PerPage};
@@ -2190,15 +2200,13 @@ fn carousel_layouts_pages_keep_their_slides_own_order_wherever() {
     );
     assert_eq!(positions(&pages), [600.0, 900.0, 1200.0, 0.0, 300.0]);
     // "at rest, the current page moves mid-track with the same slides in view"
-    let at = |position, first| LoopAt { position, first };
-    let rotated = |first, delta| Some(Rotation { first, delta });
     assert_eq!(
         loop_rotation(&track, &view, at(0.0, 0), None, false),
-        rotated(3, 600.0)
+        Some(rotated(3, 600.0))
     );
     assert_eq!(
         loop_rotation(&track, &view, at(600.0, 3), None, false),
-        rotated(3, 0.0)
+        Some(rotated(3, 0.0))
     );
 }
 
@@ -2207,22 +2215,20 @@ fn carousel_layouts_a_step_past_the_end_rotates_only() {
     use armature_core::carousel_layout::*;
     let view = one_slide_view();
     let track = measure_track(&slide_row(5, 300.0, 0.0), 0).unwrap();
-    let at = |position, first| LoopAt { position, first };
     let forward_to = |page| {
         Some(Heading {
             page,
             forward: true,
         })
     };
-    let rotated = |first, delta| Some(Rotation { first, delta });
     // "a step past the end rotates only when the next page doesn't lie ahead"
     assert_eq!(
         loop_rotation(&track, &view, at(1200.0, 0), forward_to(0), true),
-        rotated(2, -600.0)
+        Some(rotated(2, -600.0))
     );
     assert_eq!(
         loop_rotation(&track, &view, at(600.0, 0), forward_to(3), true),
-        rotated(0, 0.0)
+        Some(rotated(0, 0.0))
     );
     // "loops seamlessly only with a page's step of room to either side"
     assert!(can_loop(
@@ -2252,7 +2258,6 @@ fn carousel_layouts_a_step_past_the_end_rotates_only() {
 fn carousel_layouts_a_track_too_short_to_rotate_gives() {
     use armature_core::carousel_layout::*;
     let view = one_slide_view();
-    let at = |position, first| LoopAt { position, first };
     // "a track too short to rotate gives no rotation"
     let short = measure_track(&slide_row(2, 100.0, 0.0), 0).unwrap();
     assert_eq!(
