@@ -1175,16 +1175,52 @@ fn trigger_matching_random_edits_never_leave_a_range_that() {
     }
 }
 
+/// The mention token most of the token tests use.
+fn alice() -> armature_core::token_text::Token {
+    armature_core::token_text::Token::new("mention", "alice", "@Alice").with_id("a")
+}
+
+/// A file token.
+fn file_token() -> armature_core::token_text::Token {
+    armature_core::token_text::Token::new("file", "src/a.ts", "a.ts").with_id("f")
+}
+
+/// A piece of plain text.
+fn plain(text: &str) -> armature_core::token_text::Segment {
+    armature_core::token_text::Segment::Text(text.to_string())
+}
+
+/// The token a segment holds. A test that asks for one where there is text fails.
+#[expect(clippy::panic, reason = "a helper for tests fails as a test does")]
+fn token_in(segment: &armature_core::token_text::Segment) -> armature_core::token_text::Token {
+    match segment {
+        armature_core::token_text::Segment::Token(token) => token.clone(),
+        armature_core::token_text::Segment::Text(_) => panic!("expected a token"),
+    }
+}
+
+/// A value with its tokens' ids blanked, to compare content: reading text back
+/// gives tokens new ids.
+fn without_ids(
+    value: &[armature_core::token_text::Segment],
+) -> Vec<armature_core::token_text::Segment> {
+    use armature_core::token_text::{Segment, Token};
+    value
+        .iter()
+        .map(|segment| match segment {
+            Segment::Token(token) => Segment::Token(Token {
+                id: String::new(),
+                ..token.clone()
+            }),
+            other @ Segment::Text(_) => other.clone(),
+        })
+        .collect()
+}
+
 // token-input-model.test.ts
 #[test]
 fn token_text_model() {
     use armature_core::token_text::*;
-    let alice = || Token::new("mention", "alice", "@Alice").with_id("a");
-    let text = |text: &str| Segment::Text(text.to_string());
-    let token = |segment: &Segment| match segment {
-        Segment::Token(token) => token.clone(),
-        Segment::Text(_) => panic!("expected a token"),
-    };
     // "normalizing merges strings, drops empty ones and gives tokens ids"
     let value = normalize(vec![
         "a".into(),
@@ -1195,8 +1231,8 @@ fn token_text_model() {
         "c".into(),
     ]);
     assert_eq!(value.len(), 3);
-    assert_eq!(value[0], text("ab"));
-    let made = token(&value[1]).id;
+    assert_eq!(value[0], plain("ab"));
+    let made = token_in(&value[1]).id;
     assert!(
         made.strip_prefix('t')
             .is_some_and(|digits| digits.chars().all(|ch| ch.is_ascii_digit()))
@@ -1207,31 +1243,25 @@ fn token_text_model() {
 #[test]
 fn token_text_model_a_repeated_id_stays_with_the_first() {
     use armature_core::token_text::*;
-    let alice = || Token::new("mention", "alice", "@Alice").with_id("a");
-    let file = || Token::new("file", "src/a.ts", "a.ts").with_id("f");
-    let token = |segment: &Segment| match segment {
-        Segment::Token(token) => token.clone(),
-        Segment::Text(_) => panic!("expected a token"),
-    };
     // "a repeated id stays with the first token, and the next gets a new one"
     let pair = normalize(vec![alice().into(), alice().into()]);
-    assert_eq!(token(&pair[0]).id, "a");
-    assert_ne!(token(&pair[1]).id, "a");
+    assert_eq!(token_in(&pair[0]).id, "a");
+    assert_ne!(token_in(&pair[1]).id, "a");
     // "a supplied id too large to count past leaves generated ids unique"
     let _ = normalize(vec![
         Token::new("file", "x", "x")
             .with_id("t99999999999999999999")
             .into(),
     ]);
-    let first = token(&normalize(vec![Token::new("file", "x", "x").into()])[0]).id;
-    let second = token(&normalize(vec![Token::new("file", "x", "x").into()])[0]).id;
+    let first = token_in(&normalize(vec![Token::new("file", "x", "x").into()])[0]).id;
+    let second = token_in(&normalize(vec![Token::new("file", "x", "x").into()])[0]).id;
     assert_ne!(first, second);
     // "a token counts as one offset"
     let value = normalize(vec![
         "hi ".into(),
         alice().into(),
         " and ".into(),
-        file().into(),
+        file_token().into(),
     ]);
     assert_eq!(value_length(&value), 10);
     assert_eq!(offset_text(&value), "hi \u{FFFC} and \u{FFFC}");
@@ -1242,17 +1272,15 @@ fn token_text_model_a_repeated_id_stays_with_the_first() {
 #[test]
 fn token_text_model_slicing_keeps_whole_tokens() {
     use armature_core::token_text::*;
-    let alice = || Token::new("mention", "alice", "@Alice").with_id("a");
-    let text = |text: &str| Segment::Text(text.to_string());
     // "slicing keeps whole tokens"
     let value = normalize(vec!["hi ".into(), alice().into(), "!".into()]);
-    assert_eq!(slice_value(&value, 2, 4), [text(" "), alice().into()]);
-    assert_eq!(slice_value(&value, 4, usize::MAX), [text("!")]);
+    assert_eq!(slice_value(&value, 2, 4), [plain(" "), alice().into()]);
+    assert_eq!(slice_value(&value, 4, usize::MAX), [plain("!")]);
     // "an edit over a token removes all of it, and edits before it shift it"
     let value = normalize(vec!["ab".into(), alice().into(), "cd".into()]);
     assert_eq!(
         replace_range(&value, 1, 3, vec!["X".into()]),
-        [text("aXcd")]
+        [plain("aXcd")]
     );
     assert_eq!(
         offset_of_token(&replace_range(&value, 0, 0, vec!["zz".into()]), "a"),
@@ -1267,8 +1295,6 @@ fn token_text_model_slicing_keeps_whole_tokens() {
 #[test]
 fn token_text_model_word_deletion_stops_at_tokens_and_removes() {
     use armature_core::token_text::*;
-    let alice = || Token::new("mention", "alice", "@Alice").with_id("a");
-    let file = || Token::new("file", "src/a.ts", "a.ts").with_id("f");
     // "word deletion stops at tokens, and removes just the token when it's next"
     let value = normalize(vec!["one ".into(), alice().into(), "two three".into()]);
     assert_eq!(word_boundary(&value, 14, false), 9);
@@ -1284,7 +1310,7 @@ fn token_text_model_word_deletion_stops_at_tokens_and_removes() {
     // "tokens are written as links and labels as text"
     let value = normalize(vec![
         "Summarize ".into(),
-        file().into(),
+        file_token().into(),
         " for ".into(),
         alice().into(),
     ]);
@@ -1299,48 +1325,23 @@ fn token_text_model_word_deletion_stops_at_tokens_and_removes() {
 fn token_text_model_compares_content_since_reading_text_back_makes() {
     use armature_core::token_text::*;
     // Compares content, since reading text back makes new ids.
-    let strip = |value: &[Segment]| -> Vec<Segment> {
-        value
-            .iter()
-            .map(|segment| match segment {
-                Segment::Token(token) => Segment::Token(Token {
-                    id: String::new(),
-                    ..token.clone()
-                }),
-                other @ Segment::Text(_) => other.clone(),
-            })
-            .collect()
-    };
     // "labels and values with brackets and parentheses round-trip"
     let odd = Token::new("file", "a (copy).ts", "[draft] a\\b").with_id("x");
     assert_eq!(
-        strip(&from_text(&to_text(&[odd.clone().into()]))),
-        strip(&[odd.into()])
+        without_ids(&from_text(&to_text(&[odd.clone().into()]))),
+        without_ids(&[odd.into()])
     );
 }
 
 #[test]
 fn token_text_model_text_that_looks_like_a_token_stays() {
     use armature_core::token_text::*;
-    let text = |text: &str| Segment::Text(text.to_string());
-    let strip = |value: &[Segment]| -> Vec<Segment> {
-        value
-            .iter()
-            .map(|segment| match segment {
-                Segment::Token(token) => Segment::Token(Token {
-                    id: String::new(),
-                    ..token.clone()
-                }),
-                other @ Segment::Text(_) => other.clone(),
-            })
-            .collect()
-    };
     // "text that looks like a token stays text"
     let value = normalize(vec!["see [@x](y:z) and \\[@q](r:s)".into()]);
     assert_eq!(from_text(&to_text(&value)), value);
     // "malformed links are text"
-    assert_eq!(from_text("[@open](type:val"), [text("[@open](type:val")]);
-    assert_eq!(from_text("[@a](b c:d)"), [text("[@a](b c:d)")]);
+    assert_eq!(from_text("[@open](type:val"), [plain("[@open](type:val")]);
+    assert_eq!(from_text("[@a](b c:d)"), [plain("[@a](b c:d)")]);
     // "any value round-trips through the codec"
     let mut seed: u64 = 42;
     let mut random = || {
@@ -1374,8 +1375,8 @@ fn token_text_model_text_that_looks_like_a_token_stays() {
         }
         let value = normalize(segments);
         assert_eq!(
-            strip(&from_text(&to_text(&value))),
-            strip(&value),
+            without_ids(&from_text(&to_text(&value))),
+            without_ids(&value),
             "run {run}: {value:?}"
         );
     }
@@ -1413,51 +1414,49 @@ fn fuzzy_scores() {
     assert!(fuzzy_score("ECL", "Éclair").unwrap() > 900);
 }
 
-// roving.test.ts
-#[test]
-fn roving_tab_stops() {
-    use armature_core::roving::*;
-    let item = |key| Stop {
+/// An enabled item that can take focus and is not preferred.
+const fn stop(key: &str) -> armature_core::roving::Stop<'_> {
+    armature_core::roving::Stop {
         key,
         disabled: false,
         focusable: true,
         preferred: false,
-    };
+    }
+}
+
+// roving.test.ts
+#[test]
+fn roving_tab_stops() {
+    use armature_core::roving::*;
     // "a remembered item keeps it while it can take focus"
-    assert_eq!(roving_stop(&[item("a"), item("b")], Some("b")), Some("b"));
+    assert_eq!(roving_stop(&[stop("a"), stop("b")], Some("b")), Some("b"));
     assert_eq!(
         roving_stop(
             &[
-                item("a"),
+                stop("a"),
                 Stop {
                     focusable: false,
-                    ..item("b")
+                    ..stop("b")
                 }
             ],
             Some("b")
         ),
         Some("a")
     );
-    assert_eq!(roving_stop(&[item("a")], Some("gone")), Some("a"));
+    assert_eq!(roving_stop(&[stop("a")], Some("gone")), Some("a"));
 }
 
 #[test]
 fn roving_tab_stops_otherwise_the_first_preferred_enabled_item_then() {
     use armature_core::roving::*;
-    let item = |key| Stop {
-        key,
-        disabled: false,
-        focusable: true,
-        preferred: false,
-    };
     // "otherwise the first preferred enabled item, then the first enabled one"
     assert_eq!(
         roving_stop(
             &[
-                item("a"),
+                stop("a"),
                 Stop {
                     preferred: true,
-                    ..item("b")
+                    ..stop("b")
                 }
             ],
             None
@@ -1467,11 +1466,11 @@ fn roving_tab_stops_otherwise_the_first_preferred_enabled_item_then() {
     assert_eq!(
         roving_stop(
             &[
-                item("a"),
+                stop("a"),
                 Stop {
                     preferred: true,
                     disabled: true,
-                    ..item("b")
+                    ..stop("b")
                 }
             ],
             None
@@ -1483,9 +1482,9 @@ fn roving_tab_stops_otherwise_the_first_preferred_enabled_item_then() {
             &[
                 Stop {
                     disabled: true,
-                    ..item("a")
+                    ..stop("a")
                 },
-                item("b")
+                stop("b")
             ],
             None
         ),
@@ -1496,23 +1495,17 @@ fn roving_tab_stops_otherwise_the_first_preferred_enabled_item_then() {
 #[test]
 fn roving_tab_stops_a_group_where_every_item_is_disabled() {
     use armature_core::roving::*;
-    let item = |key| Stop {
-        key,
-        disabled: false,
-        focusable: true,
-        preferred: false,
-    };
     // "a group where every item is disabled keeps a focusable one, unless none can take focus"
     assert_eq!(
         roving_stop(
             &[
                 Stop {
                     disabled: true,
-                    ..item("a")
+                    ..stop("a")
                 },
                 Stop {
                     disabled: true,
-                    ..item("b")
+                    ..stop("b")
                 }
             ],
             None
@@ -1524,7 +1517,7 @@ fn roving_tab_stops_a_group_where_every_item_is_disabled() {
             &[Stop {
                 disabled: true,
                 focusable: false,
-                ..item("a")
+                ..stop("a")
             }],
             None
         ),
