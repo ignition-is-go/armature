@@ -65,10 +65,16 @@ const FILES: [&str; 7] = [
     "docs/intro.md",
     "README.md",
 ];
+/// The width of tracks, fields and lists, so the columns line up.
 const TRACK: f32 = 220.;
 /// The size of the colour picker's pad.
 const PAD_WIDTH: f32 = 200.;
 const PAD_HEIGHT: f32 = 110.;
+
+/// A mark after a chosen row's text.
+const fn tick_if(chosen: bool) -> &'static str {
+    if chosen { "  ✓" } else { "" }
+}
 
 fn items(entries: &[(&str, bool)]) -> Vec<Item> {
     entries
@@ -336,11 +342,7 @@ fn row<K: PartOf>(
     cx: &App,
 ) -> PartElement {
     let semantics = state.read(cx).semantics(kind, Some(key));
-    let tick = if semantics.selected == Some(true) {
-        "  ✓"
-    } else {
-        ""
-    };
+    let tick = tick_if(semantics.selected == Some(true));
     part(state, kind, Some(key), cx)
         .px_2()
         .py_1()
@@ -369,7 +371,7 @@ where
 
 fn list(state: &Entity<Machine<Listbox>>, cx: &App) -> PartElement {
     boxed(part(state, listbox::Part::Root, None, cx))
-        .w(px(220.))
+        .w(px(TRACK))
         .p_1()
         .children(rows(state, listbox::Part::Option, cx))
 }
@@ -391,12 +393,12 @@ impl Demo {
     fn select_section(&self, cx: &App) -> Div {
         let chosen_size = self.size.read(cx).value().first().cloned();
         let trigger = boxed(part(&self.size, select::Part::Trigger, None, cx))
-            .w(px(220.))
+            .w(px(TRACK))
             .px_2()
             .py_1()
             .child(chosen_size.unwrap_or_else(|| "Choose a size".into()));
         let options = boxed(part(&self.size, select::Part::Content, None, cx))
-            .w(px(220.))
+            .w(px(TRACK))
             .p_1()
             .bg(rgb(WHITE))
             .shadow_md()
@@ -461,7 +463,7 @@ impl Demo {
                         .read(cx)
                         .semantics(sortable::Part::Item, Some(key));
                     boxed(part(&self.groceries, sortable::Part::Item, Some(key), cx))
-                        .w(px(220.))
+                        .w(px(TRACK))
                         .px_2()
                         .py_1()
                         .when(grabbed.selected == Some(true), |el| el.bg(rgb(WASH)))
@@ -589,11 +591,7 @@ impl Demo {
                 None => "",
             };
             let name = path.rsplit('/').next().unwrap_or(path);
-            let tick = if semantics.selected == Some(true) {
-                "  ✓"
-            } else {
-                ""
-            };
+            let tick = tick_if(semantics.selected == Some(true));
             part(&self.files, tree_view::Part::Node, Some(path), cx)
                 .ml(px(18.
                     * semantics
@@ -856,11 +854,7 @@ impl Demo {
                 .rows
                 .read(cx)
                 .semantics(virtual_list::Part::Row, Some(&row.key));
-            let tick = if semantics.selected == Some(true) {
-                "  ✓"
-            } else {
-                ""
-            };
+            let tick = tick_if(semantics.selected == Some(true));
             part(&self.rows, virtual_list::Part::Row, Some(&row.key), cx)
                 .absolute()
                 .top(px(row.offset.cast::<f32>()))
@@ -1029,11 +1023,7 @@ impl Demo {
             .collect();
         let entry = |(key, label): &(String, String)| {
             let semantics = self.actions.read(cx).semantics(menu::Part::Item, Some(key));
-            let tick = if semantics.checked == Some(true) {
-                "  ✓"
-            } else {
-                ""
-            };
+            let tick = tick_if(semantics.checked == Some(true));
             part(&self.actions, menu::Part::Item, Some(key), cx)
                 .px_2()
                 .py_1()
