@@ -123,6 +123,22 @@ pub fn settle(panel: &PanelConstraints, target: f64, current: f64, threshold: f6
     }
 }
 
+/// The size of the panel at `index`. A panel that is not there has none.
+fn size_at(layout: &[f64], index: usize) -> f64 {
+    layout.get(index).copied().unwrap_or_default()
+}
+
+/// The limits of the panel at `index`. A panel that is not there has the widest.
+fn limits_at(panels: &[PanelConstraints], index: usize) -> PanelConstraints {
+    panels.get(index).copied().unwrap_or_default()
+}
+
+fn set_size(layout: &mut [f64], index: usize, size: f64) {
+    if let Some(slot) = layout.get_mut(index) {
+        *slot = size;
+    }
+}
+
 /// Whether a handle is fixed in place. Handles past the end of `locked` are not.
 fn is_locked(locked: &[bool], handle: usize) -> bool {
     locked.get(handle).copied().unwrap_or(false)
@@ -168,16 +184,14 @@ pub fn resize_at(
         handle.saturating_add(1)
     };
     let shrinking = shrinkable(layout.len(), handle, forward, locked);
-    let start = layout.get(pivot).copied().unwrap_or_default();
-    let room = panels.get(pivot).copied().unwrap_or_default().max - start;
+    let start = size_at(layout, pivot);
+    let room = limits_at(panels, pivot).max - start;
     let capacity: f64 = shrinking
         .iter()
-        .map(|index| {
-            (layout.get(*index).copied().unwrap_or_default() - lowest(&panels[*index])).max(0.0)
-        })
+        .map(|index| (size_at(layout, *index) - lowest(&limits_at(panels, *index))).max(0.0))
         .sum();
     let asked = delta.abs().min(room).min(capacity);
-    let wanted = settle(&panels[pivot], start + asked, start, threshold) - start;
+    let wanted = settle(&limits_at(panels, pivot), start + asked, start, threshold) - start;
     if wanted <= EPSILON {
         return None;
     }
@@ -188,35 +202,31 @@ pub fn resize_at(
         if remaining <= EPSILON {
             break;
         }
-        let (size, panel) = (
-            layout.get(index).copied().unwrap_or_default(),
-            &panels[index],
-        );
+        let (size, panel) = (size_at(layout, index), &limits_at(panels, index));
         let mut settled = size.min(settle(panel, size - remaining, size, threshold));
         if given + size - settled > room + EPSILON {
             settled = size.min(panel.min.max(size - remaining));
         }
-        next[index] = settled;
+        set_size(&mut next, index, settled);
         given += size - settled;
     }
-    if given <= EPSILON || !allowed(&panels[pivot], start + given) {
+    if given <= EPSILON || !allowed(&limits_at(panels, pivot), start + given) {
         return None;
     }
-    next[pivot] = start + given;
+    set_size(&mut next, pivot, start + given);
     Some(next)
 }
 
 /// How far Home moves a handle: until the panel before it is as small as it goes.
 #[must_use]
 pub fn home_delta(layout: &[f64], panels: &[PanelConstraints], handle: usize) -> f64 {
-    lowest(&panels[handle]) - layout.get(handle).copied().unwrap_or_default()
+    lowest(&limits_at(panels, handle)) - size_at(layout, handle)
 }
 
 /// How far End moves a handle: until the panel before it is as large as it goes.
 #[must_use]
 pub fn end_delta(layout: &[f64], panels: &[PanelConstraints], handle: usize) -> f64 {
-    panels.get(handle).copied().unwrap_or_default().max
-        - layout.get(handle).copied().unwrap_or_default()
+    limits_at(panels, handle).max - size_at(layout, handle)
 }
 
 /// The least and greatest size the panel before a handle can reach by moving it,
@@ -230,9 +240,7 @@ pub fn handle_bounds(
 ) -> (f64, f64) {
     let reach = |delta: f64| {
         resize_at(layout, panels, handle, delta, 1.0, locked)
-            .map_or(layout.get(handle).copied().unwrap_or_default(), |next| {
-                next.get(handle).copied().unwrap_or_default()
-            })
+            .map_or(size_at(layout, handle), |next| size_at(&next, handle))
     };
     (
         reach(home_delta(layout, panels, handle)),
@@ -261,29 +269,21 @@ pub fn all_handle_bounds(
     // How much each panel, and those after it that a resize can reach, can give up.
     let mut spare = vec![0.0; layout.len().saturating_add(1)];
     for index in (0..layout.len()).rev() {
-        let own = (layout.get(index).copied().unwrap_or_default()
-            - panels.get(index).copied().unwrap_or_default().min)
-            .max(0.0);
+        let own = (size_at(layout, index) - limits_at(panels, index).min).max(0.0);
         let passed_on = if is_locked(locked, index) {
             0.0
         } else {
-            spare
-                .get(index.saturating_add(1))
-                .copied()
-                .unwrap_or_default()
+            size_at(&spare, index.saturating_add(1))
         };
-        spare[index] = own + passed_on;
+        set_size(&mut spare, index, own + passed_on);
     }
     handles
         .map(|handle| {
             let (before, after) = (handle, handle.saturating_add(1));
-            let size = layout.get(before).copied().unwrap_or_default();
-            let can_shrink = (size - panels.get(before).copied().unwrap_or_default().min).min(
-                panels.get(after).copied().unwrap_or_default().max
-                    - layout.get(after).copied().unwrap_or_default(),
-            );
-            let can_grow = (panels.get(before).copied().unwrap_or_default().max - size)
-                .min(spare.get(after).copied().unwrap_or_default());
+            let size = size_at(layout, before);
+            let can_shrink = (size - limits_at(panels, before).min)
+                .min(limits_at(panels, after).max - size_at(layout, after));
+            let can_grow = (limits_at(panels, before).max - size).min(size_at(&spare, after));
             (size - can_shrink.max(0.0), size + can_grow.max(0.0))
         })
         .collect()
@@ -403,7 +403,7 @@ pub fn resize_panel(
     threshold: f64,
     locked: &[bool],
 ) -> Option<Vec<f64>> {
-    let delta = target - layout.get(index).copied().unwrap_or_default();
+    let delta = target - size_at(layout, index);
     let after = (index.saturating_add(1) < layout.len() && !is_locked(locked, index))
         .then(|| resize_at(layout, panels, index, delta, threshold, locked))
         .flatten();
@@ -421,11 +421,9 @@ pub fn resize_panel(
         .flatten();
     let mut best: Option<Vec<f64>> = None;
     for candidate in [after, before].into_iter().flatten() {
-        let closest = best
-            .as_ref()
-            .map_or(layout.get(index).copied().unwrap_or_default(), |best| {
-                best.get(index).copied().unwrap_or_default()
-            });
+        let closest = best.as_ref().map_or(size_at(layout, index), |best| {
+            best.get(index).copied().unwrap_or_default()
+        });
         if (candidate.get(index).copied().unwrap_or_default() - target).abs()
             < (closest - target).abs() - EPSILON
         {
