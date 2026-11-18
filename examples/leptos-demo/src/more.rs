@@ -317,10 +317,17 @@ fn CropParts() -> impl IntoView {
 #[component]
 fn TraceRows() -> impl IntoView {
     let trace = use_primitive::<Waterfall>();
-    let bar = move |key: String, at: usize| {
+    // Where a row's bar starts and how long it is, as percentages of the lane.
+    let bar_start = move |key: String| {
         move || {
-            let (start, length) = trace.with(|t| t.bar(&key)).unwrap_or_default();
-            format!("{}%", if at == 0 { start } else { length } * 100.0)
+            let (start, _) = trace.with(|t| t.bar(&key)).unwrap_or_default();
+            format!("{}%", start * 100.0)
+        }
+    };
+    let bar_length = move |key: String| {
+        move || {
+            let (_, length) = trace.with(|t| t.bar(&key)).unwrap_or_default();
+            format!("{}%", length * 100.0)
         }
     };
     view! {
@@ -334,7 +341,7 @@ fn TraceRows() -> impl IntoView {
                                 <Part part=waterfall::Part::Row item=key.clone()>{name}</Part>
                             </div>
                             <div class="trace-lane">
-                                <div class="trace-bar" style:left=bar(key.clone(), 0) style:width=bar(key, 1)>
+                                <div class="trace-bar" style:left=bar_start(key.clone()) style:width=bar_length(key)>
                                     <Part part=waterfall::Part::Bar item=key.clone() />
                                 </div>
                             </div>

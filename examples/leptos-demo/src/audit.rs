@@ -87,6 +87,16 @@ fn Stars() -> impl IntoView {
     }
 }
 
+/// One day of a month's grid. A day is drawn once, in its own month: a padding day
+/// from a neighbouring month is left blank.
+fn day_cell(day: Date, year: i32, month: u8) -> AnyView {
+    if (day.year, day.month) == (year, month) {
+        view! { <Part part=calendar::Part::Day item=day.format()>{day.day}</Part> }.into_any()
+    } else {
+        view! { <span class="blank"></span> }.into_any()
+    }
+}
+
 #[component]
 fn TwoMonths() -> impl IntoView {
     let calendar = use_primitive::<Calendar>();
@@ -102,22 +112,7 @@ fn TwoMonths() -> impl IntoView {
                         {calendar
                             .with_untracked(|c| c.weeks_of(year, month))
                             .into_iter()
-                            .map(|week| {
-                                view! {
-                                    <div class="week">
-                                        {week
-                                            .map(|day| {
-                                                // A day is drawn once, in its own month.
-                                                if (day.year, day.month) == (year, month) {
-                                                    view! { <Part part=calendar::Part::Day item=day.format()>{day.day}</Part> }.into_any()
-                                                } else {
-                                                    view! { <span class="blank"></span> }.into_any()
-                                                }
-                                            })
-                                            .collect_view()}
-                                    </div>
-                                }
-                            })
+                            .map(|week| view! { <div class="week">{week.map(|day| day_cell(day, year, month)).collect_view()}</div> })
                             .collect_view()}
                     </div>
                 </For>
