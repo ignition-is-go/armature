@@ -1062,10 +1062,6 @@ fn trigger_matching_spaces_allow_phrases_and_a_number_caps() {
 #[test]
 fn trigger_matching_a_multi_character_trigger_matches() {
     use armature_core::trigger_match::*;
-    let found = |text: &str, rules: &[TriggerRule], offset: usize| {
-        find_trigger_match(text, offset, rules)
-            .map(|m| format!("{}{}@{}", m.trigger, m.query, m.start))
-    };
     // "a multi-character trigger matches"
     assert_eq!(
         found("see [[Page", &[TriggerRule::new("[[")], 0).as_deref(),
@@ -1114,7 +1110,6 @@ fn trigger_matching_maxlength_ends_a_long_query() {
 #[test]
 fn trigger_matching_isvalidquery_and_isatboundary() {
     use armature_core::trigger_match::*;
-    let mention = || TriggerRule::new("@");
     // "isValidQuery and isAtBoundary"
     assert!(is_valid_query("", &mention()));
     let chars = |text: &str| text.chars().collect::<Vec<_>>();
