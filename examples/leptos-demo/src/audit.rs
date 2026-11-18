@@ -207,26 +207,92 @@ fn CommandField() -> impl IntoView {
     }
 }
 
-#[expect(
-    clippy::too_many_lines,
-    reason = "one section for each component the demo shows"
-)]
 #[component]
-pub fn Audit() -> impl IntoView {
-    let (price, on_price) = follow();
-    let (panes, on_panes) = follow();
-    let (stars, on_stars) = follow();
-    let (stay, on_stay) = follow();
-    let (sizes, on_sizes) = follow();
-    let (palette, on_palette) = follow();
-    let (amount, on_amount) = follow();
-    let (time, on_time) = follow();
-    let (city, on_city) = follow();
-    let (line, on_line) = follow();
-    let (zoomed, on_zoomed) = follow();
-    let searches = RwSignal::new(Vec::<String>::new());
-    let answers = RwSignal::new(Vec::<(String, String)>::new());
+fn EventListSection() -> impl IntoView {
     let step = RwSignal::new(vec![("current".to_string(), "packed".to_string())]);
+    view! {
+        <Section title="Event list">
+            <Root machine=EventList::default() label="Order progress" settings=step>
+                <Part part=event_list::Part::Root>
+                    <Part part=event_list::Part::Event item="ordered">"Ordered"</Part>
+                    <Part part=event_list::Part::Event item="packed">"Packed"</Part>
+                    <Part part=event_list::Part::Event item="shipped">"Shipped"</Part>
+                </Part>
+            </Root>
+        </Section>
+    }
+}
+
+#[component]
+fn RangeSliderSection() -> impl IntoView {
+    let (price, on_price) = follow();
+    view! {
+        <Section title="Range slider">
+            <p id="price-value">"Price: " {move || price.get().join(" to ")}</p>
+            <Root machine=RangeSlider::default() label="Price" on_value_change=on_price><Grips /></Root>
+        </Section>
+    }
+}
+
+#[component]
+fn PanelGroupSection() -> impl IntoView {
+    let (panes, on_panes) = follow();
+    view! {
+        <Section title="Panel group">
+            <p id="panes-value">"Panes: " {move || panes.get().join(" / ")}</p>
+            <Root machine=PanelGroup::default() label="Layout" on_value_change=on_panes><Panes /></Root>
+        </Section>
+    }
+}
+
+#[component]
+fn HalfStarRatingSection() -> impl IntoView {
+    let (stars, on_stars) = follow();
+    view! {
+        <Section title="Half-star rating">
+            <p id="stars-value">"Stars: " {move || stars.get().join("")}</p>
+            <Root machine=Rating::new(rating::Options { halves: true, ..Default::default() }) label="Review" on_value_change=on_stars><Stars /></Root>
+        </Section>
+    }
+}
+
+#[component]
+fn DateSpanSection() -> impl IntoView {
+    let (stay, on_stay) = follow();
+    view! {
+        <Section title="Date span">
+            <p id="stay-value">"Stay: " {move || stay.get().join(" to ")}</p>
+            <Root
+                machine=Calendar::new(calendar::Options { mode: Selecting::Range, months: 2, ..Default::default() }, Date::new(2026, 11, 17).unwrap_or(Date::FIRST))
+                label="Stay"
+                on_value_change=on_stay
+            >
+                <TwoMonths />
+            </Root>
+        </Section>
+    }
+}
+
+#[component]
+fn MultipleSelectSection() -> impl IntoView {
+    let (sizes, on_sizes) = follow();
+    view! {
+        <Section title="Multiple select">
+            <p id="sizes-value">"Sizes: " {move || sizes.get().join(", ")}</p>
+            <Root machine=Select::multiple() label="Sizes in stock" on_value_change=on_sizes>
+                <Part part=select::Part::Trigger>{move || if sizes.get().is_empty() { "Choose sizes".to_string() } else { sizes.get().join(", ") }}</Part>
+                <Part part=select::Part::Content>
+                    <Part part=select::Part::Option item="small">"Small"</Part>
+                    <Part part=select::Part::Option item="medium">"Medium"</Part>
+                    <Part part=select::Part::Option item="large">"Large"</Part>
+                </Part>
+            </Root>
+        </Section>
+    }
+}
+
+#[component]
+fn TreeThatLoadsSection() -> impl IntoView {
     // The children of a folder arrive when it is first opened.
     let loaded = RwSignal::new(Vec::<(String, String)>::new());
     let asked = RwSignal::new(String::new());
@@ -244,63 +310,20 @@ pub fn Audit() -> impl IntoView {
         }
         true
     });
-
     view! {
-        <Section title="Event list">
-            <Root machine=EventList::default() label="Order progress" settings=step>
-                <Part part=event_list::Part::Root>
-                    <Part part=event_list::Part::Event item="ordered">"Ordered"</Part>
-                    <Part part=event_list::Part::Event item="packed">"Packed"</Part>
-                    <Part part=event_list::Part::Event item="shipped">"Shipped"</Part>
-                </Part>
-            </Root>
-        </Section>
-
-        <Section title="Range slider">
-            <p id="price-value">"Price: " {move || price.get().join(" to ")}</p>
-            <Root machine=RangeSlider::default() label="Price" on_value_change=on_price><Grips /></Root>
-        </Section>
-
-        <Section title="Panel group">
-            <p id="panes-value">"Panes: " {move || panes.get().join(" / ")}</p>
-            <Root machine=PanelGroup::default() label="Layout" on_value_change=on_panes><Panes /></Root>
-        </Section>
-
-        <Section title="Half-star rating">
-            <p id="stars-value">"Stars: " {move || stars.get().join("")}</p>
-            <Root machine=Rating::new(rating::Options { halves: true, ..Default::default() }) label="Review" on_value_change=on_stars><Stars /></Root>
-        </Section>
-
-        <Section title="Date span">
-            <p id="stay-value">"Stay: " {move || stay.get().join(" to ")}</p>
-            <Root
-                machine=Calendar::new(calendar::Options { mode: Selecting::Range, months: 2, ..Default::default() }, Date::new(2026, 11, 17).unwrap_or(Date::FIRST))
-                label="Stay"
-                on_value_change=on_stay
-            >
-                <TwoMonths />
-            </Root>
-        </Section>
-
-        <Section title="Multiple select">
-            <p id="sizes-value">"Sizes: " {move || sizes.get().join(", ")}</p>
-            <Root machine=Select::multiple() label="Sizes in stock" on_value_change=on_sizes>
-                <Part part=select::Part::Trigger>{move || if sizes.get().is_empty() { "Choose sizes".to_string() } else { sizes.get().join(", ") }}</Part>
-                <Part part=select::Part::Content>
-                    <Part part=select::Part::Option item="small">"Small"</Part>
-                    <Part part=select::Part::Option item="medium">"Medium"</Part>
-                    <Part part=select::Part::Option item="large">"Large"</Part>
-                </Part>
-            </Root>
-        </Section>
-
         <Section title="Tree that loads">
             <p id="remote-value">"Asked for: " {move || asked.get()}</p>
             <Root machine=TreeView::new(tree_from_paths(&["remote", "notes.md"]), Dir::Ltr).lazy(&["remote"]) label="Remote files" on_value_change=on_remote settings=loaded>
                 <LazyRows />
             </Root>
         </Section>
+    }
+}
 
+#[component]
+fn CommandPagesSection() -> impl IntoView {
+    let (palette, on_palette) = follow();
+    view! {
         <Section title="Command pages">
             <p id="palette-value">"Ran: " {move || palette.get().join("")}</p>
             <Root machine=Command::default().page("theme", "change-theme", &["light", "dark"]) label="Palette" on_value_change=on_palette>
@@ -313,7 +336,13 @@ pub fn Audit() -> impl IntoView {
                 </Part>
             </Root>
         </Section>
+    }
+}
 
+#[component]
+fn NumberScrubAndWheelSection() -> impl IntoView {
+    let (amount, on_amount) = follow();
+    view! {
         <Section title="Number scrub and wheel">
             <p id="amount-value">"Amount: " {move || amount.get().join("")}</p>
             <Root machine=NumberInput::new(NumberRange::new(0.0, 100.0, 1.0), 20.0) label="Amount" on_value_change=on_amount>
@@ -321,17 +350,34 @@ pub fn Audit() -> impl IntoView {
                 <Part part=number_input::Part::Input />
             </Root>
         </Section>
+    }
+}
 
+#[component]
+fn TwelveHourTimeSection() -> impl IntoView {
+    let (time, on_time) = follow();
+    view! {
         <Section title="Twelve-hour time">
             <p id="time-value">"Time: " {move || time.get().join("")}</p>
             <Root machine=DateInput::new(true).twelve_hour() label="Meeting" on_value_change=on_time><TimeParts /></Root>
         </Section>
+    }
+}
 
+#[component]
+fn CompletionAndMoreSection() -> impl IntoView {
+    let (city, on_city) = follow();
+    view! {
         <Section title="Completion and more">
             <p id="city-value">"City: " {move || city.get().join(", ")}</p>
             <Root machine=Combobox::new(combobox::Options { load_more: true, ..Default::default() }) label="City" on_value_change=on_city><CityField /></Root>
         </Section>
+    }
+}
 
+#[component]
+fn LocaleSection() -> impl IntoView {
+    view! {
         <Section title="Locale">
             <p id="locale-value">
                 {armature_leptos::locale::format_number(1234.5, "de-DE")}
@@ -343,7 +389,14 @@ pub fn Audit() -> impl IntoView {
                 {armature_leptos::locale::format_date(Date::new(2026, 11, 17).unwrap_or(Date::FIRST), "en-GB")}
             </p>
         </Section>
+    }
+}
 
+#[component]
+fn RemoteSearchSection() -> impl IntoView {
+    let searches = RwSignal::new(Vec::<String>::new());
+    let answers = RwSignal::new(Vec::<(String, String)>::new());
+    view! {
         <Section title="Remote search">
             <p id="remote-search-value">"Asked: " {move || searches.get().join(" ")}</p>
             <Root
@@ -369,15 +422,48 @@ pub fn Audit() -> impl IntoView {
                 </Part>
             </Root>
         </Section>
+    }
+}
 
+#[component]
+fn CommandArgumentsSection() -> impl IntoView {
+    let (line, on_line) = follow();
+    view! {
         <Section title="Command arguments">
             <p id="line-value">"Line: " {move || line.get().join("")}</p>
             <Root machine=TriggerMenu::new(&['/']).arguments("/deploy", &["environment", "version"]) label="Command line" on_value_change=on_line><CommandField /></Root>
         </Section>
+    }
+}
 
+#[component]
+fn ZoomedCropSection() -> impl IntoView {
+    let (zoomed, on_zoomed) = follow();
+    view! {
         <Section title="Zoomed crop">
             <p id="zoomed-value">"Crop: " {move || zoomed.get().join("")}</p>
             <Root machine=ImageCropper::new(Size { width: 800.0, height: 600.0 }, Some(1.0)) label="Zoomed crop" on_value_change=on_zoomed><ZoomCrop /></Root>
         </Section>
+    }
+}
+
+#[component]
+pub fn Audit() -> impl IntoView {
+    view! {
+        <EventListSection />
+        <RangeSliderSection />
+        <PanelGroupSection />
+        <HalfStarRatingSection />
+        <DateSpanSection />
+        <MultipleSelectSection />
+        <TreeThatLoadsSection />
+        <CommandPagesSection />
+        <NumberScrubAndWheelSection />
+        <TwelveHourTimeSection />
+        <CompletionAndMoreSection />
+        <LocaleSection />
+        <RemoteSearchSection />
+        <CommandArgumentsSection />
+        <ZoomedCropSection />
     }
 }

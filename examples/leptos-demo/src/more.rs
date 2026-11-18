@@ -362,33 +362,181 @@ fn Files() -> impl IntoView {
     }
 }
 
-#[expect(
-    clippy::too_many_lines,
-    reason = "one section for each component the demo shows"
-)]
 #[component]
-pub fn More() -> impl IntoView {
+fn ButtonSection() -> impl IntoView {
     let saves = RwSignal::new(0_u32);
     let on_save = Callback::new(move |_: ValueChange| {
         saves.update(|count| *count = count.saturating_add(1));
         true
     });
+    view! {
+        <Section title="Button">
+            <p id="button-value">"Saves: " {move || saves.get()}</p>
+            <Root machine=Button::default() label="Save" on_value_change=on_save>
+                <Part part=button::Part::Root>"Save"</Part>
+            </Root>
+        </Section>
+    }
+}
+
+#[component]
+fn MeterAndProgressSection() -> impl IntoView {
+    view! {
+        <Section title="Meter and progress">
+            <Root machine=Meter::new(40.0, 0.0, 200.0) label="Storage"><Part part=MeterPart::Root>"20% used"</Part></Root>
+            <Root machine=Progress::new(Some(60.0), 0.0, 100.0) label="Upload"><Part part=ProgressPart::Root>"60%"</Part></Root>
+            <Root machine=Separator::default() label="Rule"><Part part=SeparatorPart::Root /></Root>
+        </Section>
+    }
+}
+
+#[component]
+fn CollapsibleSection() -> impl IntoView {
+    view! {
+        <Section title="Collapsible">
+            <Root machine=Collapsible::default() label="Details">
+                <Part part=collapsible::Part::Trigger>"Details"</Part>
+                <Part part=collapsible::Part::Panel>"More to read."</Part>
+            </Root>
+        </Section>
+    }
+}
+
+#[component]
+fn CheckboxSection() -> impl IntoView {
     let (agreed, on_agreed) = follow();
     let (alerts, on_alerts) = follow();
+    view! {
+        <Section title="Checkbox">
+            <p id="agreed-value">"Agreed: " {move || agreed.get().join("")}</p>
+            <Root machine=Checkbox::default() label="Agree" on_value_change=on_agreed>
+                <Part part=checkbox::Part::Root><Part part=checkbox::Part::Indicator>"✓"</Part></Part>
+            </Root>
+            <p id="alerts-value">"Alerts: " {move || alerts.get().join(", ")}</p>
+            <Root machine=CheckboxGroup::default() label="Alerts" on_value_change=on_alerts>
+                <Part part=checkbox::GroupPart::Root>
+                    <Part part=checkbox::GroupPart::All label="All alerts">"All"</Part>
+                    <Part part=checkbox::GroupPart::Option item="email">"Email"</Part>
+                    <Part part=checkbox::GroupPart::Option item="sms">"SMS"</Part>
+                </Part>
+            </Root>
+        </Section>
+    }
+}
+
+#[component]
+fn ToggleGroupSection() -> impl IntoView {
     let (align, on_align) = follow();
+    view! {
+        <Section title="Toggle group">
+            <p id="align-value">"Align: " {move || align.get().join("")}</p>
+            <Root machine=ToggleGroup::default() label="Align" on_value_change=on_align>
+                <Part part=toggle_group::Part::Root>
+                    <Part part=toggle_group::Part::Toggle item="left">"Left"</Part>
+                    <Part part=toggle_group::Part::Toggle item="center">"Centre"</Part>
+                    <Part part=toggle_group::Part::Toggle item="right">"Right"</Part>
+                </Part>
+            </Root>
+        </Section>
+    }
+}
+
+#[component]
+fn PaginationSection() -> impl IntoView {
     let (page, on_page) = follow();
+    view! {
+        <Section title="Pagination">
+            <p id="page-value">"Page: " {move || page.get().join("")}</p>
+            <Root machine=Pagination::new(1, 10) label="Results" on_value_change=on_page><Pages /></Root>
+        </Section>
+    }
+}
+
+#[component]
+fn TextFieldSection() -> impl IntoView {
     let (email, on_email) = follow();
+    view! {
+        <Section title="Text field">
+            <p id="email-value">"Email: " {move || email.get().join("")}</p>
+            <Root
+                machine=TextField::new(Kind::Text).required().validate(|text| (!text.contains('@')).then(|| "Enter an email address.".to_string()))
+                label="Email"
+                on_value_change=on_email
+            >
+                <Part part=text_field::Part::Label>"Email"</Part>
+                <Part part=text_field::Part::Input />
+                <Part part=text_field::Part::Clear label="Clear">"×"</Part>
+                <Part part=text_field::Part::Error>"Enter an email address."</Part>
+            </Root>
+            <Root machine=TextField::new(Kind::Password) label="Password" agent_secret=true>
+                <Part part=text_field::Part::Input />
+                <Part part=text_field::Part::Reveal label="Show password">"👁"</Part>
+            </Root>
+        </Section>
+    }
+}
+
+#[component]
+fn AvatarSection() -> impl IntoView {
+    view! {
+        <Section title="Avatar">
+            <Root machine=Avatar::loading() label="Ada Lovelace">
+                <Part part=avatar::Part::Root>
+                    <Part part=avatar::Part::Image><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" width="32" height="32" alt="" /></Part>
+                    <Part part=avatar::Part::Fallback>"AL"</Part>
+                </Part>
+            </Root>
+        </Section>
+    }
+}
+
+#[component]
+fn MenuSection() -> impl IntoView {
     let (ran, on_ran) = follow();
+    view! {
+        <Section title="Menu">
+            <p id="menu-value">"Menu: " {move || ran.get().join(", ")}</p>
+            <Root machine=Menu::new(entries()) label="File actions" on_value_change=on_ran>
+                <Part part=menu::Part::Trigger>"Actions"</Part>
+                <Part part=menu::Part::Area><span class="context-area">"Or right-click here"</span></Part>
+                <MenuItems />
+            </Root>
+        </Section>
+    }
+}
+
+#[component]
+fn MenubarSection() -> impl IntoView {
     let (bar, on_bar) = follow();
+    view! {
+        <Section title="Menubar">
+            <p id="bar-value">"Bar: " {move || bar.get().join(", ")}</p>
+            <Root
+                machine=Menubar::new(vec![("file", "File", entries()), ("view", "View", vec![Entry::action("zoom", "Zoom in")])], Dir::Ltr)
+                label="Application"
+                on_value_change=on_bar
+            >
+                <BarMenus />
+            </Root>
+        </Section>
+    }
+}
+
+#[component]
+fn HoverCardSection() -> impl IntoView {
+    view! {
+        <Section title="Hover card">
+            <Root machine=Tooltip::hover_card() label="Profile">
+                <Part part=tooltip::Part::Trigger>"@ada"</Part>
+                <Part part=tooltip::Part::Content>"Ada Lovelace, mathematician."</Part>
+            </Root>
+        </Section>
+    }
+}
+
+#[component]
+fn ComboboxSection() -> impl IntoView {
     let (fruit, on_fruit) = follow();
-    let (when, on_when) = follow();
-    let (due, on_due) = follow();
-    let (note, on_note) = follow();
-    let (slide, on_slide) = follow();
-    let (crop, on_crop) = follow();
-    let (span, on_span) = follow();
-    let (files, on_files) = follow();
-    let (nav, on_nav) = follow();
     let loading = RwSignal::new(false);
     let fruit_settings = Signal::derive(move || {
         vec![(
@@ -400,6 +548,154 @@ pub fn More() -> impl IntoView {
         loading.update(|on| *on = !*on);
         true
     });
+    view! {
+        <Section title="Combobox">
+            <p id="combo-value">"Fruit: " {move || fruit.get().join(", ")}</p>
+            <Root machine=Button::default() label="Load fruit" on_value_change=toggle_loading><Part part=button::Part::Root>"Load"</Part></Root>
+            <Root
+                machine=Combobox::new(combobox::Options { auto_highlight: true, ..Default::default() })
+                label="Favourite fruit"
+                on_value_change=on_fruit
+                settings=fruit_settings
+            >
+                <Part part=combobox::Part::Input />
+                <Part part=combobox::Part::List>
+                    <Part part=combobox::Part::Option item="apple">"Apple"</Part>
+                    <Part part=combobox::Part::Option item="apricot">"Apricot"</Part>
+                    <Part part=combobox::Part::Option item="banana">"Banana"</Part>
+                    <Part part=combobox::Part::Empty>"Nothing matches."</Part>
+                    <Part part=combobox::Part::Status>"Loading…"</Part>
+                </Part>
+            </Root>
+        </Section>
+    }
+}
+
+#[component]
+fn NavigationMenuSection() -> impl IntoView {
+    let (nav, on_nav) = follow();
+    view! {
+        <Section title="Navigation menu">
+            <p id="nav-value">"Open: " {move || nav.get().join("")}</p>
+            <Root machine=NavigationMenu::new(navigation_menu::Options::default(), &[("products", true), ("pricing", false)]).current("pricing") label="Main" on_value_change=on_nav>
+                <Part part=navigation_menu::Part::Root>
+                    <div class="bar">
+                        <Part part=navigation_menu::Part::Trigger item="products">"Products"</Part>
+                        <Part part=navigation_menu::Part::Link item="pricing">"Pricing"</Part>
+                    </div>
+                    <Part part=navigation_menu::Part::Panel item="products">"Analytics, storage and more."</Part>
+                </Part>
+            </Root>
+        </Section>
+    }
+}
+
+#[component]
+fn ToastsSection() -> impl IntoView {
+    let toasts = RwSignal::new(Vec::<String>::new());
+    let count = RwSignal::new(0_u32);
+    let on_toasts = Callback::new(move |change: ValueChange| {
+        // An action is offered first. The list follows when the toast goes.
+        if !change
+            .value
+            .first()
+            .is_some_and(|entry| entry.starts_with("action:"))
+        {
+            toasts.set(change.value);
+        }
+        true
+    });
+    let notify = Callback::new(move |_: ValueChange| {
+        count.update(|n| *n = n.saturating_add(1));
+        let toast = Toast::new(&count.get_untracked().to_string(), "Saved")
+            .action("Undo")
+            .lasting(1500);
+        toasts.update(|list| list.push(toast.encode()));
+        true
+    });
+    view! {
+        <Section title="Toasts">
+            <p id="toast-value">"Showing: " {move || toasts.get().len()}</p>
+            <Root machine=Button::default() label="Notify" on_value_change=notify><Part part=button::Part::Root>"Notify"</Part></Root>
+            <Root machine=Toaster::default() label="Notifications" value=toasts on_value_change=on_toasts><Toasts /></Root>
+        </Section>
+    }
+}
+
+#[component]
+fn DateInputSection() -> impl IntoView {
+    let (when, on_when) = follow();
+    view! {
+        <Section title="Date input">
+            <p id="when-value">"When: " {move || when.get().join("")}</p>
+            <Root machine=DateInput::new(false) label="When" on_value_change=on_when>
+                <Part part=date_input::Part::Root>
+                    <div class="segments">
+                        <Part part=date_input::Part::Segment item="year" label="Year" />
+                        "-"
+                        <Part part=date_input::Part::Segment item="month" label="Month" />
+                        "-"
+                        <Part part=date_input::Part::Segment item="day" label="Day" />
+                    </div>
+                </Part>
+            </Root>
+        </Section>
+    }
+}
+
+#[component]
+fn DatePickerSection() -> impl IntoView {
+    let (due, on_due) = follow();
+    view! {
+        <Section title="Date picker">
+            <p id="due-value">"Due: " {move || due.get().join("")}</p>
+            <Root machine=DatePicker::new(armature_core::calendar::Options::default(), Date::new(2026, 11, 17).unwrap_or(Date::FIRST)) label="Due date" on_value_change=on_due>
+                <PickerParts />
+            </Root>
+        </Section>
+    }
+}
+
+#[component]
+fn MentionsSection() -> impl IntoView {
+    let (note, on_note) = follow();
+    view! {
+        <Section title="Mentions">
+            <p id="note-value">"Note: " {move || note.get().join("")}</p>
+            <Root machine=TriggerMenu::new(&['@']) label="Note" on_value_change=on_note>
+                <Part part=trigger_menu::Part::Input />
+                <Part part=trigger_menu::Part::List>
+                    <Part part=trigger_menu::Part::Option item="@ada">"ada"</Part>
+                    <Part part=trigger_menu::Part::Option item="@alan">"alan"</Part>
+                </Part>
+            </Root>
+        </Section>
+    }
+}
+
+#[component]
+fn CarouselSection() -> impl IntoView {
+    let (slide, on_slide) = follow();
+    view! {
+        <Section title="Carousel">
+            <p id="slide-value">"Slide: " {move || slide.get().join("")}</p>
+            <Root machine=Carousel::default() label="Gallery" on_value_change=on_slide><Slides /></Root>
+        </Section>
+    }
+}
+
+#[component]
+fn ScrollAreaSection() -> impl IntoView {
+    view! {
+        <Section title="Scroll area">
+            <Root machine=ScrollArea::default() label="Log"><ScrollParts /></Root>
+            <Root machine=ScrollArea::horizontal() label="Timeline strip"><WideParts /></Root>
+        </Section>
+    }
+}
+
+#[component]
+fn FormSection() -> impl IntoView {
     // A form keeps its fields' values together and says what stops a submit.
     let form = StoredValue::new(
         Form::default()
@@ -444,221 +740,7 @@ pub fn More() -> impl IntoView {
         name_problem.set(String::new());
         true
     });
-    let toasts = RwSignal::new(Vec::<String>::new());
-    let count = RwSignal::new(0_u32);
-    let on_toasts = Callback::new(move |change: ValueChange| {
-        // An action is offered first. The list follows when the toast goes.
-        if !change
-            .value
-            .first()
-            .is_some_and(|entry| entry.starts_with("action:"))
-        {
-            toasts.set(change.value);
-        }
-        true
-    });
-    let notify = Callback::new(move |_: ValueChange| {
-        count.update(|n| *n = n.saturating_add(1));
-        let toast = Toast::new(&count.get_untracked().to_string(), "Saved")
-            .action("Undo")
-            .lasting(1500);
-        toasts.update(|list| list.push(toast.encode()));
-        true
-    });
-    let trace = vec![
-        Span::new("page", 0.0, 400.0, None),
-        Span::new("api", 100.0, 200.0, Some("page")),
-        Span::new("db", 150.0, 100.0, Some("api")),
-    ];
-
     view! {
-        <Section title="Button">
-            <p id="button-value">"Saves: " {move || saves.get()}</p>
-            <Root machine=Button::default() label="Save" on_value_change=on_save>
-                <Part part=button::Part::Root>"Save"</Part>
-            </Root>
-        </Section>
-
-        <Section title="Meter and progress">
-            <Root machine=Meter::new(40.0, 0.0, 200.0) label="Storage"><Part part=MeterPart::Root>"20% used"</Part></Root>
-            <Root machine=Progress::new(Some(60.0), 0.0, 100.0) label="Upload"><Part part=ProgressPart::Root>"60%"</Part></Root>
-            <Root machine=Separator::default() label="Rule"><Part part=SeparatorPart::Root /></Root>
-        </Section>
-
-        <Section title="Collapsible">
-            <Root machine=Collapsible::default() label="Details">
-                <Part part=collapsible::Part::Trigger>"Details"</Part>
-                <Part part=collapsible::Part::Panel>"More to read."</Part>
-            </Root>
-        </Section>
-
-        <Section title="Checkbox">
-            <p id="agreed-value">"Agreed: " {move || agreed.get().join("")}</p>
-            <Root machine=Checkbox::default() label="Agree" on_value_change=on_agreed>
-                <Part part=checkbox::Part::Root><Part part=checkbox::Part::Indicator>"✓"</Part></Part>
-            </Root>
-            <p id="alerts-value">"Alerts: " {move || alerts.get().join(", ")}</p>
-            <Root machine=CheckboxGroup::default() label="Alerts" on_value_change=on_alerts>
-                <Part part=checkbox::GroupPart::Root>
-                    <Part part=checkbox::GroupPart::All label="All alerts">"All"</Part>
-                    <Part part=checkbox::GroupPart::Option item="email">"Email"</Part>
-                    <Part part=checkbox::GroupPart::Option item="sms">"SMS"</Part>
-                </Part>
-            </Root>
-        </Section>
-
-        <Section title="Toggle group">
-            <p id="align-value">"Align: " {move || align.get().join("")}</p>
-            <Root machine=ToggleGroup::default() label="Align" on_value_change=on_align>
-                <Part part=toggle_group::Part::Root>
-                    <Part part=toggle_group::Part::Toggle item="left">"Left"</Part>
-                    <Part part=toggle_group::Part::Toggle item="center">"Centre"</Part>
-                    <Part part=toggle_group::Part::Toggle item="right">"Right"</Part>
-                </Part>
-            </Root>
-        </Section>
-
-        <Section title="Pagination">
-            <p id="page-value">"Page: " {move || page.get().join("")}</p>
-            <Root machine=Pagination::new(1, 10) label="Results" on_value_change=on_page><Pages /></Root>
-        </Section>
-
-        <Section title="Text field">
-            <p id="email-value">"Email: " {move || email.get().join("")}</p>
-            <Root
-                machine=TextField::new(Kind::Text).required().validate(|text| (!text.contains('@')).then(|| "Enter an email address.".to_string()))
-                label="Email"
-                on_value_change=on_email
-            >
-                <Part part=text_field::Part::Label>"Email"</Part>
-                <Part part=text_field::Part::Input />
-                <Part part=text_field::Part::Clear label="Clear">"×"</Part>
-                <Part part=text_field::Part::Error>"Enter an email address."</Part>
-            </Root>
-            <Root machine=TextField::new(Kind::Password) label="Password" agent_secret=true>
-                <Part part=text_field::Part::Input />
-                <Part part=text_field::Part::Reveal label="Show password">"👁"</Part>
-            </Root>
-        </Section>
-
-        <Section title="Avatar">
-            <Root machine=Avatar::loading() label="Ada Lovelace">
-                <Part part=avatar::Part::Root>
-                    <Part part=avatar::Part::Image><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" width="32" height="32" alt="" /></Part>
-                    <Part part=avatar::Part::Fallback>"AL"</Part>
-                </Part>
-            </Root>
-        </Section>
-
-        <Section title="Menu">
-            <p id="menu-value">"Menu: " {move || ran.get().join(", ")}</p>
-            <Root machine=Menu::new(entries()) label="File actions" on_value_change=on_ran>
-                <Part part=menu::Part::Trigger>"Actions"</Part>
-                <Part part=menu::Part::Area><span class="context-area">"Or right-click here"</span></Part>
-                <MenuItems />
-            </Root>
-        </Section>
-
-        <Section title="Menubar">
-            <p id="bar-value">"Bar: " {move || bar.get().join(", ")}</p>
-            <Root
-                machine=Menubar::new(vec![("file", "File", entries()), ("view", "View", vec![Entry::action("zoom", "Zoom in")])], Dir::Ltr)
-                label="Application"
-                on_value_change=on_bar
-            >
-                <BarMenus />
-            </Root>
-        </Section>
-
-        <Section title="Hover card">
-            <Root machine=Tooltip::hover_card() label="Profile">
-                <Part part=tooltip::Part::Trigger>"@ada"</Part>
-                <Part part=tooltip::Part::Content>"Ada Lovelace, mathematician."</Part>
-            </Root>
-        </Section>
-
-        <Section title="Combobox">
-            <p id="combo-value">"Fruit: " {move || fruit.get().join(", ")}</p>
-            <Root machine=Button::default() label="Load fruit" on_value_change=toggle_loading><Part part=button::Part::Root>"Load"</Part></Root>
-            <Root
-                machine=Combobox::new(combobox::Options { auto_highlight: true, ..Default::default() })
-                label="Favourite fruit"
-                on_value_change=on_fruit
-                settings=fruit_settings
-            >
-                <Part part=combobox::Part::Input />
-                <Part part=combobox::Part::List>
-                    <Part part=combobox::Part::Option item="apple">"Apple"</Part>
-                    <Part part=combobox::Part::Option item="apricot">"Apricot"</Part>
-                    <Part part=combobox::Part::Option item="banana">"Banana"</Part>
-                    <Part part=combobox::Part::Empty>"Nothing matches."</Part>
-                    <Part part=combobox::Part::Status>"Loading…"</Part>
-                </Part>
-            </Root>
-        </Section>
-
-        <Section title="Navigation menu">
-            <p id="nav-value">"Open: " {move || nav.get().join("")}</p>
-            <Root machine=NavigationMenu::new(navigation_menu::Options::default(), &[("products", true), ("pricing", false)]).current("pricing") label="Main" on_value_change=on_nav>
-                <Part part=navigation_menu::Part::Root>
-                    <div class="bar">
-                        <Part part=navigation_menu::Part::Trigger item="products">"Products"</Part>
-                        <Part part=navigation_menu::Part::Link item="pricing">"Pricing"</Part>
-                    </div>
-                    <Part part=navigation_menu::Part::Panel item="products">"Analytics, storage and more."</Part>
-                </Part>
-            </Root>
-        </Section>
-
-        <Section title="Toasts">
-            <p id="toast-value">"Showing: " {move || toasts.get().len()}</p>
-            <Root machine=Button::default() label="Notify" on_value_change=notify><Part part=button::Part::Root>"Notify"</Part></Root>
-            <Root machine=Toaster::default() label="Notifications" value=toasts on_value_change=on_toasts><Toasts /></Root>
-        </Section>
-
-        <Section title="Date input">
-            <p id="when-value">"When: " {move || when.get().join("")}</p>
-            <Root machine=DateInput::new(false) label="When" on_value_change=on_when>
-                <Part part=date_input::Part::Root>
-                    <div class="segments">
-                        <Part part=date_input::Part::Segment item="year" label="Year" />
-                        "-"
-                        <Part part=date_input::Part::Segment item="month" label="Month" />
-                        "-"
-                        <Part part=date_input::Part::Segment item="day" label="Day" />
-                    </div>
-                </Part>
-            </Root>
-        </Section>
-
-        <Section title="Date picker">
-            <p id="due-value">"Due: " {move || due.get().join("")}</p>
-            <Root machine=DatePicker::new(armature_core::calendar::Options::default(), Date::new(2026, 11, 17).unwrap_or(Date::FIRST)) label="Due date" on_value_change=on_due>
-                <PickerParts />
-            </Root>
-        </Section>
-
-        <Section title="Mentions">
-            <p id="note-value">"Note: " {move || note.get().join("")}</p>
-            <Root machine=TriggerMenu::new(&['@']) label="Note" on_value_change=on_note>
-                <Part part=trigger_menu::Part::Input />
-                <Part part=trigger_menu::Part::List>
-                    <Part part=trigger_menu::Part::Option item="@ada">"ada"</Part>
-                    <Part part=trigger_menu::Part::Option item="@alan">"alan"</Part>
-                </Part>
-            </Root>
-        </Section>
-
-        <Section title="Carousel">
-            <p id="slide-value">"Slide: " {move || slide.get().join("")}</p>
-            <Root machine=Carousel::default() label="Gallery" on_value_change=on_slide><Slides /></Root>
-        </Section>
-
-        <Section title="Scroll area">
-            <Root machine=ScrollArea::default() label="Log"><ScrollParts /></Root>
-            <Root machine=ScrollArea::horizontal() label="Timeline strip"><WideParts /></Root>
-        </Section>
-
         <Section title="Form">
             <p id="form-value">{move || outcome.get()}</p>
             <Root machine=TextField::new(Kind::Text) label="Name" on_value_change=field("name")>
@@ -673,12 +755,24 @@ pub fn More() -> impl IntoView {
             <Root machine=Button::default() label="Create" on_value_change=submit><Part part=button::Part::Root>"Create"</Part></Root>
             <Root machine=Button::default() label="Reset" on_value_change=reset><Part part=button::Part::Root>"Reset"</Part></Root>
         </Section>
+    }
+}
 
+#[component]
+fn ImageCropperSection() -> impl IntoView {
+    let (crop, on_crop) = follow();
+    view! {
         <Section title="Image cropper">
             <p id="crop-value">"Crop: " {move || crop.get().join("")}</p>
             <Root machine=ImageCropper::new(Size { width: 800.0, height: 600.0 }, None) label="Crop" on_value_change=on_crop><CropParts /></Root>
         </Section>
+    }
+}
 
+#[component]
+fn FileInputSection() -> impl IntoView {
+    let (files, on_files) = follow();
+    view! {
         <Section title="File input">
             <p id="files-value">"Files: " {move || files.get().join(", ")}</p>
             <Root
@@ -689,12 +783,28 @@ pub fn More() -> impl IntoView {
                 <Files />
             </Root>
         </Section>
+    }
+}
 
+#[component]
+fn WaterfallSection() -> impl IntoView {
+    let (span, on_span) = follow();
+    let trace = vec![
+        Span::new("page", 0.0, 400.0, None),
+        Span::new("api", 100.0, 200.0, Some("page")),
+        Span::new("db", 150.0, 100.0, Some("api")),
+    ];
+    view! {
         <Section title="Waterfall">
             <p id="span-value">"Span: " {move || span.get().join("")}</p>
             <Root machine=Waterfall::new(trace, Dir::Ltr) label="Trace" on_value_change=on_span><TraceRows /></Root>
         </Section>
+    }
+}
 
+#[component]
+fn UpstreamOptionsSection() -> impl IntoView {
+    view! {
         <Section title="Upstream options">
             // A menu whose trigger is disabled never opens by hand.
             <Root machine=Menu::new(entries()).disabled() label="Locked actions">
@@ -744,5 +854,35 @@ pub fn More() -> impl IntoView {
                 </Part>
             </Root>
         </Section>
+    }
+}
+
+#[component]
+pub fn More() -> impl IntoView {
+    view! {
+        <ButtonSection />
+        <MeterAndProgressSection />
+        <CollapsibleSection />
+        <CheckboxSection />
+        <ToggleGroupSection />
+        <PaginationSection />
+        <TextFieldSection />
+        <AvatarSection />
+        <MenuSection />
+        <MenubarSection />
+        <HoverCardSection />
+        <ComboboxSection />
+        <NavigationMenuSection />
+        <ToastsSection />
+        <DateInputSection />
+        <DatePickerSection />
+        <MentionsSection />
+        <CarouselSection />
+        <ScrollAreaSection />
+        <FormSection />
+        <ImageCropperSection />
+        <FileInputSection />
+        <WaterfallSection />
+        <UpstreamOptionsSection />
     }
 }
