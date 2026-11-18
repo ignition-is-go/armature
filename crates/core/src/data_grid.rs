@@ -156,6 +156,14 @@ impl DataGrid {
         allowed
     }
 
+    /// The edits that empty every selected cell.
+    fn emptied(&self) -> Vec<(Cell, String)> {
+        self.range
+            .cells()
+            .map(|cell| (cell, String::new()))
+            .collect()
+    }
+
     /// Pasted cells land with their top-left corner on the selection's.
     fn pasted(&self, text: &str) -> Vec<(Cell, String)> {
         let (top, left) = (*self.range.rows().start(), *self.range.cols().start());
@@ -249,11 +257,7 @@ impl Primitive for DataGrid {
                 key: Key::Backspace,
                 ..
             } => {
-                let edits = self
-                    .range
-                    .cells()
-                    .map(|cell| (cell, String::new()))
-                    .collect();
+                let edits = self.emptied();
                 self.write(edits, Source::User, gate);
                 Reaction::handled()
             }
@@ -335,10 +339,7 @@ impl Primitive for DataGrid {
             }
             "paste" | "clear" => {
                 let edits = if action == "clear" {
-                    self.range
-                        .cells()
-                        .map(|cell| (cell, String::new()))
-                        .collect()
+                    self.emptied()
                 } else {
                     self.pasted(item.ok_or(ActError::MissingItem { action: "paste" })?)
                 };
