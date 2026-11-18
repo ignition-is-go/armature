@@ -1194,6 +1194,22 @@ fn toast_behaviors() {
         );
     };
     let count = |toaster: &Toaster| toaster.value().len();
+    // Focus arriving on the first toast's close button, or leaving it.
+    let on_close_button = |toaster: &mut Toaster, arriving: bool| {
+        let item = Some("a".to_string());
+        let input = if arriving {
+            Input::Focus {
+                part: Part::Close,
+                item,
+            }
+        } else {
+            Input::Blur {
+                part: Part::Close,
+                item,
+            }
+        };
+        toaster.send(input, &mut |_| true);
+    };
     // "a shown toast expires after its duration"
     let mut toaster = stack(&[Toast::new("a", "Saved")]);
     tick(&mut toaster, 0, true);
@@ -1221,23 +1237,11 @@ fn toast_behaviors() {
     let mut both = stack(&[Toast::new("a", "Saved")]);
     tick(&mut both, 0, true);
     hover(&mut both, true, 1000);
-    both.send(
-        Input::Focus {
-            part: Part::Close,
-            item: Some("a".into()),
-        },
-        &mut |_| true,
-    );
+    on_close_button(&mut both, true);
     hover(&mut both, false, 2000);
     tick(&mut both, 20_000, true);
     assert_eq!(count(&both), 1, "focus still holds it");
-    both.send(
-        Input::Blur {
-            part: Part::Close,
-            item: Some("a".into()),
-        },
-        &mut |_| true,
-    );
+    on_close_button(&mut both, false);
     assert_eq!(
         both.wake_after(),
         Some(0),
@@ -1251,13 +1255,7 @@ fn toast_behaviors() {
     // Focus alone holds too.
     let mut focused = stack(&[Toast::new("a", "Saved")]);
     tick(&mut focused, 0, true);
-    focused.send(
-        Input::Focus {
-            part: Part::Close,
-            item: Some("a".into()),
-        },
-        &mut |_| true,
-    );
+    on_close_button(&mut focused, true);
     tick(&mut focused, 100, true);
     tick(&mut focused, 9000, true);
     assert_eq!(count(&focused), 1);
