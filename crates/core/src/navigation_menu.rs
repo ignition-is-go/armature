@@ -42,21 +42,44 @@ impl Default for Options {
 
 const ACTIONS: &[&str] = &["open", "close", "follow"];
 
+/// One top-level entry: a link, or a trigger that opens a panel.
+#[derive(Clone, Debug)]
+struct Entry {
+    key: String,
+    opens_panel: bool,
+}
+
+/// What hovering has asked for, once the pointer has rested.
+#[derive(Clone, Debug)]
+struct Due {
+    at_ms: u64,
+    /// The panel to have open then, or none.
+    open: Option<String>,
+}
+
+/// Offers a link being followed to the owner, as `link:<key>`.
+fn follow(key: &str, source: Source, reason: Reason, gate: Gate) -> bool {
+    gate(&ValueChange {
+        value: vec![format!("link:{key}")],
+        source,
+        reason,
+    })
+}
+
 /// A site's main navigation: links, and triggers that open panels of more links.
 /// The value is the key of the open panel. Following a link offers `link:<key>` to
 /// the gate.
 #[derive(Clone, Debug, Default)]
 pub struct NavigationMenu {
     opts: Options,
-    /// The top-level entries in order, and whether each opens a panel.
-    entries: Vec<(String, bool)>,
+    /// The top-level entries in order.
+    entries: Vec<Entry>,
     labels: Vec<(String, String)>,
     /// The link for the page being shown.
     current: Option<String>,
     open: Option<String>,
     focused: Option<String>,
-    /// A panel to open or close once the pointer has rested, and when.
-    due: Option<(u64, Option<String>)>,
+    due: Option<Due>,
 }
 
 impl NavigationMenu {
@@ -65,7 +88,10 @@ impl NavigationMenu {
     pub fn new(opts: Options, entries: &[(&str, bool)]) -> Self {
         let entries = entries
             .iter()
-            .map(|(key, panel)| (key.to_string(), *panel))
+            .map(|(key, opens_panel)| Entry {
+                key: key.to_string(),
+                opens_panel: *opens_panel,
+            })
             .collect();
         Self {
             opts,
@@ -85,10 +111,12 @@ impl NavigationMenu {
         self.open.as_deref()
     }
 
+    fn entry(&self, key: &str) -> Option<&Entry> {
+        self.entries.iter().find(|entry| entry.key == key)
+    }
+
     fn has_panel(&self, key: &str) -> bool {
-        self.entries
-            .iter()
-            .any(|(entry, panel)| entry == key && *panel)
+        self.entry(key).is_some_and(|entry| entry.opens_panel)
     }
 
     fn set(&mut self, open: Option<String>, source: Source, reason: Reason, gate: Gate) -> bool {
@@ -110,7 +138,7 @@ impl NavigationMenu {
     fn tab_stop(&self) -> Option<&str> {
         self.focused
             .as_deref()
-            .or_else(|| self.entries.first().map(|(key, _)| key.as_str()))
+            .or_else(|| self.entries.first().map(|entry| entry.key.as_str()))
     }
 
     fn part_of(&self, key: &str) -> Part {
@@ -149,7 +177,10 @@ impl NavigationMenu {
             self.opts.close_delay_ms
         };
         let at_ms = now_ms.saturating_add(delay);
-        self.due = Some((at_ms, wanted));
+        self.due = Some(Due {
+            at_ms,
+            open: wanted,
+        });
         Reaction::default().with(Effect::Wake { at_ms })
     }
 
@@ -160,14 +191,14 @@ impl NavigationMenu {
         };
         let at = self
             .tab_stop()
-            .and_then(|key| self.entries.iter().position(|(entry, _)| entry == key));
+            .and_then(|key| self.entries.iter().position(|entry| entry.key == key));
         let Some(next) = roving::step(&vec![true; self.entries.len()], at, nav, true) else {
             return Reaction::default();
         };
         let key = self
             .entries
             .get(next)
-            .map(|entry| entry.0.clone())
+            .map(|entry| entry.key.clone())
             .unwrap_or_default();
         self.focused = Some(key.clone());
         Reaction::item(self.part_of(&key), true, Some(key))
@@ -297,12 +328,9 @@ impl Primitive for NavigationMenu {
                 ..
             } => {
                 // Following a link closes whatever is open. The platform follows it.
-                gate(&ValueChange {
-                    value: vec![format!("link:{key}")],
-                    source: Source::User,
-                    reason: Reason::Press,
-                });
+                follow(&key, Source::User, Reason::Press, gate);
                 self.open = None;
+                self.due = None;
                 Reaction::default()
             }
             Input::Hover {
@@ -312,8 +340,8 @@ impl Primitive for NavigationMenu {
                 now_ms,
             } if self.opts.hover => self.on_hover(part, key, inside, now_ms, gate),
             Input::Tick { now_ms } => {
-                if let Some((_, wanted)) = self.due.clone().filter(|(at_ms, _)| now_ms >= *at_ms) {
-                    self.set(wanted, Source::User, Reason::Press, gate);
+                if let Some(due) = self.due.clone().filter(|due| now_ms >= due.at_ms) {
+                    self.set(due.open, Source::User, Reason::Press, gate);
                 }
                 Reaction::default()
             }
@@ -373,7 +401,7 @@ impl Primitive for NavigationMenu {
         let items = self
             .entries
             .iter()
-            .map(|(key, _)| SnapshotItem {
+            .map(|Entry { key, .. }| SnapshotItem {
                 label: self
                     .labels
                     .iter()
@@ -412,16 +440,12 @@ impl Primitive for NavigationMenu {
             }
         };
         let key = item.ok_or(ActError::MissingItem { action })?;
-        if !self.entries.iter().any(|(entry, _)| entry == key) {
+        if self.entry(key).is_none() {
             return Err(ActError::UnknownItem(key.to_string()));
         }
         let done = match (action, self.has_panel(key)) {
             ("open", true) => self.set(Some(key.to_string()), Source::Agent, Reason::Action, gate),
-            ("follow", false) => gate(&ValueChange {
-                value: vec![format!("link:{key}")],
-                source: Source::Agent,
-                reason: Reason::Action,
-            }),
+            ("follow", false) => follow(key, Source::Agent, Reason::Action, gate),
             _ => false,
         };
         if done { Ok(()) } else { Err(ActError::Refused) }
@@ -465,6 +489,22 @@ mod tests {
         hover(&mut nav, Part::Trigger, "docs", true, 70);
         assert_eq!(nav.open_panel(), Some("docs"));
         assert!(nav.semantics(Part::Panel, Some("products")).hidden);
+    }
+
+    #[test]
+    fn following_a_link_drops_a_panel_that_was_about_to_open() {
+        let mut nav = nav();
+        hover(&mut nav, Part::Trigger, "products", true, 0);
+        nav.send(
+            Input::Press {
+                part: Part::Link,
+                item: Some("pricing".into()),
+                mods: Modifiers::default(),
+            },
+            &mut |_| true,
+        );
+        nav.send(Input::Tick { now_ms: 50 }, &mut |_| true);
+        assert_eq!(nav.open_panel(), None, "the page has moved on");
     }
 
     #[test]
