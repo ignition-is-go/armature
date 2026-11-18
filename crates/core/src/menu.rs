@@ -285,6 +285,106 @@ impl Menu {
     }
 }
 
+impl Menu {
+    /// An entry's own key runs it, whether or not the menu is open.
+    fn on_hotkey(&mut self, shortcut: crate::shortcut::Shortcut, gate: Gate) -> Reaction<Part> {
+        let entry = self
+            .entries
+            .iter()
+            .find(|entry| entry.shortcut == Some(shortcut) && entry.kind != Kind::Submenu);
+        let Some(key) = entry.map(|entry| entry.key.clone()) else {
+            return Reaction::default();
+        };
+        let was = (self.open, self.path.clone(), self.active.clone());
+        let ran = self
+            .choose(&key, Source::User, Reason::Keyboard, gate)
+            .is_ok();
+        // Running one by its key leaves the menu as it was, and focus too.
+        if !was.0 {
+            (self.open, self.path, self.active) = was;
+        }
+        Reaction {
+            handled: ran,
+            ..Reaction::default()
+        }
+    }
+
+    /// A key pressed while the menu is open: moving between entries, opening and
+    /// leaving submenus, choosing, closing, and typing to find an entry.
+    fn on_key_while_open(
+        &mut self,
+        key: Key,
+        mods: crate::keys::Modifiers,
+        now_ms: u64,
+        gate: Gate,
+    ) -> Reaction<Part> {
+        let shown: Vec<Entry> = self.shown().into_iter().cloned().collect();
+        let enabled: Vec<bool> = shown.iter().map(|entry| !entry.disabled).collect();
+        let at = self
+            .active
+            .as_deref()
+            .and_then(|key| shown.iter().position(|entry| entry.key == key));
+        let go = |nav| {
+            roving::step(&enabled, at, nav, true)
+                .and_then(|index| shown.get(index))
+                .map(|entry| entry.key.clone())
+        };
+        let target = match key {
+            Key::ArrowDown => go(Nav::Next),
+            Key::ArrowUp => go(Nav::Prev),
+            Key::Home => go(Nav::First),
+            Key::End => go(Nav::Last),
+            Key::Enter | Key::Space => {
+                let Some(key) = self.active.clone() else {
+                    return Reaction::handled();
+                };
+                return self
+                    .choose(&key, Source::User, Reason::Keyboard, gate)
+                    .unwrap_or_else(|_| Reaction::handled());
+            }
+            Key::ArrowRight => {
+                let submenu = at
+                    .and_then(|at| shown.get(at))
+                    .filter(|entry| entry.kind == Kind::Submenu && !entry.disabled);
+                let Some(key) = submenu.map(|entry| entry.key.clone()) else {
+                    return Reaction::default();
+                };
+                return self
+                    .choose(&key, Source::User, Reason::Keyboard, gate)
+                    .unwrap_or_else(|_| Reaction::handled());
+            }
+            Key::ArrowLeft | Key::Escape if !self.path.is_empty() => return self.back(),
+            Key::Escape => {
+                self.close();
+                return Reaction::focusing(Part::Trigger);
+            }
+            // Tab closes the menu and is left to move focus on from the trigger.
+            Key::Tab => {
+                self.close();
+                return Reaction {
+                    handled: false,
+                    ..Reaction::focusing(Part::Trigger)
+                };
+            }
+            Key::Char(ch) if !mods.ctrl && !mods.alt => {
+                let labels: Vec<(&str, bool)> = shown
+                    .iter()
+                    .map(|entry| (entry.label.as_str(), !entry.disabled))
+                    .collect();
+                self.typeahead
+                    .push(ch, now_ms, &labels, at)
+                    .and_then(|index| shown.get(index))
+                    .map(|entry| entry.key.clone())
+            }
+            _ => return Reaction::default(),
+        };
+        if let Some(key) = &target {
+            self.active = Some(key.clone());
+        }
+        Reaction::item(Part::Item, true, target)
+    }
+}
+
 impl PartOf for Part {
     type Primitive = Menu;
 }
@@ -406,11 +506,6 @@ impl Primitive for Menu {
             },
         }
     }
-
-    #[expect(
-        clippy::too_many_lines,
-        reason = "one arm for each input the primitive answers"
-    )]
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
         // A disabled trigger never opens the menu.
         if self.disabled
@@ -424,27 +519,7 @@ impl Primitive for Menu {
         }
         match (input, self.open) {
             // An entry's own key runs it, whether or not the menu is open.
-            (Input::Hotkey { shortcut }, _) => {
-                let entry = self
-                    .entries
-                    .iter()
-                    .find(|entry| entry.shortcut == Some(shortcut) && entry.kind != Kind::Submenu);
-                let Some(key) = entry.map(|entry| entry.key.clone()) else {
-                    return Reaction::default();
-                };
-                let was = (self.open, self.path.clone(), self.active.clone());
-                let ran = self
-                    .choose(&key, Source::User, Reason::Keyboard, gate)
-                    .is_ok();
-                // Running one by its key leaves the menu as it was, and focus too.
-                if !was.0 {
-                    (self.open, self.path, self.active) = was;
-                }
-                Reaction {
-                    handled: ran,
-                    ..Reaction::default()
-                }
-            }
+            (Input::Hotkey { shortcut }, _) => self.on_hotkey(shortcut, gate),
             // Called up where the pointer is, as a context menu.
             (Input::ContextMenu { at, .. }, _) => {
                 let reaction = self.open_at(false);
@@ -518,70 +593,7 @@ impl Primitive for Menu {
                 Reaction::default()
             }
             (Input::Key { key, mods, now_ms }, true) => {
-                let shown: Vec<Entry> = self.shown().into_iter().cloned().collect();
-                let enabled: Vec<bool> = shown.iter().map(|entry| !entry.disabled).collect();
-                let at = self
-                    .active
-                    .as_deref()
-                    .and_then(|key| shown.iter().position(|entry| entry.key == key));
-                let go = |nav| {
-                    roving::step(&enabled, at, nav, true)
-                        .and_then(|index| shown.get(index))
-                        .map(|entry| entry.key.clone())
-                };
-                let target = match key {
-                    Key::ArrowDown => go(Nav::Next),
-                    Key::ArrowUp => go(Nav::Prev),
-                    Key::Home => go(Nav::First),
-                    Key::End => go(Nav::Last),
-                    Key::Enter | Key::Space => {
-                        let Some(key) = self.active.clone() else {
-                            return Reaction::handled();
-                        };
-                        return self
-                            .choose(&key, Source::User, Reason::Keyboard, gate)
-                            .unwrap_or_else(|_| Reaction::handled());
-                    }
-                    Key::ArrowRight => {
-                        let submenu = at
-                            .and_then(|at| shown.get(at))
-                            .filter(|entry| entry.kind == Kind::Submenu && !entry.disabled);
-                        let Some(key) = submenu.map(|entry| entry.key.clone()) else {
-                            return Reaction::default();
-                        };
-                        return self
-                            .choose(&key, Source::User, Reason::Keyboard, gate)
-                            .unwrap_or_else(|_| Reaction::handled());
-                    }
-                    Key::ArrowLeft | Key::Escape if !self.path.is_empty() => return self.back(),
-                    Key::Escape => {
-                        self.close();
-                        return Reaction::focusing(Part::Trigger);
-                    }
-                    // Tab closes the menu and is left to move focus on from the trigger.
-                    Key::Tab => {
-                        self.close();
-                        return Reaction {
-                            handled: false,
-                            ..Reaction::focusing(Part::Trigger)
-                        };
-                    }
-                    Key::Char(ch) if !mods.ctrl && !mods.alt => {
-                        let labels: Vec<(&str, bool)> = shown
-                            .iter()
-                            .map(|entry| (entry.label.as_str(), !entry.disabled))
-                            .collect();
-                        self.typeahead
-                            .push(ch, now_ms, &labels, at)
-                            .and_then(|index| shown.get(index))
-                            .map(|entry| entry.key.clone())
-                    }
-                    _ => return Reaction::default(),
-                };
-                if let Some(key) = &target {
-                    self.active = Some(key.clone());
-                }
-                Reaction::item(Part::Item, true, target)
+                self.on_key_while_open(key, mods, now_ms, gate)
             }
             _ => Reaction::default(),
         }

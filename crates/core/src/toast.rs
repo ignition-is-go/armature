@@ -261,6 +261,58 @@ impl Toaster {
     }
 }
 
+impl Toaster {
+    /// Time passing: clocks are held or resumed, and notifications whose time is up leave.
+    fn on_tick(&mut self, now_ms: u64, gate: Gate) -> Reaction<Part> {
+        // Reading with the pointer and with the keyboard hold the clocks
+        // separately: they run again only once neither does.
+        let held = self.hovered || self.focused.is_some();
+        if held != self.paused.is_some() {
+            let resumed = self.hold(held, now_ms);
+            if held {
+                return resumed;
+            }
+        }
+        if self.paused.is_some() {
+            return Reaction::default();
+        }
+        let due: Vec<String> = self
+            .deadlines
+            .iter()
+            .filter(|(_, at)| now_ms >= *at)
+            .map(|(id, _)| id.clone())
+            .collect();
+        if !self.remove(&due, Source::User, Reason::Timer, gate) {
+            // The owner kept them, so they get their time again.
+            self.deadlines.retain(|(id, _)| !due.contains(id));
+        }
+        // Whatever has just come into view starts its clock and is read out.
+        let mut reaction = Reaction::default();
+        let started: Vec<(String, u64, String, bool)> = self
+            .unstarted()
+            .into_iter()
+            .map(|toast| {
+                (
+                    toast.id.clone(),
+                    self.lasts(toast).unwrap_or(0),
+                    toast.title.clone(),
+                    toast.kind == Kind::Error,
+                )
+            })
+            .collect();
+        for (id, lasts, title, assertive) in started {
+            self.deadlines.push((id, now_ms.saturating_add(lasts)));
+            reaction = reaction.with(Effect::Announce {
+                message: title,
+                assertive,
+            });
+        }
+        let wake = self.wake();
+        reaction.effects.extend(wake.effects);
+        reaction
+    }
+}
+
 impl PartOf for Part {
     type Primitive = Toaster;
 }
@@ -351,61 +403,9 @@ impl Primitive for Toaster {
             },
         }
     }
-
-    #[expect(
-        clippy::too_many_lines,
-        reason = "one arm for each input the primitive answers"
-    )]
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
         match input {
-            Input::Tick { now_ms } => {
-                // Reading with the pointer and with the keyboard hold the clocks
-                // separately: they run again only once neither does.
-                let held = self.hovered || self.focused.is_some();
-                if held != self.paused.is_some() {
-                    let resumed = self.hold(held, now_ms);
-                    if held {
-                        return resumed;
-                    }
-                }
-                if self.paused.is_some() {
-                    return Reaction::default();
-                }
-                let due: Vec<String> = self
-                    .deadlines
-                    .iter()
-                    .filter(|(_, at)| now_ms >= *at)
-                    .map(|(id, _)| id.clone())
-                    .collect();
-                if !self.remove(&due, Source::User, Reason::Timer, gate) {
-                    // The owner kept them, so they get their time again.
-                    self.deadlines.retain(|(id, _)| !due.contains(id));
-                }
-                // Whatever has just come into view starts its clock and is read out.
-                let mut reaction = Reaction::default();
-                let started: Vec<(String, u64, String, bool)> = self
-                    .unstarted()
-                    .into_iter()
-                    .map(|toast| {
-                        (
-                            toast.id.clone(),
-                            self.lasts(toast).unwrap_or(0),
-                            toast.title.clone(),
-                            toast.kind == Kind::Error,
-                        )
-                    })
-                    .collect();
-                for (id, lasts, title, assertive) in started {
-                    self.deadlines.push((id, now_ms.saturating_add(lasts)));
-                    reaction = reaction.with(Effect::Announce {
-                        message: title,
-                        assertive,
-                    });
-                }
-                let wake = self.wake();
-                reaction.effects.extend(wake.effects);
-                reaction
-            }
+            Input::Tick { now_ms } => self.on_tick(now_ms, gate),
             Input::Hover {
                 part: Part::Region,
                 inside,
