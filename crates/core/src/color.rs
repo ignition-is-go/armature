@@ -429,7 +429,7 @@ impl Rgb {
             let n = numbers(body);
             return (n.len() >= 3).then(|| {
                 Self::new(
-                    (n.get(0).copied().unwrap_or_default().clamp(0.0, 255.0)).cast::<u8>(),
+                    (n.first().copied().unwrap_or_default().clamp(0.0, 255.0)).cast::<u8>(),
                     (n.get(1).copied().unwrap_or_default().clamp(0.0, 255.0)).cast::<u8>(),
                     (n.get(2).copied().unwrap_or_default().clamp(0.0, 255.0)).cast::<u8>(),
                 )
@@ -439,7 +439,7 @@ impl Rgb {
             let n = numbers(body);
             return (n.len() >= 3).then(|| {
                 Hsl {
-                    h: n.get(0).copied().unwrap_or_default().rem_euclid(360.0),
+                    h: n.first().copied().unwrap_or_default().rem_euclid(360.0),
                     s: (n.get(1).copied().unwrap_or_default() / 100.0).clamp(0.0, 1.0),
                     l: (n.get(2).copied().unwrap_or_default() / 100.0).clamp(0.0, 1.0),
                 }
@@ -533,7 +533,7 @@ impl P3 {
             .filter_map(|part| part.parse().ok())
             .collect();
         (parts.len() >= 3).then(|| Self {
-            r: parts.get(0).copied().unwrap_or_default(),
+            r: parts.first().copied().unwrap_or_default(),
             g: parts.get(1).copied().unwrap_or_default(),
             b: parts.get(2).copied().unwrap_or_default(),
         })

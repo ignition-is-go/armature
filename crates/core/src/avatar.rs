@@ -123,7 +123,7 @@ impl Primitive for Avatar {
                     return Reaction::default().with(crate::primitive::Effect::Wake { at_ms });
                 }
                 Some(since) if now_ms >= since.saturating_add(self.fallback_delay_ms) => {
-                    self.waited.1 = true
+                    self.waited.1 = true;
                 }
                 Some(_) => {}
             },

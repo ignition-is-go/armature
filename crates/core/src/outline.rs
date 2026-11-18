@@ -83,7 +83,7 @@ pub fn moved_rows(
             .iter()
             .map(|row| OutlineRow {
                 key: row.key.clone(),
-                depth: row.depth.saturating_add((depth.saturating_sub(was))),
+                depth: row.depth.saturating_add(depth.saturating_sub(was)),
             })
             .collect()
     } else {
@@ -92,7 +92,7 @@ pub fn moved_rows(
             .iter()
             .map(|row| OutlineRow {
                 key: row.key.clone(),
-                depth: row.depth.saturating_sub((was.saturating_sub(depth))),
+                depth: row.depth.saturating_sub(was.saturating_sub(depth)),
             })
             .collect()
     };

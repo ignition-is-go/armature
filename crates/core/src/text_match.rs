@@ -81,7 +81,7 @@ pub fn fuzzy_score(query: &str, text: &str) -> Option<u32> {
     }
     (letters > 0).then(|| {
         ((bonus.saturating_mul(400))
-            .checked_div((letters.saturating_mul(2)))
+            .checked_div(letters.saturating_mul(2))
             .unwrap_or_default())
         .saturating_add(100)
     })

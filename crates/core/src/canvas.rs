@@ -499,7 +499,7 @@ impl Primitive for Canvas {
                         });
                     }
                     Some(Gesture::Move { from, origin }) => {
-                        self.shift_selected(&origin, at.minus(from))
+                        self.shift_selected(&origin, at.minus(from));
                     }
                     Some(Gesture::Resize { key, from, origin }) => {
                         let limits = ResizeLimits {

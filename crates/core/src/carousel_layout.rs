@@ -66,7 +66,7 @@ pub fn group_slides(slides: &[SlideBox], snapport: f64, per_page: PerPage) -> Ve
             for (index, slide) in slides.iter().enumerate() {
                 let fits = groups.last().is_some_and(|group| {
                     slide.start + slide.size
-                        - slides[group.get(0).copied().unwrap_or_default()].start
+                        - slides[group.first().copied().unwrap_or_default()].start
                         <= snapport + 0.5
                 });
                 match groups.last_mut().filter(|_| fits) {
@@ -96,7 +96,7 @@ fn page_of(
     padding_start: f64,
 ) -> Page {
     let (first, last) = (
-        boxes[group.get(0).copied().unwrap_or_default()],
+        boxes[group.first().copied().unwrap_or_default()],
         boxes[group
             .get(group.len().saturating_sub(1))
             .copied()
@@ -106,7 +106,7 @@ fn page_of(
     Page {
         slides: group.to_vec(),
         position: first.start - margin - padding_start,
-        leader: group.get(0).copied().unwrap_or_default(),
+        leader: group.first().copied().unwrap_or_default(),
         margin,
     }
 }
@@ -334,7 +334,7 @@ pub fn loop_rotation(
     // tried first, so it wins a tie.
     let mut starts: Vec<usize> = groups
         .iter()
-        .map(|group| group.get(0).copied().unwrap_or_default())
+        .map(|group| group.first().copied().unwrap_or_default())
         .collect();
     if starts.contains(&at.first) {
         starts.insert(0, at.first);

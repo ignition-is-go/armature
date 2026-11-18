@@ -1,8 +1,6 @@
 //! Finding a trigger such as `@` or `/` in the text before the caret, and the query
 //! typed after it. Offsets count characters.
 
-use crate::convert::Cast;
-
 /// Where a trigger may sit.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Boundary {

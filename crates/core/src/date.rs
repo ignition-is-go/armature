@@ -77,8 +77,8 @@ impl Date {
         .saturating_sub(day_of_era / 146_096))
             / 365;
         let day_of_year = day_of_era.saturating_sub(
-            (((year_of_era.saturating_mul(365)).saturating_add(year_of_era / 4))
-                .saturating_sub(year_of_era / 100)),
+            ((year_of_era.saturating_mul(365)).saturating_add(year_of_era / 4))
+                .saturating_sub(year_of_era / 100),
         );
         let shifted_month = ((day_of_year.saturating_mul(5)).saturating_add(2)) / 153;
         let day = ((day_of_year

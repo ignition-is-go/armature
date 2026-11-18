@@ -396,7 +396,7 @@ impl Primitive for Calendar {
         match action {
             "next_month" => self.focused = self.focused.add_months(self.page()),
             "previous_month" => {
-                self.focused = self.focused.add_months(self.page().saturating_neg())
+                self.focused = self.focused.add_months(self.page().saturating_neg());
             }
             "select" => {
                 let text = item.ok_or(ActError::MissingItem { action: "select" })?;
