@@ -11,7 +11,7 @@ use armature_core::popup::{self, Placement, Rect, Side, Size};
 use armature_core::presence::Presence;
 use armature_core::primitive::{
     Effect as Ask, FocusTarget, Focusable, Input, Item, PartOf, Pointer, PointerPhase, Primitive,
-    Reaction, Role,
+    Reaction, Role, Semantics,
 };
 use armature_core::safe_area::{Axis, SafeArea};
 use leptos::prelude::*;
@@ -813,76 +813,37 @@ where
     children()
 }
 
-/// One part of the primitive owned by the nearest `Root`. It renders unstyled, as a
-/// `div`, or as an `input` for a part the person types into, and carries the part's
-/// semantics and event wiring.
-#[expect(
-    clippy::too_many_lines,
-    reason = "one block of wiring for each kind of input a part can take"
-)]
-#[component]
-pub fn Part<K>(
-    part: K,
-    /// The item this part belongs to. Required for item parts.
-    #[prop(optional, into)]
-    item: Option<String>,
-    /// For an item, its text for typeahead and agents, which defaults to the rendered
-    /// text. For any other part, its own accessible name.
-    #[prop(optional, into)]
+/// An item part tells the primitive about its item for as long as it is rendered.
+fn register_item<P: Primitive + Send + Sync>(
+    ctx: Context<P>,
+    item: Option<&String>,
     label: String,
-    #[prop(optional)] disabled: bool,
-    #[prop(optional)] children: Option<Children>,
-) -> impl IntoView
-where
-    K: PartOf,
-    K::Primitive: Send + Sync,
-{
-    let ctx = expect_context::<Context<K::Primitive>>();
-    let registers = K::Primitive::is_item(part);
-    let tracks_pointer = K::Primitive::tracks_pointer(part);
-    let own_name = (!registers && !label.is_empty()).then(|| label.clone());
-    if registers {
-        let key = item.clone().unwrap_or_default();
-        if key.is_empty() {
-            leptos::logging::warn!(
-                "an item part of `{}` was rendered without an `item` key",
-                label
-            );
-        }
-        ctx.machine.update(|m| {
-            m.upsert_item(Item {
-                key: key.clone(),
-                label,
-                disabled,
-            });
-        });
-        on_cleanup(move || {
-            ctx.machine.try_update(|m| m.remove_item(&key));
-        });
+    disabled: bool,
+) {
+    let key = item.cloned().unwrap_or_default();
+    if key.is_empty() {
+        leptos::logging::warn!(
+            "an item part of `{}` was rendered without an `item` key",
+            label
+        );
     }
-
-    let semantics = Memo::new({
-        let item = item.clone();
-        move |_| ctx.machine.with(|m| m.semantics(part, item.as_deref()))
+    ctx.machine.update(|m| {
+        m.upsert_item(Item {
+            key: key.clone(),
+            label,
+            disabled,
+        });
     });
-    let role = semantics.get_untracked().role;
-    let interactive = move || semantics.get_untracked().focusable != Focusable::No;
-    let names_component = item.is_none()
-        && ctx
-            .machine
-            .with_untracked(armature_core::primitive::Primitive::named_part)
-            == Some(part);
-    // A part the primitive keeps text for is a native field. One that edits its
-    // own content, key by key, is not.
-    let takes_text = matches!(role, Some(Role::TextBox | Role::SpinButton))
-        && ctx
-            .machine
-            .with_untracked(|m| m.text(part, item.as_deref()).is_some());
+    on_cleanup(move || {
+        ctx.machine.try_update(|m| m.remove_item(&key));
+    });
+}
 
-    let element = NodeRef::<leptos::html::Div>::new();
-    // A part the person types into is an input, not a div.
-    let field = NodeRef::<leptos::html::Input>::new();
-    // A part that closes stays rendered until its exit animation, if it has one, ends.
+/// A part that closes stays rendered until its exit animation, if it has one, ends.
+fn animate_presence(
+    semantics: Memo<Semantics>,
+    element: NodeRef<leptos::html::Div>,
+) -> RwSignal<Presence> {
     let presence = RwSignal::new(if semantics.get_untracked().hidden {
         Presence::Absent
     } else {
@@ -939,7 +900,17 @@ where
             None => settle(),
         }
     });
-    let placement = K::Primitive::popup_of(part);
+    presence
+}
+
+/// A popup is placed against its anchor when it opens, and again whenever the page
+/// scrolls or the window is resized.
+fn keep_popup_placed<P: Primitive + Send + Sync>(
+    ctx: Context<P>,
+    placement: Option<Placement<P::Part>>,
+    semantics: Memo<Semantics>,
+    element: NodeRef<leptos::html::Div>,
+) {
     if let Some(placement) = placement {
         Effect::new(move |_| {
             if semantics.get().hidden {
@@ -978,209 +949,126 @@ where
             on_resize.remove();
         });
     }
+}
 
-    let on_click = {
-        let item = item.clone();
-        move |ev: leptos::ev::MouseEvent| {
-            // A part that tracks the pointer already saw this press as a gesture.
-            if tracks_pointer || !interactive() {
-                return;
-            }
-            let mods = modifiers(ev.shift_key(), ev.ctrl_key() || ev.meta_key(), ev.alt_key());
-            ctx.dispatch(Input::Press {
-                part,
-                item: item.clone(),
-                mods,
-            });
+fn click_handler<P: Primitive + Send + Sync>(
+    ctx: Context<P>,
+    part: P::Part,
+    item: Option<String>,
+    semantics: Memo<Semantics>,
+) -> impl Fn(leptos::ev::MouseEvent) + 'static {
+    let tracks_pointer = P::tracks_pointer(part);
+    let interactive = move || semantics.get_untracked().focusable != Focusable::No;
+    move |ev: leptos::ev::MouseEvent| {
+        // A part that tracks the pointer already saw this press as a gesture.
+        if tracks_pointer || !interactive() {
+            return;
         }
-    };
-    let on_pointerdown = {
-        let item = item.clone();
-        move |ev: leptos::ev::PointerEvent| {
-            // A part nested inside this one may already have taken the gesture.
-            if !tracks_pointer || ev.button() != 0 || ev.default_prevented() {
-                return;
-            }
-            ctx.captured.set_value(Some((part, item.clone())));
-            ctx.pointer(PointerPhase::Down, part, item.clone(), &ev);
-            // Stops the browser starting a text selection or a native drag.
-            ev.prevent_default();
-        }
-    };
-    let on_focus = {
-        let item = item.clone();
-        move |_| {
-            if interactive() && !semantics.get_untracked().active {
-                ctx.dispatch(Input::Focus {
-                    part,
-                    item: item.clone(),
-                });
-            }
-        }
-    };
-    let on_blur = {
-        let item = item.clone();
-        let instance = ctx.instance.to_string();
-        move |ev: leptos::ev::FocusEvent| {
-            // Focus moving to another part of the same component is not leaving it.
-            let next = ev
-                .related_target()
-                .and_then(|target| target.dyn_into::<web_sys::Element>().ok());
-            let stays = next
-                .and_then(|next| next.closest("[data-armature]").ok().flatten())
-                .is_some_and(|owner| {
-                    owner.get_attribute("data-armature").as_deref() == Some(instance.as_str())
-                });
-            if stays {
-                return;
-            }
-            let leave = {
-                let item = item.clone();
-                move || {
-                    ctx.dispatch(Input::Blur {
-                        part,
-                        item: item.clone(),
-                    });
-                }
-            };
-            if ev.related_target().is_some() {
-                leave();
-                return;
-            }
-            // With nowhere named, focus may only have dropped because the focused
-            // part was re-rendered, and is about to be put back. Look again once it
-            // has had the chance.
-            let instance = instance.clone();
-            request_animation_frame(move || {
-                request_animation_frame(move || {
-                    let owner = document()
-                        .active_element()
-                        .and_then(|now| now.closest("[data-armature]").ok().flatten());
-                    let inside = owner.is_some_and(|owner| {
-                        owner.get_attribute("data-armature").as_deref() == Some(instance.as_str())
-                    });
-                    if !inside {
-                        leave();
-                    }
-                });
-            });
-        }
-    };
-    // Find-in-page may search a hidden part that allows it, and says when it matched.
-    {
-        let item = item.clone();
-        Effect::new(move |_| {
-            let node = element.get().map(|node| web_sys::Element::clone(&node));
-            let node = node.or_else(|| field.get().map(|node| web_sys::Element::clone(&node)));
-            let Some(element) = node else { return };
-            let item = item.clone();
-            let for_context = item.clone();
-            let for_wheel = item.clone();
-            let found = Closure::<dyn Fn()>::new(move || {
-                ctx.dispatch(Input::Found {
-                    part,
-                    item: item.clone(),
-                });
-            });
-            let _ = element
-                .add_event_listener_with_callback("beforematch", found.as_ref().unchecked_ref());
-            found.forget();
-            // The wheel goes to a part that asks for it at that moment, and scrolls the
-            // page otherwise.
-            {
-                let item = for_wheel;
-                let turned =
-                    Closure::<dyn Fn(web_sys::WheelEvent)>::new(move |ev: web_sys::WheelEvent| {
-                        if !ctx.machine.with_untracked(|m| m.wheels(part)) {
-                            return;
-                        }
-                        let mods =
-                            modifiers(ev.shift_key(), ev.ctrl_key() || ev.meta_key(), ev.alt_key());
-                        // The page scrolls as usual unless the primitive made use of it.
-                        if ctx.dispatch(Input::Wheel {
-                            part,
-                            item: item.clone(),
-                            delta: -ev.delta_y() / 100.0,
-                            mods,
-                        }) {
-                            ev.prevent_default();
-                        }
-                    });
-                let _ = element
-                    .add_event_listener_with_callback("wheel", turned.as_ref().unchecked_ref());
-                turned.forget();
-            }
-            // The platform's gesture for a context menu goes to a part that takes it,// in place of the browser's own menu.
-            if K::Primitive::context(part) {
-                let item = for_context;
-                let asked =
-                    Closure::<dyn Fn(web_sys::MouseEvent)>::new(move |ev: web_sys::MouseEvent| {
-                        ev.prevent_default();
-                        let at = Point::new(f64::from(ev.client_x()), f64::from(ev.client_y()));
-                        ctx.dispatch(Input::ContextMenu {
-                            part,
-                            item: item.clone(),
-                            at,
-                        });
-                    });
-                let _ = element.add_event_listener_with_callback(
-                    "contextmenu",
-                    asked.as_ref().unchecked_ref(),
-                );
-                asked.forget();
-            }
-            // Files dragged from outside the page may be dropped on a part that takes them.
-            if K::Primitive::drops(part) {
-                let over =
-                    Closure::<dyn Fn(web_sys::DragEvent)>::new(move |ev: web_sys::DragEvent| {
-                        // Without this the browser opens the file instead of handing it over.
-                        ev.prevent_default();
-                        if ev.type_() == "dragenter" {
-                            ctx.dispatch(Input::DragOver { inside: true });
-                        }
-                    });
-                let left = Closure::<dyn Fn()>::new(move || {
-                    ctx.dispatch(Input::DragOver { inside: false });
-                });
-                let dropped =
-                    Closure::<dyn Fn(web_sys::DragEvent)>::new(move |ev: web_sys::DragEvent| {
-                        ev.prevent_default();
-                        let files = crate::files::remember(
-                            ev.data_transfer().and_then(|data| data.files()),
-                        );
-                        ctx.dispatch(Input::Files {
-                            files,
-                            dropped: true,
-                        });
-                    });
-                for name in ["dragenter", "dragover"] {
-                    let _ = element
-                        .add_event_listener_with_callback(name, over.as_ref().unchecked_ref());
-                }
-                let _ = element
-                    .add_event_listener_with_callback("dragleave", left.as_ref().unchecked_ref());
-                let _ = element
-                    .add_event_listener_with_callback("drop", dropped.as_ref().unchecked_ref());
-                over.forget();
-                left.forget();
-                dropped.forget();
-            }
-            // A picture inside the part says when it has loaded or failed. Those events
-            // do not bubble, so they are caught on the way down.
-            for (name, ok) in [("load", true), ("error", false)] {
-                let heard = Closure::<dyn Fn()>::new(move || {
-                    ctx.dispatch(Input::Loaded { part, ok });
-                });
-                let _ = element.add_event_listener_with_callback_and_bool(
-                    name,
-                    heard.as_ref().unchecked_ref(),
-                    true,
-                );
-                heard.forget();
-            }
+        let mods = modifiers(ev.shift_key(), ev.ctrl_key() || ev.meta_key(), ev.alt_key());
+        ctx.dispatch(Input::Press {
+            part,
+            item: item.clone(),
+            mods,
         });
     }
-    let on_keydown = move |ev: leptos::ev::KeyboardEvent| {
+}
+
+fn pointerdown_handler<P: Primitive + Send + Sync>(
+    ctx: Context<P>,
+    part: P::Part,
+    item: Option<String>,
+) -> impl Fn(leptos::ev::PointerEvent) + 'static {
+    let tracks_pointer = P::tracks_pointer(part);
+    move |ev: leptos::ev::PointerEvent| {
+        // A part nested inside this one may already have taken the gesture.
+        if !tracks_pointer || ev.button() != 0 || ev.default_prevented() {
+            return;
+        }
+        ctx.captured.set_value(Some((part, item.clone())));
+        ctx.pointer(PointerPhase::Down, part, item.clone(), &ev);
+        // Stops the browser starting a text selection or a native drag.
+        ev.prevent_default();
+    }
+}
+
+fn focus_handler<P: Primitive + Send + Sync>(
+    ctx: Context<P>,
+    part: P::Part,
+    item: Option<String>,
+    semantics: Memo<Semantics>,
+) -> impl Fn(leptos::ev::FocusEvent) + 'static {
+    let interactive = move || semantics.get_untracked().focusable != Focusable::No;
+    move |_| {
+        if interactive() && !semantics.get_untracked().active {
+            ctx.dispatch(Input::Focus {
+                part,
+                item: item.clone(),
+            });
+        }
+    }
+}
+
+/// Focus leaving a part tells the primitive, unless it only moved to another part
+/// of the same component.
+fn blur_handler<P: Primitive + Send + Sync>(
+    ctx: Context<P>,
+    part: P::Part,
+    item: Option<String>,
+) -> impl Fn(leptos::ev::FocusEvent) + 'static {
+    let instance = ctx.instance.to_string();
+    move |ev: leptos::ev::FocusEvent| {
+        // Focus moving to another part of the same component is not leaving it.
+        let next = ev
+            .related_target()
+            .and_then(|target| target.dyn_into::<web_sys::Element>().ok());
+        let stays = next
+            .and_then(|next| next.closest("[data-armature]").ok().flatten())
+            .is_some_and(|owner| {
+                owner.get_attribute("data-armature").as_deref() == Some(instance.as_str())
+            });
+        if stays {
+            return;
+        }
+        let leave = {
+            let item = item.clone();
+            move || {
+                ctx.dispatch(Input::Blur {
+                    part,
+                    item: item.clone(),
+                });
+            }
+        };
+        if ev.related_target().is_some() {
+            leave();
+            return;
+        }
+        // With nowhere named, focus may only have dropped because the focused
+        // part was re-rendered, and is about to be put back. Look again once it
+        // has had the chance.
+        let instance = instance.clone();
+        request_animation_frame(move || {
+            request_animation_frame(move || {
+                let owner = document()
+                    .active_element()
+                    .and_then(|now| now.closest("[data-armature]").ok().flatten());
+                let inside = owner.is_some_and(|owner| {
+                    owner.get_attribute("data-armature").as_deref() == Some(instance.as_str())
+                });
+                if !inside {
+                    leave();
+                }
+            });
+        });
+    }
+}
+
+fn keydown_handler<P: Primitive + Send + Sync>(
+    ctx: Context<P>,
+    semantics: Memo<Semantics>,
+    element: NodeRef<leptos::html::Div>,
+) -> impl Fn(leptos::ev::KeyboardEvent) + 'static {
+    let interactive = move || semantics.get_untracked().focusable != Focusable::No;
+    move |ev: leptos::ev::KeyboardEvent| {
         // Keys pressed while an input method is composing belong to it.
         if !interactive() || ev.is_composing() {
             return;
@@ -1209,126 +1097,16 @@ where
             ev.prevent_default();
             ev.stop_propagation();
         }
-    };
+    }
+}
 
-    let hovers = K::Primitive::hovers(part);
-    let hover = {
-        let item = item.clone();
-        move |inside: bool, ev: leptos::ev::PointerEvent| {
-            // Touch has no hover, so a tap never counts as one.
-            if !hovers || ev.pointer_type() == "touch" {
-                return;
-            }
-            let leave = {
-                let item = item.clone();
-                move || {
-                    let now_ms = js_sys::Date::now().cast::<u64>();
-                    ctx.dispatch(Input::Hover {
-                        part,
-                        item: item.clone(),
-                        inside,
-                        now_ms,
-                    });
-                }
-            };
-            // Leaving for a popup this component has open is not leaving yet: the
-            // pointer may cross the gap, and cut the corner, on its way there.
-            let popup = (!inside)
-                .then(|| {
-                    K::Primitive::parts()
-                        .iter()
-                        .copied()
-                        .filter(|other| *other != part)
-                        .find_map(|other| {
-                            K::Primitive::popup_of(other)
-                                .filter(|_| K::Primitive::hovers(other))?;
-                            let found = ctx
-                                .element_of(other, item.as_deref())
-                                .or_else(|| ctx.element_of(other, None))?;
-                            let rect = found.get_bounding_client_rect();
-                            (rect.width() > 0.0)
-                                .then(|| Rect::new(rect.x(), rect.y(), rect.width(), rect.height()))
-                        })
-                })
-                .flatten();
-            let Some(popup) = popup else {
-                leave();
-                return;
-            };
-            let from = Point::new(f64::from(ev.client_x()), f64::from(ev.client_y()));
-            let axis = if from.y < popup.y || from.y > popup.bottom() {
-                Axis::Y
-            } else {
-                Axis::X
-            };
-            let area = Rc::new(std::cell::RefCell::new(SafeArea::start(
-                from,
-                popup,
-                axis,
-                js_sys::Date::now().cast::<u64>(),
-            )));
-            let last = Rc::new(Cell::new(from));
-            // The shape spanning this part and its popup: a pointer inside it is
-            // still on its way across.
-            let trigger = element.get_untracked().map(|own| {
-                let rect = own.get_bounding_client_rect();
-                Rect::new(rect.x(), rect.y(), rect.width(), rect.height())
-            });
-            let bridged = move |at: Point| {
-                trigger.is_some_and(|trigger| popup::bridges(trigger, popup, 4.0, at))
-            };
-            let held: Held = Rc::default();
-            // Ends the wait, telling the primitive the pointer left unless it arrived.
-            let finish = {
-                let held = held.clone();
-                move |arrived: bool| {
-                    let Some((moves, ticks)) = held.borrow_mut().take() else {
-                        return;
-                    };
-                    moves.remove();
-                    ticks.clear();
-                    if !arrived {
-                        leave();
-                    }
-                }
-            };
-            let moves = window_event_listener(leptos::ev::pointermove, {
-                let (area, last, finish) = (area.clone(), last.clone(), finish.clone());
-                move |ev| {
-                    let at = Point::new(f64::from(ev.client_x()), f64::from(ev.client_y()));
-                    last.set(at);
-                    if popup.contains(at) {
-                        finish(true);
-                    } else if !area
-                        .borrow_mut()
-                        .contains(at, js_sys::Date::now().cast::<u64>())
-                        && !bridged(at)
-                    {
-                        finish(false);
-                    }
-                }
-            });
-            // A pointer that stops short of the popup has left after all.
-            let ticks = set_interval_with_handle(
-                move || {
-                    if !area
-                        .borrow_mut()
-                        .contains(last.get(), js_sys::Date::now().cast::<u64>())
-                    {
-                        finish(false);
-                    }
-                },
-                Duration::from_millis(100),
-            );
-            match ticks {
-                Ok(ticks) => *held.borrow_mut() = Some((moves, ticks)),
-                Err(_) => moves.remove(),
-            }
-        }
-    };
-    let (on_enter, on_leave) = (hover.clone(), hover);
-    let scrolls = K::Primitive::scrolls(part);
-    let report_scroll = move || {
+/// Tells the primitive how far a scrolling part is scrolled and how long it is.
+fn scroll_reporter<P: Primitive + Send + Sync>(
+    ctx: Context<P>,
+    part: P::Part,
+    element: NodeRef<leptos::html::Div>,
+) -> impl Fn() + Copy + 'static {
+    move || {
         if let Some(scroller) = element.get_untracked() {
             let across = ctx
                 .machine
@@ -1355,12 +1133,15 @@ where
                 now_ms: js_sys::Date::now().cast::<u64>(),
             });
         }
-    };
-    if scrolls {
-        // The first report waits a frame, for the part to have a size.
-        Effect::new(move |_| request_animation_frame(report_scroll));
     }
-    let on_paste = move |ev: leptos::ev::ClipboardEvent| {
+}
+
+fn paste_handler<P: Primitive + Send + Sync>(
+    ctx: Context<P>,
+    semantics: Memo<Semantics>,
+) -> impl Fn(leptos::ev::ClipboardEvent) + 'static {
+    let interactive = move || semantics.get_untracked().focusable != Focusable::No;
+    move |ev: leptos::ev::ClipboardEvent| {
         if !interactive() {
             return;
         }
@@ -1373,32 +1154,112 @@ where
             ev.prevent_default();
             ev.stop_propagation();
         }
-    };
+    }
+}
 
+/// A part's own id, and the ids of the parts it refers to. Related parts find each
+/// other by id, and parts that share an item share its key.
+fn part_ids<P: Primitive + Send + Sync>(
+    ctx: Context<P>,
+    part: P::Part,
+    item: Option<&str>,
+) -> (String, RelatedIds) {
+    let instance = ctx.instance;
+    let id_of = |part: P::Part| {
+        item.map_or_else(
+            || format!("armature-{instance}-{part:?}"),
+            |item| format!("armature-{instance}-{part:?}-{item}"),
+        )
+    };
+    let relations = P::relations(part);
+    let related = RelatedIds {
+        controls: relations.controls.map(id_of),
+        labelled_by: relations.labelled_by.map(id_of),
+        described_by: relations.described_by.map(id_of),
+    };
+    (id_of(part), related)
+}
+
+/// A part the person types into, drawn as a native text field.
+fn text_field_view<P: Primitive + Send + Sync>(
+    ctx: Context<P>,
+    part: P::Part,
+    item: Option<String>,
+    semantics: Memo<Semantics>,
+    field: NodeRef<leptos::html::Input>,
+    label_text: Option<String>,
+    own_id: String,
+) -> AnyView {
+    let role = semantics.get_untracked().role;
     let range = move || semantics.get().range;
-    let tabindex = move || match semantics.get().focusable {
-        Focusable::No => None,
-        Focusable::Programmatic => Some("-1"),
-        Focusable::TabStop => Some("0"),
+    let on_focus = focus_handler(ctx, part, item.clone(), semantics);
+    let on_blur = blur_handler(ctx, part, item.clone());
+    // A text field is never a modal container, so it has no element to trap Tab in.
+    let on_keydown = keydown_handler(ctx, semantics, NodeRef::new());
+    let instance = ctx.instance.to_string();
+    let part_name = format!("{part:?}");
+    let text_item = item.clone();
+    let text = move || {
+        ctx.machine
+            .with(|m| m.text(part, text_item.as_deref()))
+            .unwrap_or_default()
     };
-    // Related parts find each other by id. Parts that share an item share its key.
-    let id_of = {
-        let (instance, item) = (ctx.instance, item.clone());
-        move |part: K| {
-            item.as_ref().map_or_else(
-                || format!("armature-{instance}-{part:?}"),
-                |item| format!("armature-{instance}-{part:?}-{item}"),
-            )
-        }
+    let input_item = item.clone();
+    let on_input = move |ev: leptos::ev::Event| {
+        let value = event_target_value(&ev);
+        ctx.dispatch(Input::Text {
+            part,
+            item: input_item.clone(),
+            value,
+        });
     };
-    let relations = K::Primitive::relations(part);
-    let controls = relations.controls.map(&id_of);
-    let labelled_by = relations.labelled_by.map(&id_of);
-    let described_by = relations.described_by.map(&id_of);
-    let own_id = id_of(part);
+    view! {
+        <input
+            node_ref=field
+            type=move || if semantics.get().obscured { "password" } else { "text" }
+            role=(role == Some(Role::SpinButton)).then_some("spinbutton")
+            aria-label=label_text
+            aria-valuenow=move || range().map(|r| r.now.to_string())
+            aria-valuemin=move || range().map(|r| r.min.to_string())
+            aria-valuemax=move || range().map(|r| r.max.to_string())
+            aria-disabled=move || semantics.get().disabled.then_some("true")
+            autocomplete="off"
+            hidden=move || semantics.get().hidden
+            style:display=move || semantics.get().hidden.then_some("none")
+            prop:value=text
+            id=own_id
+            data-armature=instance
+            data-armature-part=part_name
+            data-value=item
+            on:input=on_input
+            on:focus=on_focus
+            on:blur=on_blur
+            on:keydown=on_keydown
+        />
+    }
+    .into_any()
+}
 
-    // State that changes often is written straight onto the element. The view layer
-    // caps how many attributes one element may declare.
+/// The ids of the parts this one controls, is named by and is described by.
+struct RelatedIds {
+    controls: Option<String>,
+    labelled_by: Option<String>,
+    described_by: Option<String>,
+}
+
+/// State that changes often is written straight onto the element. The view layer
+/// caps how many attributes one element may declare.
+fn sync_attributes(
+    semantics: Memo<Semantics>,
+    element: NodeRef<leptos::html::Div>,
+    field: NodeRef<leptos::html::Input>,
+    related: RelatedIds,
+) {
+    let RelatedIds {
+        controls,
+        labelled_by,
+        described_by,
+    } = related;
     Effect::new(move |_| {
         let state = semantics.get();
         let node = element.get().map(|node| web_sys::Element::clone(&node));
@@ -1451,6 +1312,370 @@ where
             );
         }
     });
+}
+
+/// The wheel goes to a part that asks for it at that moment, and scrolls the page
+/// otherwise.
+fn listen_for_wheel<P: Primitive + Send + Sync>(
+    ctx: Context<P>,
+    part: P::Part,
+    item: Option<String>,
+    element: &web_sys::Element,
+) {
+    // The wheel goes to a part that asks for it at that moment, and scrolls the
+    // page otherwise.
+    {
+        let turned = Closure::<dyn Fn(web_sys::WheelEvent)>::new(move |ev: web_sys::WheelEvent| {
+            if !ctx.machine.with_untracked(|m| m.wheels(part)) {
+                return;
+            }
+            let mods = modifiers(ev.shift_key(), ev.ctrl_key() || ev.meta_key(), ev.alt_key());
+            // The page scrolls as usual unless the primitive made use of it.
+            if ctx.dispatch(Input::Wheel {
+                part,
+                item: item.clone(),
+                delta: -ev.delta_y() / 100.0,
+                mods,
+            }) {
+                ev.prevent_default();
+            }
+        });
+        let _ = element.add_event_listener_with_callback("wheel", turned.as_ref().unchecked_ref());
+        turned.forget();
+    }
+}
+
+/// The platform's gesture for a context menu goes to a part that takes it, in place
+/// of the browser's own menu.
+fn listen_for_context_menu<P: Primitive + Send + Sync>(
+    ctx: Context<P>,
+    part: P::Part,
+    item: Option<String>,
+    element: &web_sys::Element,
+) {
+    // The platform's gesture for a context menu goes to a part that takes it,// in place of the browser's own menu.
+    if P::context(part) {
+        let asked = Closure::<dyn Fn(web_sys::MouseEvent)>::new(move |ev: web_sys::MouseEvent| {
+            ev.prevent_default();
+            let at = Point::new(f64::from(ev.client_x()), f64::from(ev.client_y()));
+            ctx.dispatch(Input::ContextMenu {
+                part,
+                item: item.clone(),
+                at,
+            });
+        });
+        let _ =
+            element.add_event_listener_with_callback("contextmenu", asked.as_ref().unchecked_ref());
+        asked.forget();
+    }
+}
+
+/// Files dragged from outside the page may be dropped on a part that takes them.
+fn listen_for_drops<P: Primitive + Send + Sync>(
+    ctx: Context<P>,
+    part: P::Part,
+    element: &web_sys::Element,
+) {
+    // Files dragged from outside the page may be dropped on a part that takes them.
+    if P::drops(part) {
+        let over = Closure::<dyn Fn(web_sys::DragEvent)>::new(move |ev: web_sys::DragEvent| {
+            // Without this the browser opens the file instead of handing it over.
+            ev.prevent_default();
+            if ev.type_() == "dragenter" {
+                ctx.dispatch(Input::DragOver { inside: true });
+            }
+        });
+        let left = Closure::<dyn Fn()>::new(move || {
+            ctx.dispatch(Input::DragOver { inside: false });
+        });
+        let dropped = Closure::<dyn Fn(web_sys::DragEvent)>::new(move |ev: web_sys::DragEvent| {
+            ev.prevent_default();
+            let files = crate::files::remember(ev.data_transfer().and_then(|data| data.files()));
+            ctx.dispatch(Input::Files {
+                files,
+                dropped: true,
+            });
+        });
+        for name in ["dragenter", "dragover"] {
+            let _ = element.add_event_listener_with_callback(name, over.as_ref().unchecked_ref());
+        }
+        let _ =
+            element.add_event_listener_with_callback("dragleave", left.as_ref().unchecked_ref());
+        let _ = element.add_event_listener_with_callback("drop", dropped.as_ref().unchecked_ref());
+        over.forget();
+        left.forget();
+        dropped.forget();
+    }
+}
+
+/// A picture inside the part says when it has loaded or failed.
+fn listen_for_loads<P: Primitive + Send + Sync>(
+    ctx: Context<P>,
+    part: P::Part,
+    element: &web_sys::Element,
+) {
+    // A picture inside the part says when it has loaded or failed. Those events
+    // do not bubble, so they are caught on the way down.
+    for (name, ok) in [("load", true), ("error", false)] {
+        let heard = Closure::<dyn Fn()>::new(move || {
+            ctx.dispatch(Input::Loaded { part, ok });
+        });
+        let _ = element.add_event_listener_with_callback_and_bool(
+            name,
+            heard.as_ref().unchecked_ref(),
+            true,
+        );
+        heard.forget();
+    }
+}
+
+/// The events the view layer has no attribute for are listened to on the element
+/// itself, once it is on the page.
+fn listen_on_element<P: Primitive + Send + Sync>(
+    ctx: Context<P>,
+    part: P::Part,
+    item: Option<String>,
+    element: NodeRef<leptos::html::Div>,
+    field: NodeRef<leptos::html::Input>,
+) {
+    Effect::new(move |_| {
+        let node = element.get().map(|node| web_sys::Element::clone(&node));
+        let node = node.or_else(|| field.get().map(|node| web_sys::Element::clone(&node)));
+        let Some(element) = node else { return };
+        let item = item.clone();
+        let for_context = item.clone();
+        let for_wheel = item.clone();
+        let found = Closure::<dyn Fn()>::new(move || {
+            ctx.dispatch(Input::Found {
+                part,
+                item: item.clone(),
+            });
+        });
+        let _ =
+            element.add_event_listener_with_callback("beforematch", found.as_ref().unchecked_ref());
+        found.forget();
+        listen_for_wheel(ctx, part, for_wheel, &element);
+        listen_for_context_menu(ctx, part, for_context, &element);
+        listen_for_drops(ctx, part, &element);
+        listen_for_loads(ctx, part, &element);
+    });
+}
+
+/// The popup this component has open that the pointer may be leaving a part for.
+fn open_popup_of<P: Primitive + Send + Sync>(
+    ctx: Context<P>,
+    part: P::Part,
+    item: Option<&str>,
+) -> Option<Rect> {
+    P::parts()
+        .iter()
+        .copied()
+        .filter(|other| *other != part)
+        .find_map(|other| {
+            P::popup_of(other).filter(|_| P::hovers(other))?;
+            let found = ctx
+                .element_of(other, item)
+                .or_else(|| ctx.element_of(other, None))?;
+            let rect = found.get_bounding_client_rect();
+            (rect.width() > 0.0).then(|| Rect::new(rect.x(), rect.y(), rect.width(), rect.height()))
+        })
+}
+
+/// Puts off `leave` while the pointer crosses from a part towards `popup`. It runs
+/// if the pointer wanders off or stops short, and never if it arrives.
+fn hold_while_crossing(
+    popup: Rect,
+    from: Point,
+    element: NodeRef<leptos::html::Div>,
+    leave: impl Fn() + Clone + 'static,
+) {
+    let axis = if from.y < popup.y || from.y > popup.bottom() {
+        Axis::Y
+    } else {
+        Axis::X
+    };
+    let area = Rc::new(std::cell::RefCell::new(SafeArea::start(
+        from,
+        popup,
+        axis,
+        js_sys::Date::now().cast::<u64>(),
+    )));
+    let last = Rc::new(Cell::new(from));
+    // The shape spanning this part and its popup: a pointer inside it is
+    // still on its way across.
+    let trigger = element.get_untracked().map(|own| {
+        let rect = own.get_bounding_client_rect();
+        Rect::new(rect.x(), rect.y(), rect.width(), rect.height())
+    });
+    let bridged =
+        move |at: Point| trigger.is_some_and(|trigger| popup::bridges(trigger, popup, 4.0, at));
+    let held: Held = Rc::default();
+    // Ends the wait, telling the primitive the pointer left unless it arrived.
+    let finish = {
+        let held = held.clone();
+        move |arrived: bool| {
+            let Some((moves, ticks)) = held.borrow_mut().take() else {
+                return;
+            };
+            moves.remove();
+            ticks.clear();
+            if !arrived {
+                leave();
+            }
+        }
+    };
+    let moves = window_event_listener(leptos::ev::pointermove, {
+        let (area, last, finish) = (area.clone(), last.clone(), finish.clone());
+        move |ev| {
+            let at = Point::new(f64::from(ev.client_x()), f64::from(ev.client_y()));
+            last.set(at);
+            if popup.contains(at) {
+                finish(true);
+            } else if !area
+                .borrow_mut()
+                .contains(at, js_sys::Date::now().cast::<u64>())
+                && !bridged(at)
+            {
+                finish(false);
+            }
+        }
+    });
+    // A pointer that stops short of the popup has left after all.
+    let ticks = set_interval_with_handle(
+        move || {
+            if !area
+                .borrow_mut()
+                .contains(last.get(), js_sys::Date::now().cast::<u64>())
+            {
+                finish(false);
+            }
+        },
+        Duration::from_millis(100),
+    );
+    match ticks {
+        Ok(ticks) => *held.borrow_mut() = Some((moves, ticks)),
+        Err(_) => moves.remove(),
+    }
+}
+
+/// Tells the primitive when the pointer comes to rest on a part or leaves it.
+fn hover_handler<P: Primitive + Send + Sync>(
+    ctx: Context<P>,
+    part: P::Part,
+    item: Option<String>,
+    element: NodeRef<leptos::html::Div>,
+) -> impl Fn(bool, leptos::ev::PointerEvent) + Clone + 'static {
+    let hovers = P::hovers(part);
+    move |inside: bool, ev: leptos::ev::PointerEvent| {
+        // Touch has no hover, so a tap never counts as one.
+        if !hovers || ev.pointer_type() == "touch" {
+            return;
+        }
+        let leave = {
+            let item = item.clone();
+            move || {
+                let now_ms = js_sys::Date::now().cast::<u64>();
+                ctx.dispatch(Input::Hover {
+                    part,
+                    item: item.clone(),
+                    inside,
+                    now_ms,
+                });
+            }
+        };
+        // Leaving for a popup this component has open is not leaving yet: the
+        // pointer may cross the gap, and cut the corner, on its way there.
+        // Leaving for a popup this component has open is not leaving yet: the
+        // pointer may cross the gap, and cut the corner, on its way there.
+        let popup = if inside {
+            None
+        } else {
+            open_popup_of(ctx, part, item.as_deref())
+        };
+        let Some(popup) = popup else {
+            leave();
+            return;
+        };
+        let from = Point::new(f64::from(ev.client_x()), f64::from(ev.client_y()));
+        hold_while_crossing(popup, from, element, leave);
+    }
+}
+
+/// One part of the primitive owned by the nearest `Root`. It renders unstyled, as a
+/// `div`, or as an `input` for a part the person types into, and carries the part's
+/// semantics and event wiring.
+#[component]
+pub fn Part<K>(
+    part: K,
+    /// The item this part belongs to. Required for item parts.
+    #[prop(optional, into)]
+    item: Option<String>,
+    /// For an item, its text for typeahead and agents, which defaults to the rendered
+    /// text. For any other part, its own accessible name.
+    #[prop(optional, into)]
+    label: String,
+    #[prop(optional)] disabled: bool,
+    #[prop(optional)] children: Option<Children>,
+) -> impl IntoView
+where
+    K: PartOf,
+    K::Primitive: Send + Sync,
+{
+    let ctx = expect_context::<Context<K::Primitive>>();
+    let registers = K::Primitive::is_item(part);
+    let tracks_pointer = K::Primitive::tracks_pointer(part);
+    let own_name = (!registers && !label.is_empty()).then(|| label.clone());
+    if registers {
+        register_item(ctx, item.as_ref(), label, disabled);
+    }
+
+    let semantics = Memo::new({
+        let item = item.clone();
+        move |_| ctx.machine.with(|m| m.semantics(part, item.as_deref()))
+    });
+    let role = semantics.get_untracked().role;
+    let names_component = item.is_none()
+        && ctx
+            .machine
+            .with_untracked(armature_core::primitive::Primitive::named_part)
+            == Some(part);
+    // A part the primitive keeps text for is a native field. One that edits its
+    // own content, key by key, is not.
+    let takes_text = matches!(role, Some(Role::TextBox | Role::SpinButton))
+        && ctx
+            .machine
+            .with_untracked(|m| m.text(part, item.as_deref()).is_some());
+
+    let element = NodeRef::<leptos::html::Div>::new();
+    // A part the person types into is an input, not a div.
+    let field = NodeRef::<leptos::html::Input>::new();
+    let presence = animate_presence(semantics, element);
+    let placement = K::Primitive::popup_of(part);
+    keep_popup_placed(ctx, placement, semantics, element);
+    listen_on_element(ctx, part, item.clone(), element, field);
+
+    let on_click = click_handler(ctx, part, item.clone(), semantics);
+    let on_pointerdown = pointerdown_handler(ctx, part, item.clone());
+    let on_focus = focus_handler(ctx, part, item.clone(), semantics);
+    let on_blur = blur_handler(ctx, part, item.clone());
+    let on_keydown = keydown_handler(ctx, semantics, element);
+    let on_paste = paste_handler(ctx, semantics);
+    let hover = hover_handler(ctx, part, item.clone(), element);
+    let (on_enter, on_leave) = (hover.clone(), hover);
+    let scrolls = K::Primitive::scrolls(part);
+    let report_scroll = scroll_reporter(ctx, part, element);
+    if scrolls {
+        // The first report waits a frame, for the part to have a size.
+        Effect::new(move |_| request_animation_frame(report_scroll));
+    }
+
+    let tabindex = move || match semantics.get().focusable {
+        Focusable::No => None,
+        Focusable::Programmatic => Some("-1"),
+        Focusable::TabStop => Some("0"),
+    };
+    let (own_id, related) = part_ids(ctx, part, item.as_deref());
+    sync_attributes(semantics, element, field, related);
 
     let label_text = match (names_component, own_name) {
         (true, _) => Some(ctx.label.get_value()),
@@ -1460,46 +1685,7 @@ where
     let part_name = format!("{part:?}");
 
     if takes_text {
-        let text_item = item.clone();
-        let text = move || {
-            ctx.machine
-                .with(|m| m.text(part, text_item.as_deref()))
-                .unwrap_or_default()
-        };
-        let input_item = item.clone();
-        let on_input = move |ev: leptos::ev::Event| {
-            let value = event_target_value(&ev);
-            ctx.dispatch(Input::Text {
-                part,
-                item: input_item.clone(),
-                value,
-            });
-        };
-        return view! {
-            <input
-                node_ref=field
-                type=move || if semantics.get().obscured { "password" } else { "text" }
-                role=(role == Some(Role::SpinButton)).then_some("spinbutton")
-                aria-label=label_text
-                aria-valuenow=move || range().map(|r| r.now.to_string())
-                aria-valuemin=move || range().map(|r| r.min.to_string())
-                aria-valuemax=move || range().map(|r| r.max.to_string())
-                aria-disabled=move || semantics.get().disabled.then_some("true")
-                autocomplete="off"
-                hidden=move || semantics.get().hidden
-                style:display=move || semantics.get().hidden.then_some("none")
-                prop:value=text
-                id=own_id
-                data-armature=instance
-                data-armature-part=part_name
-                data-value=item
-                on:input=on_input
-                on:focus=on_focus
-                on:blur=on_blur
-                on:keydown=on_keydown
-            />
-        }
-        .into_any();
+        return text_field_view(ctx, part, item, semantics, field, label_text, own_id);
     }
 
     view! {
