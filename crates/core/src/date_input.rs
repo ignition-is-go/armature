@@ -21,19 +21,6 @@ pub enum Segment {
 }
 
 impl Segment {
-    /// Where this segment's value is kept among a date's fields.
-    const fn index(self) -> usize {
-        match self {
-            Self::Year => 0,
-            Self::Month => 1,
-            Self::Day => 2,
-            Self::Hour => 3,
-            Self::Minute => 4,
-            Self::Second => 5,
-            Self::Period => 6,
-        }
-    }
-
     pub const DATE: [Self; 3] = [Self::Year, Self::Month, Self::Day];
     pub const DATE_TIME: [Self; 5] = [Self::Year, Self::Month, Self::Day, Self::Hour, Self::Minute];
     const ALL: [Self; 7] = [
@@ -78,6 +65,42 @@ pub enum Part {
 
 const ACTIONS: &[&str] = &["set", "clear"];
 
+/// What has been given for each piece so far. The hour is on the 24-hour clock.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Fields {
+    year: Option<u32>,
+    month: Option<u32>,
+    day: Option<u32>,
+    hour: Option<u32>,
+    minute: Option<u32>,
+    second: Option<u32>,
+}
+
+impl Fields {
+    /// Sets a piece that is kept as a number. Morning or afternoon is not one.
+    const fn set(&mut self, segment: Segment, number: Option<u32>) {
+        match segment {
+            Segment::Year => self.year = number,
+            Segment::Month => self.month = number,
+            Segment::Day => self.day = number,
+            Segment::Hour => self.hour = number,
+            Segment::Minute => self.minute = number,
+            Segment::Second => self.second = number,
+            Segment::Period => {}
+        }
+    }
+
+    /// The date, once the year, month and day are all given.
+    fn date(self) -> Option<(u32, u32, u32)> {
+        Some((self.year?, self.month?, self.day?))
+    }
+}
+
+/// An hour as shown on a twelve-hour clock, on the 24-hour clock.
+const fn to_24_hour(shown: u32, pm: bool) -> u32 {
+    (shown % 12).saturating_add(if pm { 12 } else { 0 })
+}
+
 /// A date typed one piece at a time.
 ///
 /// Up and Down step a piece, digits fill it and move on when it is full, and Left and
@@ -90,12 +113,13 @@ const ACTIONS: &[&str] = &["set", "clear"];
 )]
 pub struct DateInput {
     with_time: bool,
-    fields: [Option<u32>; 6],
+    fields: Fields,
     focused: Segment,
     /// The digits typed into the focused piece so far.
     typed: String,
     /// The earliest and latest dates taken. A date outside them is refused.
-    limits: (Option<Date>, Option<Date>),
+    earliest: Option<Date>,
+    latest: Option<Date>,
     /// Whether seconds are shown.
     seconds: bool,
     /// Whether the hours run to twelve with a morning or afternoon after them.
@@ -115,10 +139,18 @@ impl DateInput {
     pub const fn new(with_time: bool) -> Self {
         Self {
             with_time,
-            fields: [None; 6],
+            fields: Fields {
+                year: None,
+                month: None,
+                day: None,
+                hour: None,
+                minute: None,
+                second: None,
+            },
             focused: Segment::Year,
             typed: String::new(),
-            limits: (None, None),
+            earliest: None,
+            latest: None,
             seconds: false,
             twelve: false,
             pm: false,
@@ -127,24 +159,21 @@ impl DateInput {
 
     #[must_use]
     pub const fn between(mut self, earliest: Option<Date>, latest: Option<Date>) -> Self {
-        self.limits = (earliest, latest);
+        self.earliest = earliest;
+        self.latest = latest;
         self
     }
 
     /// Whether a complete date lies outside the earliest and latest taken.
-    #[must_use]
-    pub fn out_of_range(&self, fields: &[Option<u32>; 6]) -> bool {
-        let get = |segment: Segment| fields.get(segment.index()).copied().unwrap_or_default();
-        let (Some(year), Some(month), Some(day)) =
-            (get(Segment::Year), get(Segment::Month), get(Segment::Day))
-        else {
+    fn out_of_range(&self, fields: Fields) -> bool {
+        let Some((year, month, day)) = fields.date() else {
             return false;
         };
         let Some(date) = Date::new(year.cast::<i32>(), month.cast::<u8>(), day.cast::<u8>()) else {
             return true;
         };
-        self.limits.0.is_some_and(|earliest| date < earliest)
-            || self.limits.1.is_some_and(|latest| date > latest)
+        self.earliest.is_some_and(|earliest| date < earliest)
+            || self.latest.is_some_and(|latest| date > latest)
     }
 
     /// The pieces shown, in order.
@@ -178,10 +207,16 @@ impl DateInput {
     fn get(&self, segment: Segment) -> Option<u32> {
         match segment {
             Segment::Period => Some(u32::from(self.pm)),
-            Segment::Hour if self.twelve => {
-                self.fields[3].map(|hour| if hour % 12 == 0 { 12 } else { hour % 12 })
-            }
-            other => self.fields.get(other.index()).copied().unwrap_or_default(),
+            Segment::Hour if self.twelve => self
+                .fields
+                .hour
+                .map(|hour| if hour % 12 == 0 { 12 } else { hour % 12 }),
+            Segment::Year => self.fields.year,
+            Segment::Month => self.fields.month,
+            Segment::Day => self.fields.day,
+            Segment::Hour => self.fields.hour,
+            Segment::Minute => self.fields.minute,
+            Segment::Second => self.fields.second,
         }
     }
 
@@ -207,17 +242,24 @@ impl DateInput {
         }
     }
 
-    fn written(&self, fields: &[Option<u32>; 6]) -> Vec<String> {
-        let get = |segment: Segment| fields.get(segment.index()).copied().unwrap_or_default();
-        let (Some(year), Some(month), Some(day)) =
-            (get(Segment::Year), get(Segment::Month), get(Segment::Day))
-        else {
+    /// The value these fields make: nothing while a piece is missing or the date
+    /// lies outside the limits, where it stays on screen to be corrected.
+    fn value_of(&self, fields: Fields) -> Vec<String> {
+        if self.out_of_range(fields) {
+            Vec::new()
+        } else {
+            self.written(fields)
+        }
+    }
+
+    fn written(&self, fields: Fields) -> Vec<String> {
+        let Some((year, month, day)) = fields.date() else {
             return Vec::new();
         };
         let date = format!("{year:04}-{month:02}-{day:02}");
-        match (self.with_time, get(Segment::Hour), get(Segment::Minute)) {
+        match (self.with_time, fields.hour, fields.minute) {
             (false, _, _) => vec![date],
-            (true, Some(hour), Some(minute)) => match (self.seconds, get(Segment::Second)) {
+            (true, Some(hour), Some(minute)) => match (self.seconds, fields.second) {
                 (false, _) => vec![format!("{date}T{hour:02}:{minute:02}")],
                 (true, Some(second)) => vec![format!("{date}T{hour:02}:{minute:02}:{second:02}")],
                 (true, None) => Vec::new(),
@@ -240,39 +282,21 @@ impl DateInput {
             // Morning or afternoon moves the hour to the other half of the day.
             Segment::Period => {
                 let pm = number == Some(1);
-                fields[3] =
-                    fields[3].map(|hour| (hour % 12).saturating_add(if pm { 12 } else { 0 }));
+                fields.hour = fields.hour.map(|hour| to_24_hour(hour, pm));
                 self.pm = pm;
             }
             Segment::Hour if self.twelve => {
-                fields[3] =
-                    number.map(|shown| (shown % 12).saturating_add(if self.pm { 12 } else { 0 }));
+                fields.hour = number.map(|shown| to_24_hour(shown, self.pm));
             }
-            other => {
-                if let Some(field) = fields.get_mut(other.index()) {
-                    *field = number;
-                }
-            }
+            other => fields.set(other, number),
         }
         let trial = Self {
             fields,
             ..self.clone()
         };
         let (_, longest) = trial.limits(Segment::Day);
-        if let Some(day) = fields.get_mut(Segment::Day.index()) {
-            *day = day.map(|day| day.min(longest));
-        }
-        // A date outside the limits is kept on screen to be corrected, but is not a value.
-        let after = if self.out_of_range(&fields) {
-            Vec::new()
-        } else {
-            self.written(&fields)
-        };
-        let before = if self.out_of_range(&self.fields) {
-            Vec::new()
-        } else {
-            self.written(&self.fields)
-        };
+        fields.day = fields.day.map(|day| day.min(longest));
+        let (before, after) = (self.value_of(self.fields), self.value_of(fields));
         if before != after
             && !gate(&ValueChange {
                 value: after,
@@ -341,7 +365,7 @@ impl Primitive for DateInput {
                 let (min, max) = self.limits(segment);
                 Semantics {
                     role: Some(Role::SpinButton),
-                    invalid: self.out_of_range(&self.fields),
+                    invalid: self.out_of_range(self.fields),
                     range: self.get(segment).map(|now| ValueRange {
                         now: f64::from(now),
                         min: f64::from(min),
@@ -476,16 +500,12 @@ impl Primitive for DateInput {
     }
 
     fn value(&self) -> Vec<String> {
-        if self.out_of_range(&self.fields) {
-            Vec::new()
-        } else {
-            self.written(&self.fields)
-        }
+        self.value_of(self.fields)
     }
 
     fn set_value(&mut self, value: Vec<String>) {
         let Some(text) = value.first() else {
-            self.fields = [None; 6];
+            self.fields = Fields::default();
             return;
         };
         let (date, time) = text.split_once('T').unwrap_or((text, ""));
@@ -499,17 +519,18 @@ impl Primitive for DateInput {
             clock.next().flatten(),
         );
         self.pm = hour.is_some_and(|hour| hour >= 12);
-        self.fields = [
-            Some(date.year.cast::<u32>()),
-            Some(u32::from(date.month)),
-            Some(u32::from(date.day)),
+        self.fields = Fields {
+            year: Some(date.year.cast::<u32>()),
+            month: Some(u32::from(date.month)),
+            day: Some(u32::from(date.day)),
             hour,
             minute,
             second,
-        ];
+        };
+        // A date with a time always has one: midnight, when none was written.
         if self.with_time {
-            self.fields[3] = Some(hour.unwrap_or(0).min(23));
-            self.fields[4] = Some(minute.unwrap_or(0).min(59));
+            self.fields.hour = Some(hour.unwrap_or(0).min(23));
+            self.fields.minute = Some(minute.unwrap_or(0).min(59));
         }
     }
 
@@ -527,10 +548,10 @@ impl Primitive for DateInput {
     fn act(&mut self, action: &str, item: Option<&str>, gate: Gate) -> Result<(), ActError> {
         let mut next = self.clone();
         match action {
-            "clear" => next.fields = [None; 6],
+            "clear" => next.fields = Fields::default(),
             "set" => {
                 let text = item.ok_or(ActError::MissingItem { action: "set" })?;
-                next.fields = [None; 6];
+                next.fields = Fields::default();
                 next.set_value(vec![text.to_string()]);
                 if next.value().is_empty() {
                     return Err(ActError::UnknownItem(text.to_string()));
