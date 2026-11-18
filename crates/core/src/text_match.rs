@@ -15,7 +15,9 @@ pub fn match_ranges(query: &str, text: &str) -> Option<Vec<Range<usize>>> {
 
     let mut ranges: Vec<Range<usize>> = Vec::new();
     for index in matched {
-        let (start, ch) = chars.get(index).copied().unwrap_or_default();
+        let Some(&(start, ch)) = chars.get(index) else {
+            continue;
+        };
         let end = start.saturating_add(ch.len_utf8());
         match ranges.last_mut() {
             Some(last) if last.end == start => last.end = end,
@@ -43,18 +45,16 @@ pub fn fuzzy_score(query: &str, text: &str) -> Option<u32> {
         return Some(1000);
     }
     let starts_word = |index: usize| {
-        index == 0
-            || !haystack
-                .get(index.saturating_sub(1))
-                .copied()
-                .unwrap_or_default()
-                .is_alphanumeric()
+        let before = index.checked_sub(1).and_then(|before| haystack.get(before));
+        before.is_none_or(|ch| !ch.is_alphanumeric())
     };
+    // Where the whole query next appears, at `from` or after it.
     let found_at = |from: usize| {
-        (from..haystack
-            .len()
-            .saturating_sub(needle.len().saturating_sub(1)))
-            .find(|at| haystack.get(*at..).unwrap_or_default().starts_with(&needle))
+        haystack
+            .windows(needle.len())
+            .enumerate()
+            .skip(from)
+            .find_map(|(at, window)| (window == needle).then_some(at))
     };
     // Up to 90 more for a query that covers the whole text.
     let coverage: u32 = needle
@@ -77,21 +77,21 @@ pub fn fuzzy_score(query: &str, text: &str) -> Option<u32> {
     // The letters in order, anywhere. Spaces in the query only separate words.
     let (mut position, mut previous, mut bonus, mut letters) = (0, None, 0u32, 0u32);
     for ch in needle.iter().filter(|ch| **ch != ' ') {
-        let found = (position..haystack.len())
-            .find(|at| haystack.get(*at).copied().unwrap_or_default() == *ch)?;
+        let found = (position..haystack.len()).find(|at| haystack.get(*at) == Some(ch))?;
+        let follows_last =
+            previous.is_some_and(|previous: usize| found == previous.saturating_add(1));
         letters = letters.saturating_add(1);
-        bonus = bonus.saturating_add((u32::from(starts_word(found))).saturating_add(u32::from(
-            previous.is_some_and(|previous: usize| found == previous.saturating_add(1)),
-        )));
+        bonus = bonus
+            .saturating_add(u32::from(starts_word(found)))
+            .saturating_add(u32::from(follows_last));
         previous = Some(found);
         position = found.saturating_add(1);
     }
-    (letters > 0).then(|| {
-        ((bonus.saturating_mul(400))
-            .checked_div(letters.saturating_mul(2))
-            .unwrap_or_default())
-        .saturating_add(100)
-    })
+    // From 100 for letters scattered mid-word to 500 when every one earns both bonuses.
+    let earned = bonus
+        .saturating_mul(400)
+        .checked_div(letters.saturating_mul(2))?;
+    Some(earned.saturating_add(100))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -144,13 +144,8 @@ fn substring(query: &[char], chars: &[(usize, char)]) -> Option<Vec<usize>> {
             .all(|(q, (_, c))| same(*q, *c))
     };
     let at_word = |start: &usize| {
-        *start == 0
-            || !chars
-                .get(start.saturating_sub(1))
-                .copied()
-                .unwrap_or_default()
-                .1
-                .is_alphanumeric()
+        let before = start.checked_sub(1).and_then(|before| chars.get(before));
+        before.is_none_or(|(_, ch)| !ch.is_alphanumeric())
     };
     let start = starts
         .clone()

@@ -74,6 +74,11 @@ impl Default for PanelGroup {
 }
 
 impl PanelGroup {
+    /// The size of one panel, or zero for a panel there is none of.
+    fn size_at(&self, at: usize) -> f64 {
+        self.sizes.get(at).copied().unwrap_or_default()
+    }
+
     /// `sizes` are brought to a total of a hundred, keeping their proportions.
     #[must_use]
     pub fn new(opts: Options, sizes: &[f64]) -> Self {
@@ -152,7 +157,7 @@ impl PanelGroup {
     pub fn is_collapsed(&self, panel: usize) -> bool {
         self.panels.get(panel).is_some_and(|limits| {
             limits.collapsible
-                && self.sizes.get(panel).copied().unwrap_or_default() <= limits.collapsed + 1e-6
+                && self.size_at(panel) <= limits.collapsed + 1e-6
                 && limits.collapsed < limits.min
         })
     }
@@ -274,7 +279,7 @@ impl Primitive for PanelGroup {
                 Semantics {
                     role: Some(Role::Separator),
                     range: Some(ValueRange {
-                        now: self.sizes.get(at).copied().unwrap_or_default(),
+                        now: self.size_at(at),
                         min: least,
                         max: most,
                     }),
@@ -438,12 +443,7 @@ impl Primitive for PanelGroup {
         let (at, share) = parsed
             .filter(|(at, _)| at.saturating_add(1) < self.sizes.len())
             .ok_or_else(|| ActError::UnknownItem(given.to_string()))?;
-        let next = self.moved(
-            &self.sizes,
-            at,
-            share - self.sizes.get(at).copied().unwrap_or_default(),
-            1.0,
-        );
+        let next = self.moved(&self.sizes, at, share - self.size_at(at), 1.0);
         if self.commit(next, Source::Agent, Reason::Action, gate) {
             Ok(())
         } else {
