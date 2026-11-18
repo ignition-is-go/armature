@@ -1372,27 +1372,23 @@ fn listen_for_wheel<P: Primitive + Send + Sync>(
     item: Option<String>,
     element: &web_sys::Element,
 ) {
-    // The wheel goes to a part that asks for it at that moment, and scrolls the
-    // page otherwise.
-    {
-        let turned = Closure::<dyn Fn(web_sys::WheelEvent)>::new(move |ev: web_sys::WheelEvent| {
-            if !ctx.machine.with_untracked(|m| m.wheels(part)) {
-                return;
-            }
-            let mods = modifiers(ev.shift_key(), ev.ctrl_key() || ev.meta_key(), ev.alt_key());
-            // The page scrolls as usual unless the primitive made use of it.
-            if ctx.dispatch(Input::Wheel {
-                part,
-                item: item.clone(),
-                delta: -ev.delta_y() / 100.0,
-                mods,
-            }) {
-                ev.prevent_default();
-            }
-        });
-        let _ = element.add_event_listener_with_callback("wheel", turned.as_ref().unchecked_ref());
-        turned.forget();
-    }
+    let turned = Closure::<dyn Fn(web_sys::WheelEvent)>::new(move |ev: web_sys::WheelEvent| {
+        if !ctx.machine.with_untracked(|m| m.wheels(part)) {
+            return;
+        }
+        let mods = modifiers(ev.shift_key(), ev.ctrl_key() || ev.meta_key(), ev.alt_key());
+        // The page scrolls as usual unless the primitive made use of it.
+        if ctx.dispatch(Input::Wheel {
+            part,
+            item: item.clone(),
+            delta: -ev.delta_y() / 100.0,
+            mods,
+        }) {
+            ev.prevent_default();
+        }
+    });
+    let _ = element.add_event_listener_with_callback("wheel", turned.as_ref().unchecked_ref());
+    turned.forget();
 }
 
 /// The platform's gesture for a context menu goes to a part that takes it, in place
@@ -1403,7 +1399,6 @@ fn listen_for_context_menu<P: Primitive + Send + Sync>(
     item: Option<String>,
     element: &web_sys::Element,
 ) {
-    // The platform's gesture for a context menu goes to a part that takes it,// in place of the browser's own menu.
     if P::context(part) {
         let asked = Closure::<dyn Fn(web_sys::MouseEvent)>::new(move |ev: web_sys::MouseEvent| {
             ev.prevent_default();
@@ -1426,7 +1421,6 @@ fn listen_for_drops<P: Primitive + Send + Sync>(
     part: P::Part,
     element: &web_sys::Element,
 ) {
-    // Files dragged from outside the page may be dropped on a part that takes them.
     if P::drops(part) {
         let over = Closure::<dyn Fn(web_sys::DragEvent)>::new(move |ev: web_sys::DragEvent| {
             // Without this the browser opens the file instead of handing it over.
@@ -1458,14 +1452,30 @@ fn listen_for_drops<P: Primitive + Send + Sync>(
     }
 }
 
+/// Find-in-page matching text inside a part that hides it, which may then show it.
+fn listen_for_find<P: Primitive + Send + Sync>(
+    ctx: Context<P>,
+    part: P::Part,
+    item: Option<String>,
+    element: &web_sys::Element,
+) {
+    let found = Closure::<dyn Fn()>::new(move || {
+        ctx.dispatch(Input::Found {
+            part,
+            item: item.clone(),
+        });
+    });
+    let _ = element.add_event_listener_with_callback("beforematch", found.as_ref().unchecked_ref());
+    found.forget();
+}
+
 /// A picture inside the part says when it has loaded or failed.
 fn listen_for_loads<P: Primitive + Send + Sync>(
     ctx: Context<P>,
     part: P::Part,
     element: &web_sys::Element,
 ) {
-    // A picture inside the part says when it has loaded or failed. Those events
-    // do not bubble, so they are caught on the way down.
+    // Those events do not bubble, so they are caught on the way down.
     for (name, ok) in [("load", true), ("error", false)] {
         let heard = Closure::<dyn Fn()>::new(move || {
             ctx.dispatch(Input::Loaded { part, ok });
@@ -1489,22 +1499,12 @@ fn listen_on_element<P: Primitive + Send + Sync>(
     field: NodeRef<leptos::html::Input>,
 ) {
     Effect::new(move |_| {
-        let node = drawn_element(element, field);
-        let Some(element) = node else { return };
-        let item = item.clone();
-        let for_context = item.clone();
-        let for_wheel = item.clone();
-        let found = Closure::<dyn Fn()>::new(move || {
-            ctx.dispatch(Input::Found {
-                part,
-                item: item.clone(),
-            });
-        });
-        let _ =
-            element.add_event_listener_with_callback("beforematch", found.as_ref().unchecked_ref());
-        found.forget();
-        listen_for_wheel(ctx, part, for_wheel, &element);
-        listen_for_context_menu(ctx, part, for_context, &element);
+        let Some(element) = drawn_element(element, field) else {
+            return;
+        };
+        listen_for_find(ctx, part, item.clone(), &element);
+        listen_for_wheel(ctx, part, item.clone(), &element);
+        listen_for_context_menu(ctx, part, item.clone(), &element);
         listen_for_drops(ctx, part, &element);
         listen_for_loads(ctx, part, &element);
     });
