@@ -331,7 +331,7 @@ impl<P: Primitive> Machine<P> {
     }
 
     /// The primitive itself, for what only it knows, such as a slider's fraction.
-    pub fn primitive(&self) -> &P {
+    pub const fn primitive(&self) -> &P {
         &self.machine
     }
 
@@ -383,7 +383,7 @@ impl<P: Primitive> Machine<P> {
 
     /// Whether the person is driving this primitive from the keyboard or with a
     /// pointer, for showing focus boldly for the keyboard alone.
-    pub fn modality(&self) -> armature_core::preference::Modality {
+    pub const fn modality(&self) -> armature_core::preference::Modality {
         if self.by_keyboard {
             armature_core::preference::Modality::Keyboard
         } else {
@@ -506,10 +506,7 @@ impl<P: Primitive> Machine<P> {
         let meant = key.filter(|_| cfg!(target_os = "macos")).and_then(|key| {
             armature_core::keys::apple_key(key, held.control, held.platform, held.shift || held.alt)
         });
-        let (key, mods) = match meant {
-            Some(meant) => (Some(meant), Modifiers::default()),
-            None => (key, mods),
-        };
+        let (key, mods) = meant.map_or((key, mods), |meant| (Some(meant), Modifiers::default()));
         if key.is_some_and(|key| self.dispatch(Input::Key { key, mods, now_ms }, window, cx)) {
             return true;
         }
@@ -1119,7 +1116,7 @@ pub fn part<K: PartOf>(
         _ if semantics.hidden => Layout::Hidden,
         None => Layout::Inline,
         // A popup that belongs to an item sits against that item's own anchor.
-        Some(placement) => match machine
+        Some(placement) => machine
             .machine
             .popup_point()
             // A popup called up at a point, as a context menu is, sits against it.
@@ -1136,10 +1133,9 @@ pub fn part<K: PartOf>(
                     .copied()
             })
             .or_else(|| machine.bounds.get(&(placement.anchor, None)).copied())
-        {
-            Some(anchor) => floating(placement.side, placement.align, placement.gap, anchor),
-            None => Layout::Hidden,
-        },
+            .map_or(Layout::Hidden, |anchor| {
+                floating(placement.side, placement.align, placement.gap, anchor)
+            }),
     };
     let links = {
         let relations = K::Primitive::relations(part);
@@ -1455,7 +1451,7 @@ fn key_from_keystroke(keystroke: &gpui::Keystroke) -> Option<Key> {
     })
 }
 
-fn modifiers(modifiers: gpui::Modifiers) -> Modifiers {
+const fn modifiers(modifiers: gpui::Modifiers) -> Modifiers {
     Modifiers {
         shift: modifiers.shift,
         ctrl: modifiers.control || modifiers.platform,
@@ -1463,7 +1459,7 @@ fn modifiers(modifiers: gpui::Modifiers) -> Modifiers {
     }
 }
 
-fn accessibility_role(role: Role) -> gpui::Role {
+const fn accessibility_role(role: Role) -> gpui::Role {
     match role {
         Role::Listbox => gpui::Role::ListBox,
         Role::Option => gpui::Role::ListBoxOption,

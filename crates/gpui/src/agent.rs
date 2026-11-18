@@ -133,7 +133,7 @@ pub fn handle(request: &str, cx: &mut App) -> String {
                 .map(|step| Step {
                     target: step["target"]
                         .as_str()
-                        .or(step["ref"].as_str())
+                        .or_else(|| step["ref"].as_str())
                         .unwrap_or_default()
                         .to_string(),
                     action: step["action"].as_str().unwrap_or_default().to_string(),

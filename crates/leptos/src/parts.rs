@@ -1180,13 +1180,9 @@ where
         // Apple platforms have their own keys for the ends of a list and for
         // stepping through one.
         let others = ev.shift_key() || ev.alt_key();
-        let (key, mods) =
-            match armature_core::keys::apple_key(key, ev.ctrl_key(), ev.meta_key(), others)
-                .filter(|_| on_apple())
-            {
-                Some(meant) => (meant, Modifiers::default()),
-                None => (key, mods),
-            };
+        let (key, mods) = armature_core::keys::apple_key(key, ev.ctrl_key(), ev.meta_key(), others)
+            .filter(|_| on_apple())
+            .map_or((key, mods), |meant| (meant, Modifiers::default()));
         let now_ms = js_sys::Date::now().cast::<u64>();
         if ctx.dispatch(Input::Key { key, mods, now_ms }) {
             ev.prevent_default();
@@ -1368,9 +1364,11 @@ where
     // Related parts find each other by id. Parts that share an item share its key.
     let id_of = {
         let (instance, item) = (ctx.instance, item.clone());
-        move |part: K| match &item {
-            Some(item) => format!("armature-{instance}-{part:?}-{item}"),
-            None => format!("armature-{instance}-{part:?}"),
+        move |part: K| {
+            item.as_ref().map_or_else(
+                || format!("armature-{instance}-{part:?}"),
+                |item| format!("armature-{instance}-{part:?}-{item}"),
+            )
         }
     };
     let relations = K::Primitive::relations(part);
@@ -1425,10 +1423,10 @@ where
             ("data-active", state.active.then(String::new)),
         ];
         for (name, value) in attributes {
-            let _ = match value {
-                Some(value) => element.set_attribute(name, &value),
-                None => element.remove_attribute(name),
-            };
+            let _ = value.map_or_else(
+                || element.remove_attribute(name),
+                |value| element.set_attribute(name, &value),
+            );
         }
     });
 

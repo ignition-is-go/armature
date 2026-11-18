@@ -9,20 +9,20 @@ fn visible_now() -> Rect {
     let size = |value: Result<wasm_bindgen::JsValue, wasm_bindgen::JsValue>| {
         value.ok().and_then(|value| value.as_f64()).unwrap_or(0.0)
     };
-    match window().visual_viewport() {
-        Some(visible) => Rect {
-            x: visible.offset_left(),
-            y: visible.offset_top(),
-            width: visible.width(),
-            height: visible.height(),
-        },
-        None => Rect {
+    window().visual_viewport().map_or_else(
+        || Rect {
             x: 0.0,
             y: 0.0,
             width: size(window().inner_width()),
             height: size(window().inner_height()),
         },
-    }
+        |visible| Rect {
+            x: visible.offset_left(),
+            y: visible.offset_top(),
+            width: visible.width(),
+            height: visible.height(),
+        },
+    )
 }
 
 /// The part of the window that is actually showing, which shrinks when an on-screen
