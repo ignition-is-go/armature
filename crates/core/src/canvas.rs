@@ -143,7 +143,7 @@ impl Canvas {
     /// Where to draw a node, relative to the surface's corner, after pan and zoom.
     #[must_use]
     pub fn screen_rect(&self, key: &str) -> Option<Rect> {
-        let rect = self.nodes.iter().find(|node| node.key == key)?.rect;
+        let rect = self.node(key)?.rect;
         let corner = self.view.to_screen(Point::new(rect.x, rect.y));
         Some(Rect::new(
             corner.x,
@@ -166,7 +166,7 @@ impl Canvas {
     }
 
     fn has(&self, key: &str) -> bool {
-        self.nodes.iter().any(|node| node.key == key)
+        self.node(key).is_some()
     }
 
     /// The pointer's position on the canvas itself.
@@ -178,17 +178,31 @@ impl Canvas {
         ))
     }
 
+    /// Offers the nodes as they now stand to the owner.
+    fn offer(&self, source: Source, reason: Reason, gate: Gate) -> bool {
+        gate(&ValueChange {
+            value: written(&self.nodes),
+            source,
+            reason,
+        })
+    }
+
+    fn node(&self, key: &str) -> Option<&Node> {
+        self.nodes.iter().find(|node| node.key == key)
+    }
+
+    /// Every node's key and where it is, for the geometry helpers.
+    fn boxes(&self) -> impl Iterator<Item = (String, Rect)> + '_ {
+        self.nodes.iter().map(|node| (node.key.clone(), node.rect))
+    }
+
     /// Asks the owner about the nodes as they now stand. Agreement is recorded for
     /// undo; a refusal puts `before` back.
     fn settle(&mut self, before: Vec<Node>, source: Source, reason: Reason, gate: Gate) -> bool {
         if self.nodes == before {
             return true;
         }
-        let allowed = gate(&ValueChange {
-            value: written(&self.nodes),
-            source,
-            reason,
-        });
+        let allowed = self.offer(source, reason, gate);
         if allowed {
             self.history.record(self.nodes.clone());
         } else {
@@ -202,11 +216,7 @@ impl Canvas {
         if self.nodes == before {
             return true;
         }
-        let allowed = gate(&ValueChange {
-            value: written(&self.nodes),
-            source,
-            reason,
-        });
+        let allowed = self.offer(source, reason, gate);
         if !allowed {
             self.nodes = before;
         }
@@ -266,22 +276,49 @@ impl Canvas {
         else {
             return Reaction::default();
         };
-        let origin = self
-            .nodes
-            .iter()
-            .find(|node| node.key == from)
-            .map(|node| node.rect)
-            .unwrap_or_default();
-        let others: Vec<(String, Rect)> = self
-            .nodes
-            .iter()
-            .filter(|node| node.key != from)
-            .map(|node| (node.key.clone(), node.rect))
-            .collect();
+        let origin = self.node(&from).map(|node| node.rect).unwrap_or_default();
+        let others: Vec<(String, Rect)> = self.boxes().filter(|(key, _)| *key != from).collect();
         if let Some(next) = nearest_in_direction(&others, origin, direction) {
             self.selected = vec![next];
         }
         Reaction::handled()
+    }
+
+    /// The gesture a press begins: a pan or a selection rectangle on the surface,
+    /// a move on a node, a resize on its corner.
+    fn gesture_begun(&mut self, pointer: &Pointer<Part>, at: Point) -> Option<Gesture> {
+        let key = pointer.item.clone().filter(|key| self.has(key));
+        match (pointer.part, key) {
+            (Part::Surface, _) if pointer.mods.alt => Some(Gesture::Pan { last: pointer.at }),
+            (Part::Surface, _) => {
+                let before = self.selected.clone();
+                self.selected = lasso_selection(&before, &[], pointer.mods);
+                Some(Gesture::Lasso {
+                    from: at,
+                    to: at,
+                    before,
+                    mods: pointer.mods,
+                })
+            }
+            (Part::Node, Some(key)) => {
+                if !self.selected.contains(&key) {
+                    if !pointer.mods.shift {
+                        self.selected.clear();
+                    }
+                    self.selected.push(key);
+                }
+                Some(Gesture::Move {
+                    from: at,
+                    origin: self.nodes.clone(),
+                })
+            }
+            (Part::Resize, Some(key)) => Some(Gesture::Resize {
+                key,
+                from: at,
+                origin: self.nodes.clone(),
+            }),
+            _ => None,
+        }
     }
 
     /// A pointer moving with a gesture under way: a lasso grows, nodes are carried,
@@ -291,11 +328,7 @@ impl Canvas {
             Some(Gesture::Lasso {
                 from, before, mods, ..
             }) => {
-                let boxes: Vec<(String, Rect)> = self
-                    .nodes
-                    .iter()
-                    .map(|node| (node.key.clone(), node.rect))
-                    .collect();
+                let boxes: Vec<(String, Rect)> = self.boxes().collect();
                 self.selected = lasso_selection(&before, &lasso_hits(from, at, &boxes), mods);
                 self.gesture = Some(Gesture::Lasso {
                     from,
@@ -399,6 +432,7 @@ impl Primitive for Canvas {
             },
         }
     }
+
     fn send(&mut self, input: Input<Part>, gate: Gate) -> Reaction<Part> {
         match input {
             Input::Press {
@@ -485,6 +519,7 @@ impl Primitive for Canvas {
             _ => Reaction::default(),
         }
     }
+
     fn pointer(
         &mut self,
         pointer: Pointer<Part>,
@@ -494,40 +529,7 @@ impl Primitive for Canvas {
         let at = self.canvas_point(&pointer, measure);
         match pointer.phase {
             PointerPhase::Down => {
-                let key = pointer.item.clone().filter(|key| self.has(key));
-                self.gesture = match (pointer.part, key) {
-                    (Part::Surface, _) if pointer.mods.alt => {
-                        Some(Gesture::Pan { last: pointer.at })
-                    }
-                    (Part::Surface, _) => {
-                        let before = self.selected.clone();
-                        self.selected = lasso_selection(&before, &[], pointer.mods);
-                        Some(Gesture::Lasso {
-                            from: at,
-                            to: at,
-                            before,
-                            mods: pointer.mods,
-                        })
-                    }
-                    (Part::Node, Some(key)) => {
-                        if !self.selected.contains(&key) {
-                            if !pointer.mods.shift {
-                                self.selected.clear();
-                            }
-                            self.selected.push(key);
-                        }
-                        Some(Gesture::Move {
-                            from: at,
-                            origin: self.nodes.clone(),
-                        })
-                    }
-                    (Part::Resize, Some(key)) => Some(Gesture::Resize {
-                        key,
-                        from: at,
-                        origin: self.nodes.clone(),
-                    }),
-                    _ => None,
-                };
+                self.gesture = self.gesture_begun(&pointer, at);
                 Reaction::focusing(Part::Surface).with(Effect::CapturePointer)
             }
             PointerPhase::Move => self.pointer_moved(&pointer, at),
