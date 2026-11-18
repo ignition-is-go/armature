@@ -73,6 +73,11 @@ impl Rating {
         (shown - (f64::from(star) - 1.0)).clamp(0.0, 1.0)
     }
 
+    /// A rating on the nearest whole or half star, from none to the most.
+    fn snapped(&self, value: f64) -> f64 {
+        ((value / self.step()).round() * self.step()).clamp(0.0, f64::from(self.opts.max))
+    }
+
     fn written(value: f64) -> Vec<String> {
         if value > 0.0 {
             vec![value.to_string()]
@@ -82,8 +87,7 @@ impl Rating {
     }
 
     fn set(&mut self, value: f64, source: Source, reason: Reason, gate: Gate) -> bool {
-        let value =
-            ((value / self.step()).round() * self.step()).clamp(0.0, f64::from(self.opts.max));
+        let value = self.snapped(value);
         if (value - self.value).abs() < f64::EPSILON {
             return true;
         }
@@ -242,8 +246,7 @@ impl Primitive for Rating {
             .first()
             .and_then(|text| read_number(text))
             .unwrap_or(0.0);
-        self.value =
-            ((number / self.step()).round() * self.step()).clamp(0.0, f64::from(self.opts.max));
+        self.value = self.snapped(number);
     }
 
     fn snapshot(&self, label: &str) -> Snapshot {
