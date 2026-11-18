@@ -28,7 +28,7 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        Options {
+        Self {
             range: Span {
                 start: 0.0,
                 end: 24.0,
@@ -91,25 +91,29 @@ fn read(entry: &str) -> Option<(String, Span)> {
 }
 
 impl Timeline {
+    #[must_use]
     pub fn new(opts: Options) -> Self {
-        Timeline {
+        Self {
             opts,
             ..Default::default()
         }
     }
 
+    #[must_use]
     pub fn spans(&self) -> &[(String, Span)] {
         &self.spans
     }
 
     /// The lane each span sits in so that overlapping spans do not cover each other,
     /// in the same order as `spans`.
+    #[must_use]
     pub fn lanes(&self) -> Vec<usize> {
         let spans: Vec<Span> = self.spans.iter().map(|(_, span)| *span).collect();
         stack_spans(&spans)
     }
 
     /// Where a span sits along the track, as fractions of its length.
+    #[must_use]
     pub fn position_of(&self, span: Span) -> (f64, f64) {
         let length = (self.opts.range.end - self.opts.range.start).max(f64::MIN_POSITIVE);
         (
@@ -138,7 +142,10 @@ impl Timeline {
     fn value_at(&self, pointer: &Pointer<Part>, measure: Measure<Part>) -> Option<f64> {
         let track = measure(Part::Track, None)?;
         let along = ((pointer.at.x - track.x) / track.width.max(f64::MIN_POSITIVE)).clamp(0.0, 1.0);
-        Some(self.opts.range.start + along * (self.opts.range.end - self.opts.range.start))
+        Some(along.mul_add(
+            self.opts.range.end - self.opts.range.start,
+            self.opts.range.start,
+        ))
     }
 
     /// Asks the owner about the spans as they now stand. A refusal puts back `before`.
@@ -318,7 +325,7 @@ impl Primitive for Timeline {
                 let (grid, min) = (Some(self.opts.grid), self.opts.min_length);
                 match self.gesture.clone() {
                     Some(Gesture::Draw { key, from }) => {
-                        self.put(&key, draw_span(from, at, min, grid))
+                        self.put(&key, draw_span(from, at, min, grid));
                     }
                     Some(Gesture::Slide {
                         key,

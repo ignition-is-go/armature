@@ -33,7 +33,8 @@ pub struct InputHints {
 
 /// The hints for a kind of field. The names are the web's, which other platforms map
 /// from.
-pub fn input_hints(kind: FieldKind) -> InputHints {
+#[must_use]
+pub const fn input_hints(kind: FieldKind) -> InputHints {
     let plain = InputHints {
         keyboard: "text",
         autofill: "off",

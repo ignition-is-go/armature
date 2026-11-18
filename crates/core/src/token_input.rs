@@ -118,7 +118,7 @@ impl Primitive for TokenInput {
                 let rest = pieces.pop().unwrap_or_default().to_string();
                 let mut tokens = self.tokens.clone();
                 for piece in pieces {
-                    tokens = TokenInput {
+                    tokens = Self {
                         tokens,
                         draft: String::new(),
                     }

@@ -25,8 +25,9 @@ pub enum ScrollAlign {
 }
 
 impl Virtualizer {
+    #[must_use]
     pub fn new(count: usize, estimate: f64, gap: f64) -> Self {
-        Virtualizer {
+        Self {
             count,
             estimate,
             gap,
@@ -46,18 +47,21 @@ impl Virtualizer {
     }
 
     /// Where row `index` starts.
+    #[must_use]
     pub fn offset_of(&self, index: usize) -> f64 {
         (0..index.min(self.count))
             .map(|i| self.size(i) + self.gap)
             .sum()
     }
 
+    #[must_use]
     pub fn total_size(&self) -> f64 {
         (self.offset_of(self.count) - self.gap).max(0.0)
     }
 
     /// The rows to render for a viewport scrolled to `offset`, with `overscan` extra
     /// rows on each side so scrolling does not show gaps.
+    #[must_use]
     pub fn range(&self, offset: f64, viewport: f64, overscan: usize) -> Range<usize> {
         let mut start = 0.0;
         let mut first = None;
@@ -77,6 +81,7 @@ impl Virtualizer {
     }
 
     /// The scroll offset that brings row `index` into view at `align`.
+    #[must_use]
     pub fn scroll_to(&self, index: usize, align: ScrollAlign, viewport: f64) -> f64 {
         let index = index.min(self.count.saturating_sub(1));
         let (start, size) = (
@@ -107,7 +112,7 @@ pub struct StickToBottom {
 
 impl Default for StickToBottom {
     fn default() -> Self {
-        StickToBottom {
+        Self {
             following: true,
             slack: 24.0,
         }
@@ -115,7 +120,8 @@ impl Default for StickToBottom {
 }
 
 impl StickToBottom {
-    pub fn is_following(&self) -> bool {
+    #[must_use]
+    pub const fn is_following(&self) -> bool {
         self.following
     }
 
@@ -126,17 +132,19 @@ impl StickToBottom {
     }
 
     /// Content was added. Returns the offset to scroll to, if following.
+    #[must_use]
     pub fn content_grew(&self, viewport: f64, content: f64) -> Option<f64> {
         self.following.then(|| (content - viewport).max(0.0))
     }
 
     /// Jumps back to the newest content and resumes following.
-    pub fn follow(&mut self) {
+    pub const fn follow(&mut self) {
         self.following = true;
     }
 }
 
 /// The option centred in a wheel picker scrolled to `offset`.
+#[must_use]
 pub fn picker_index(offset: f64, item_size: f64, count: usize) -> usize {
     if count == 0 || item_size <= 0.0 {
         return 0;
@@ -146,6 +154,7 @@ pub fn picker_index(offset: f64, item_size: f64, count: usize) -> usize {
 
 /// The option a wheel picker comes to rest on when released moving at `velocity`
 /// (units per second).
+#[must_use]
 pub fn picker_settle(offset: f64, velocity: f64, item_size: f64, count: usize) -> usize {
     picker_index(
         offset + project_distance(velocity, DECELERATION),
@@ -161,6 +170,7 @@ pub const EDGE_SPEED: f64 = 1080.0;
 
 /// How fast to scroll a container, in units per second on each axis, while a drag is
 /// at `at`. Scrolling starts within `zone` of an edge and speeds up towards it.
+#[must_use]
 pub fn edge_scroll(container: Rect, at: Point, zone: f64, max_speed: f64) -> Point {
     let axis = |position: f64, start: f64, end: f64| {
         // A small container gets a narrower band, never more than a third of it.
@@ -182,6 +192,7 @@ pub fn edge_scroll(container: Rect, at: Point, zone: f64, max_speed: f64) -> Poi
 /// How far to lift content so a focused field clears an on-screen keyboard. `visible`
 /// is the part of the window the keyboard has left showing. Zero when the field
 /// already shows, with `margin` to spare.
+#[must_use]
 pub fn avoid_keyboard(field: Rect, visible: Rect, margin: f64) -> f64 {
     (field.bottom() + margin - visible.bottom()).max(0.0)
 }

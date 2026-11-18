@@ -19,7 +19,7 @@ pub struct Options {
     pub range: NumberRange,
     pub orientation: Orientation,
     pub dir: Dir,
-    /// How far PageUp, PageDown and Shift with an arrow move a grip.
+    /// How far `PageUp`, `PageDown` and Shift with an arrow move a grip.
     pub large_step: f64,
     /// The fewest steps two neighbouring grips may sit apart.
     pub min_steps_between: f64,
@@ -27,7 +27,7 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        Options {
+        Self {
             range: NumberRange::new(0.0, 100.0, 1.0),
             orientation: Orientation::Horizontal,
             dir: Dir::Ltr,
@@ -52,7 +52,7 @@ pub struct RangeSlider {
 
 impl Default for RangeSlider {
     fn default() -> Self {
-        RangeSlider::new(Options::default(), &[25.0, 75.0])
+        Self::new(Options::default(), &[25.0, 75.0])
     }
 }
 
@@ -60,7 +60,7 @@ impl RangeSlider {
     pub fn new(opts: Options, values: &[f64]) -> Self {
         let mut values: Vec<f64> = values.iter().map(|value| opts.range.snap(*value)).collect();
         values.sort_by(f64::total_cmp);
-        RangeSlider {
+        Self {
             opts,
             values,
             dragging: None,
@@ -68,11 +68,13 @@ impl RangeSlider {
         }
     }
 
+    #[must_use]
     pub fn values(&self) -> &[f64] {
         &self.values
     }
 
     /// Where each grip sits along the track, from 0 to 1.
+    #[must_use]
     pub fn fractions(&self) -> Vec<f64> {
         self.values
             .iter()
@@ -217,8 +219,8 @@ impl Primitive for RangeSlider {
                 let next = match key {
                     Key::ArrowUp => now + step,
                     Key::ArrowDown => now - step,
-                    Key::ArrowRight => now + step * forward,
-                    Key::ArrowLeft => now - step * forward,
+                    Key::ArrowRight => f64::mul_add(step, forward, now),
+                    Key::ArrowLeft => f64::mul_add(step, -forward, now),
                     Key::PageUp => now + self.opts.large_step,
                     Key::PageDown => now - self.opts.large_step,
                     // As far as the neighbours allow.

@@ -41,15 +41,19 @@ impl Preference {
     /// Starts from the stored choice if it is still one of `options`, else from
     /// `fallback`.
     pub fn load(key: &str, options: &[&str], fallback: &str, storage: &dyn Storage) -> Self {
-        let options: Vec<String> = options.iter().map(|option| option.to_string()).collect();
+        let options: Vec<String> = options
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect();
         let stored = storage.get(key).filter(|value| options.contains(value));
-        Preference {
+        Self {
             key: key.to_string(),
             options,
             value: stored.unwrap_or_else(|| fallback.to_string()),
         }
     }
 
+    #[must_use]
     pub fn value(&self) -> &str {
         &self.value
     }
@@ -77,29 +81,32 @@ pub enum ColorScheme {
 impl ColorScheme {
     pub const OPTIONS: [&'static str; 3] = ["light", "dark", "system"];
 
-    pub fn parse(name: &str) -> Option<ColorScheme> {
+    #[must_use]
+    pub fn parse(name: &str) -> Option<Self> {
         Some(match name {
-            "light" => ColorScheme::Light,
-            "dark" => ColorScheme::Dark,
-            "system" => ColorScheme::System,
+            "light" => Self::Light,
+            "dark" => Self::Dark,
+            "system" => Self::System,
             _ => return None,
         })
     }
 
-    pub fn name(self) -> &'static str {
+    #[must_use]
+    pub const fn name(self) -> &'static str {
         match self {
-            ColorScheme::Light => "light",
-            ColorScheme::Dark => "dark",
-            ColorScheme::System => "system",
+            Self::Light => "light",
+            Self::Dark => "dark",
+            Self::System => "system",
         }
     }
 
     /// Whether to render dark, given what the operating system currently prefers.
-    pub fn is_dark(self, system_prefers_dark: bool) -> bool {
+    #[must_use]
+    pub const fn is_dark(self, system_prefers_dark: bool) -> bool {
         match self {
-            ColorScheme::Light => false,
-            ColorScheme::Dark => true,
-            ColorScheme::System => system_prefers_dark,
+            Self::Light => false,
+            Self::Dark => true,
+            Self::System => system_prefers_dark,
         }
     }
 }
@@ -114,17 +121,15 @@ pub enum PointerKind {
 }
 
 impl PointerKind {
+    #[must_use]
     pub fn hovers(self) -> bool {
-        self == PointerKind::Mouse
+        self == Self::Mouse
     }
 
     /// The smallest comfortable target, in logical pixels.
+    #[must_use]
     pub fn min_target(self) -> f64 {
-        if self == PointerKind::Touch {
-            44.0
-        } else {
-            24.0
-        }
+        if self == Self::Touch { 44.0 } else { 24.0 }
     }
 }
 
@@ -153,6 +158,7 @@ pub struct StoredAttribute<'a> {
 /// before anything is painted, so the page never flashes the default first. It reads
 /// `localStorage`, then a cookie of the same name. A colour scheme stored as
 /// `system` is resolved to what the operating system prefers.
+#[must_use]
 pub fn preferences_script(choices: &[StoredAttribute]) -> String {
     // Keys and values go through a JSON-style quote so nothing in them can end the string.
     let quote = |text: &str| -> String {

@@ -161,31 +161,31 @@ impl<Part> Input<Part> {
     /// out of others. `None` if it names a part the other does not have.
     pub fn for_parts<Other>(self, to: impl Fn(Part) -> Option<Other>) -> Option<Input<Other>> {
         Some(match self {
-            Input::Key { key, mods, now_ms } => Input::Key { key, mods, now_ms },
-            Input::Press { part, item, mods } => Input::Press {
+            Self::Key { key, mods, now_ms } => Input::Key { key, mods, now_ms },
+            Self::Press { part, item, mods } => Input::Press {
                 part: to(part)?,
                 item,
                 mods,
             },
-            Input::Focus { part, item } => Input::Focus {
+            Self::Focus { part, item } => Input::Focus {
                 part: to(part)?,
                 item,
             },
-            Input::Blur { part, item } => Input::Blur {
+            Self::Blur { part, item } => Input::Blur {
                 part: to(part)?,
                 item,
             },
-            Input::Found { part, item } => Input::Found {
+            Self::Found { part, item } => Input::Found {
                 part: to(part)?,
                 item,
             },
-            Input::Loaded { part, ok } => Input::Loaded {
+            Self::Loaded { part, ok } => Input::Loaded {
                 part: to(part)?,
                 ok,
             },
-            Input::PressOutside => Input::PressOutside,
-            Input::Hotkey { shortcut } => Input::Hotkey { shortcut },
-            Input::Wheel {
+            Self::PressOutside => Input::PressOutside,
+            Self::Hotkey { shortcut } => Input::Hotkey { shortcut },
+            Self::Wheel {
                 part,
                 item,
                 delta,
@@ -196,21 +196,21 @@ impl<Part> Input<Part> {
                 delta,
                 mods,
             },
-            Input::ContextMenu { part, item, at } => Input::ContextMenu {
+            Self::ContextMenu { part, item, at } => Input::ContextMenu {
                 part: to(part)?,
                 item,
                 at,
             },
-            Input::Files { files, dropped } => Input::Files { files, dropped },
-            Input::DragOver { inside } => Input::DragOver { inside },
-            Input::WindowBlur => Input::WindowBlur,
-            Input::Tick { now_ms } => Input::Tick { now_ms },
-            Input::Text { part, item, value } => Input::Text {
+            Self::Files { files, dropped } => Input::Files { files, dropped },
+            Self::DragOver { inside } => Input::DragOver { inside },
+            Self::WindowBlur => Input::WindowBlur,
+            Self::Tick { now_ms } => Input::Tick { now_ms },
+            Self::Text { part, item, value } => Input::Text {
                 part: to(part)?,
                 item,
                 value,
             },
-            Input::Hover {
+            Self::Hover {
                 part,
                 item,
                 inside,
@@ -221,7 +221,7 @@ impl<Part> Input<Part> {
                 inside,
                 now_ms,
             },
-            Input::Scrolled {
+            Self::Scrolled {
                 part,
                 offset,
                 viewport,
@@ -234,7 +234,7 @@ impl<Part> Input<Part> {
                 content,
                 now_ms,
             },
-            Input::Paste { text } => Input::Paste { text },
+            Self::Paste { text } => Input::Paste { text },
         })
     }
 }
@@ -264,7 +264,7 @@ pub struct Reaction<Part> {
 
 impl<Part> Default for Reaction<Part> {
     fn default() -> Self {
-        Reaction {
+        Self {
             handled: false,
             focus: None,
             effects: Vec::new(),
@@ -273,8 +273,9 @@ impl<Part> Default for Reaction<Part> {
 }
 
 impl<Part> Reaction<Part> {
-    pub fn handled() -> Self {
-        Reaction {
+    #[must_use]
+    pub const fn handled() -> Self {
+        Self {
             handled: true,
             focus: None,
             effects: Vec::new(),
@@ -283,7 +284,7 @@ impl<Part> Reaction<Part> {
 
     /// A reaction that may move focus to an item of `part`.
     pub fn item(part: Part, handled: bool, focus: Option<String>) -> Self {
-        Reaction {
+        Self {
             handled,
             focus: focus.map(|item| FocusTarget {
                 part,
@@ -293,8 +294,8 @@ impl<Part> Reaction<Part> {
         }
     }
 
-    pub fn focusing(part: Part) -> Self {
-        Reaction {
+    pub const fn focusing(part: Part) -> Self {
+        Self {
             handled: true,
             focus: Some(FocusTarget { part, item: None }),
             effects: Vec::new(),
@@ -455,7 +456,7 @@ pub struct Relations<Part> {
 
 impl<Part> Default for Relations<Part> {
     fn default() -> Self {
-        Relations {
+        Self {
             labelled_by: None,
             controls: None,
             described_by: None,

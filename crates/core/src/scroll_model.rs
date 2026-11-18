@@ -21,10 +21,12 @@ pub const EDGE_TOLERANCE: f64 = 1.0;
 pub const MIN_THUMB_SIZE: f64 = 16.0;
 const PAGE_FRACTION: f64 = 0.875;
 
+#[must_use]
 pub fn max_scroll(metrics: AxisMetrics) -> f64 {
     (metrics.scroll - metrics.client).max(0.0)
 }
 
+#[must_use]
 pub fn overflows(metrics: AxisMetrics) -> bool {
     max_scroll(metrics) >= EDGE_TOLERANCE
 }
@@ -44,6 +46,7 @@ pub struct Edges {
     pub progress: f64,
 }
 
+#[must_use]
 pub fn edges_of(metrics: AxisMetrics) -> Edges {
     let max = max_scroll(metrics);
     let position = clamped_position(metrics);
@@ -65,6 +68,7 @@ pub fn edges_of(metrics: AxisMetrics) -> Edges {
 /// The thumb's length and its offset along a track of length `track`. It is as
 /// long as the visible share of the content, never shorter than the minimum, and
 /// stays in the track through a rubber band.
+#[must_use]
 pub fn thumb_geometry(metrics: AxisMetrics, track: f64) -> (f64, f64) {
     if track <= 0.0 || metrics.scroll <= 0.0 {
         return (0.0, 0.0);
@@ -81,16 +85,18 @@ pub fn thumb_geometry(metrics: AxisMetrics, track: f64) -> (f64, f64) {
 
 /// Where the content scrolls to when the thumb is dragged by `delta` from a
 /// scroll position of `start`: as far along the content as along the track.
+#[must_use]
 pub fn dragged_position(start: f64, delta: f64, metrics: AxisMetrics, track: f64) -> f64 {
     let travel = track - thumb_geometry(metrics, track).0;
     if travel <= 0.0 {
         return start;
     }
     let max = max_scroll(metrics);
-    (start + delta / travel * max).clamp(0.0, max)
+    (delta / travel).mul_add(max, start).clamp(0.0, max)
 }
 
 /// The scroll position that centers the thumb on a point of the track.
+#[must_use]
 pub fn position_at(point: f64, metrics: AxisMetrics, track: f64) -> f64 {
     let size = thumb_geometry(metrics, track).0;
     let travel = track - size;
@@ -102,23 +108,24 @@ pub fn position_at(point: f64, metrics: AxisMetrics, track: f64) -> f64 {
 
 /// Which way a press on the track pages: -1 before the thumb, 1 after it, and 0
 /// on it.
+#[must_use]
 pub fn page_direction(point: f64, thumb_size: f64, thumb_offset: f64) -> i8 {
     if point < thumb_offset {
         -1
-    } else if point > thumb_offset + thumb_size {
-        1
     } else {
-        0
+        i8::from(point > thumb_offset + thumb_size)
     }
 }
 
 /// How far a page scrolls: most of the view, so a little stays for context.
+#[must_use]
 pub fn page_length(client: f64) -> f64 {
     (client * PAGE_FRACTION).round().max(1.0)
 }
 
 /// A wheel's movement in pixels. `mode` is 0 for pixels, 1 for lines and 2 for
 /// pages, as wheel events report it.
+#[must_use]
 pub fn wheel_pixels(delta: f64, mode: u8, line_height: f64, page: f64) -> f64 {
     match mode {
         1 => delta * line_height,
@@ -140,6 +147,7 @@ pub enum ScrollbarType {
     Hover,
 }
 
+#[must_use]
 pub fn scrollbar_shown(
     kind: ScrollbarType,
     overflow: bool,
@@ -159,6 +167,7 @@ pub fn scrollbar_shown(
 /// Whether an area that sticks to its end keeps following after a scroll of
 /// `delta` leaves `after` pixels to the end. Moving away lets go, whatever moved
 /// it; reaching the end while moving toward it follows again.
+#[must_use]
 pub fn follows_end(following: bool, delta: f64, after: f64) -> bool {
     let at_end = after < EDGE_TOLERANCE;
     if following {
@@ -170,6 +179,7 @@ pub fn follows_end(following: bool, delta: f64, after: f64) -> bool {
 
 /// Whether a key scrolls toward the start, which lets go of the end. Not while
 /// typing, where the keys are text.
+#[must_use]
 pub fn scrolls_toward_start(key: Key, shift: bool, editing: bool) -> bool {
     !editing
         && (matches!(key, Key::ArrowUp | Key::PageUp | Key::Home) || (key == Key::Space && shift))

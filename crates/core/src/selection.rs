@@ -10,6 +10,7 @@ pub enum Mode {
 /// The selection that pressing `key` would produce, file-manager style: a plain press
 /// replaces, Ctrl toggles, Shift selects the range from `anchor`. `order` is the
 /// selectable keys in display order.
+#[must_use]
 pub fn propose(
     mode: Mode,
     selected: &[String],
@@ -33,7 +34,10 @@ pub fn propose(
         && let (Some(a), Some(b)) = (anchor.and_then(position), position(key))
     {
         let (lo, hi) = (a.min(b), a.max(b));
-        return order[lo..=hi].iter().map(|k| k.to_string()).collect();
+        return order[lo..=hi]
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect();
     }
     if mods.ctrl {
         let mut next: Vec<String> = selected.to_vec();
@@ -51,6 +55,7 @@ pub fn propose(
 
 /// What Ctrl+A leaves selected: everything selectable, or nothing once everything
 /// already is. Only a multiple selection has a select-all.
+#[must_use]
 pub fn toggle_all(mode: Mode, selected: &[String], order: &[&str]) -> Vec<String> {
     let all = order
         .iter()
@@ -60,12 +65,13 @@ pub fn toggle_all(mode: Mode, selected: &[String], order: &[&str]) -> Vec<String
     } else if all {
         Vec::new()
     } else {
-        order.iter().map(|key| key.to_string()).collect()
+        order.iter().map(std::string::ToString::to_string).collect()
     }
 }
 
 /// The chosen labels written out for a control that shows what is selected. Past
 /// `most`, the rest are counted: `Small, Medium and 2 more`.
+#[must_use]
 pub fn format_labels(labels: &[&str], most: usize) -> String {
     let shown = &labels[..labels.len().min(most.max(1))];
     let rest = labels.len() - shown.len();
@@ -83,12 +89,13 @@ pub fn format_labels(labels: &[&str], most: usize) -> String {
 
 /// The keys from one key to another in `order`, both included, whichever comes
 /// first. Empty if either is not in the list.
+#[must_use]
 pub fn keys_between(order: &[&str], from: &str, to: &str) -> Vec<String> {
     let at = |key: &str| order.iter().position(|entry| *entry == key);
     match (at(from), at(to)) {
         (Some(a), Some(b)) => order[a.min(b)..=a.max(b)]
             .iter()
-            .map(|key| key.to_string())
+            .map(std::string::ToString::to_string)
             .collect(),
         _ => Vec::new(),
     }
@@ -119,6 +126,7 @@ pub fn range_selection(
 }
 
 /// The selection with a key added at the end, or taken out.
+#[must_use]
 pub fn toggled_keys(selected: &[String], key: &str) -> Vec<String> {
     if selected.iter().any(|chosen| chosen == key) {
         selected
@@ -133,6 +141,7 @@ pub fn toggled_keys(selected: &[String], key: &str) -> Vec<String> {
 
 /// Select-all as a toggle: every key that can be chosen is added, or, once they
 /// all are, taken out. Keys that cannot be chosen are left as they were.
+#[must_use]
 pub fn all_toggled(selected: &[String], selectable: &[&str]) -> Vec<String> {
     if selectable.is_empty() {
         return selected.to_vec();
@@ -152,7 +161,7 @@ pub fn all_toggled(selected: &[String], selectable: &[&str]) -> Vec<String> {
         selectable
             .iter()
             .filter(|key| !selected.iter().any(|chosen| chosen == *key))
-            .map(|key| key.to_string()),
+            .map(std::string::ToString::to_string),
     );
     next
 }

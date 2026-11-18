@@ -38,8 +38,9 @@ pub struct Entry {
 }
 
 impl Entry {
+    #[must_use]
     pub fn action(key: &str, label: &str) -> Self {
-        Entry {
+        Self {
             key: key.into(),
             label: label.into(),
             kind: Kind::Action,
@@ -50,28 +51,33 @@ impl Entry {
         }
     }
 
+    #[must_use]
     pub fn of(mut self, kind: Kind) -> Self {
         self.kind = kind;
         self
     }
 
+    #[must_use]
     pub fn inside(mut self, parent: &str) -> Self {
         self.parent = Some(parent.into());
         self
     }
 
-    pub fn disabled(mut self) -> Self {
+    #[must_use]
+    pub const fn disabled(mut self) -> Self {
         self.disabled = true;
         self
     }
 
-    pub fn destructive(mut self) -> Self {
+    #[must_use]
+    pub const fn destructive(mut self) -> Self {
         self.destructive = true;
         self
     }
 
     /// Gives the entry a key written as `mod+shift+n`. One that cannot be read is
     /// ignored.
+    #[must_use]
     pub fn keys(mut self, shortcut: &str) -> Self {
         self.shortcut = crate::shortcut::Shortcut::parse(shortcut);
         self
@@ -93,7 +99,8 @@ pub enum Part {
 const ACTIONS: &[&str] = &["open", "close", "run", "toggle"];
 
 /// A menu of actions, checkboxes, radio choices and submenus, opened from a button.
-/// A submenu takes the place of the entries it was opened from, and ArrowLeft or
+///
+/// A submenu takes the place of the entries it was opened from, and `ArrowLeft` or
 /// Escape goes back. Choosing an action offers `run:<key>` to the gate. The value is
 /// what is on: a checkbox's key, and `group=key` for each radio group.
 #[derive(Clone, Debug, Default)]
@@ -113,35 +120,41 @@ pub struct Menu {
 }
 
 impl Menu {
+    #[must_use]
     pub fn new(entries: Vec<Entry>) -> Self {
-        Menu {
+        Self {
             entries,
             ..Default::default()
         }
     }
 
     /// A menu whose trigger is disabled, so no one can open it by hand.
-    pub fn disabled(mut self) -> Self {
+    #[must_use]
+    pub const fn disabled(mut self) -> Self {
         self.disabled = true;
         self
     }
 
     /// Closes the menu when a checkbox or radio entry is chosen too.
-    pub fn closing_on_select(mut self) -> Self {
+    #[must_use]
+    pub const fn closing_on_select(mut self) -> Self {
         self.close_on_select = true;
         self
     }
 
     /// Whether choosing the entry destroys something.
+    #[must_use]
     pub fn is_destructive(&self, key: &str) -> bool {
         self.entry(key).is_some_and(|entry| entry.destructive)
     }
 
-    pub fn is_open(&self) -> bool {
+    #[must_use]
+    pub const fn is_open(&self) -> bool {
         self.open
     }
 
     /// The entries of the level on show: the top, or the submenu last opened.
+    #[must_use]
     pub fn shown(&self) -> Vec<&Entry> {
         let level = self.path.last();
         self.entries
@@ -151,10 +164,12 @@ impl Menu {
     }
 
     /// The submenus opened to reach the level on show, for a heading or back button.
+    #[must_use]
     pub fn path(&self) -> &[String] {
         &self.path
     }
 
+    #[must_use]
     pub fn is_on(&self, key: &str) -> bool {
         match self.entry(key).map(|entry| &entry.kind) {
             Some(Kind::Checkbox) => self.checked.contains(key),

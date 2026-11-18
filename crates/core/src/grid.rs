@@ -25,7 +25,8 @@ pub enum GridNav {
 
 /// Arrows move by one cell. Home and End go to the ends of the row, or of the whole
 /// grid with Ctrl.
-pub fn nav_for_key(key: Key, mods: Modifiers, dir: Dir) -> Option<GridNav> {
+#[must_use]
+pub const fn nav_for_key(key: Key, mods: Modifiers, dir: Dir) -> Option<GridNav> {
     Some(match (key, dir) {
         (Key::ArrowUp, _) => GridNav::Up,
         (Key::ArrowDown, _) => GridNav::Down,
@@ -73,25 +74,29 @@ pub struct CellRange {
 }
 
 impl CellRange {
-    pub fn new(anchor: Cell) -> Self {
-        CellRange {
+    #[must_use]
+    pub const fn new(anchor: Cell) -> Self {
+        Self {
             anchor,
             focus: anchor,
         }
     }
 
-    pub fn extend_to(&mut self, cell: Cell) {
+    pub const fn extend_to(&mut self, cell: Cell) {
         self.focus = cell;
     }
 
+    #[must_use]
     pub fn rows(&self) -> RangeInclusive<usize> {
         self.anchor.row.min(self.focus.row)..=self.anchor.row.max(self.focus.row)
     }
 
+    #[must_use]
     pub fn cols(&self) -> RangeInclusive<usize> {
         self.anchor.col.min(self.focus.col)..=self.anchor.col.max(self.focus.col)
     }
 
+    #[must_use]
     pub fn contains(&self, cell: Cell) -> bool {
         self.rows().contains(&cell.row) && self.cols().contains(&cell.col)
     }
@@ -106,6 +111,7 @@ impl CellRange {
 
 /// Cell values as clipboard text that spreadsheets accept: tabs between columns,
 /// newlines between rows, and quotes around a value that contains either.
+#[must_use]
 pub fn cells_to_text(rows: &[Vec<String>]) -> String {
     let field = |value: &String| {
         if value.contains(['\t', '\n', '"']) {
@@ -121,6 +127,7 @@ pub fn cells_to_text(rows: &[Vec<String>]) -> String {
 }
 
 /// Parses clipboard text from a spreadsheet into rows of cell values.
+#[must_use]
 pub fn text_to_cells(text: &str) -> Vec<Vec<String>> {
     let mut rows = Vec::new();
     let mut row = Vec::new();

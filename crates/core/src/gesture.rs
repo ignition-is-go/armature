@@ -22,6 +22,7 @@ impl VelocityTracker {
 
     /// Units per second as of the newest sample: the slope of a line fitted to the
     /// recent samples. Zero without two samples apart in time.
+    #[must_use]
     pub fn velocity(&self) -> f64 {
         let count = self.samples.len() as f64;
         if count < 2.0 {
@@ -52,6 +53,7 @@ impl VelocityTracker {
     }
 
     /// The velocity at release. A pointer that stopped before letting go reads zero.
+    #[must_use]
     pub fn velocity_at(&self, now_ms: f64) -> f64 {
         match self.samples.last() {
             Some((newest, _)) if now_ms - newest <= STOPPED_MS => self.velocity(),
@@ -65,12 +67,14 @@ pub const DECELERATION: f64 = 0.998;
 
 /// How far a value moving at `velocity` (units per second) travels before friction
 /// stops it.
+#[must_use]
 pub fn project_distance(velocity: f64, deceleration: f64) -> f64 {
     velocity / 1000.0 * deceleration / (1.0 - deceleration)
 }
 
 /// Resistance past an edge: the further the pull, the less the value gives, never
 /// exceeding `dimension`.
+#[must_use]
 pub fn rubber_band(overshoot: f64, dimension: f64, stiffness: f64) -> f64 {
     if dimension <= 0.0 {
         return 0.0;
@@ -83,6 +87,7 @@ pub fn rubber_band(overshoot: f64, dimension: f64, stiffness: f64) -> f64 {
 /// Which of `sectors` equal slices a stroke points into, for something like a radial
 /// menu. Slice 0 is centred on straight up and the count goes clockwise. `dy` grows
 /// downwards, as on screen.
+#[must_use]
 pub fn sector_of(dx: f64, dy: f64, sectors: usize) -> usize {
     let sectors = sectors.max(1);
     let clockwise_from_up = dx.atan2(-dy).rem_euclid(std::f64::consts::TAU);
@@ -100,6 +105,7 @@ pub struct Spring {
 impl Spring {
     /// Position and velocity `seconds` after release at `from` with `velocity`, heading
     /// for `to`. Solved exactly, so any time can be asked for directly.
+    #[must_use]
     pub fn solve(&self, from: f64, to: f64, velocity: f64, seconds: f64) -> (f64, f64) {
         let offset = from - to;
         let natural = (self.stiffness / self.mass).sqrt();
@@ -107,31 +113,35 @@ impl Spring {
         let t = seconds;
 
         let (position, speed) = if (ratio - 1.0).abs() < 1e-6 {
-            let b = velocity + natural * offset;
+            let b = natural.mul_add(offset, velocity);
             let decay = (-natural * t).exp();
             (
-                decay * (offset + b * t),
-                decay * (b - natural * (offset + b * t)),
+                decay * b.mul_add(t, offset),
+                decay * natural.mul_add(-b.mul_add(t, offset), b),
             )
         } else if ratio < 1.0 {
-            let damped = natural * (1.0 - ratio * ratio).sqrt();
-            let b = (velocity + ratio * natural * offset) / damped;
+            let damped = natural * ratio.mul_add(-ratio, 1.0).sqrt();
+            let b = (ratio * natural).mul_add(offset, velocity) / damped;
             let decay = (-ratio * natural * t).exp();
             let (sin, cos) = (damped * t).sin_cos();
             (
-                decay * (offset * cos + b * sin),
+                decay * b.mul_add(sin, offset * cos),
                 decay
-                    * ((b * damped - ratio * natural * offset) * cos
-                        - (offset * damped + ratio * natural * b) * sin),
+                    * (ratio * natural)
+                        .mul_add(b, offset * damped)
+                        .mul_add(-sin, (ratio * natural).mul_add(-offset, b * damped) * cos),
             )
         } else {
-            let spread = (ratio * ratio - 1.0).sqrt();
+            let spread = ratio.mul_add(ratio, -1.0).sqrt();
             let slow = -natural * (ratio - spread);
             let fast = -natural * (ratio + spread);
-            let c1 = (velocity - fast * offset) / (slow - fast);
+            let c1 = fast.mul_add(-offset, velocity) / (slow - fast);
             let c2 = offset - c1;
             let (e1, e2) = ((slow * t).exp(), (fast * t).exp());
-            (c1 * e1 + c2 * e2, c1 * slow * e1 + c2 * fast * e2)
+            (
+                c2.mul_add(e2, c1 * e1),
+                (c2 * fast).mul_add(e2, c1 * slow * e1),
+            )
         };
         (to + position, speed)
     }
@@ -140,6 +150,7 @@ impl Spring {
 /// How dark the backdrop behind a sheet should be, from 0 to 1, when the sheet is
 /// `extent` tall. It darkens between the last height that leaves the page usable
 /// (`largest_undimmed`, an index into `heights`, or `None` for closed) and the next.
+#[must_use]
 pub fn dim_amount(extent: f64, heights: &[f64], largest_undimmed: Option<usize>) -> f64 {
     let lower = largest_undimmed
         .and_then(|at| heights.get(at))
@@ -150,11 +161,12 @@ pub fn dim_amount(extent: f64, heights: &[f64], largest_undimmed: Option<usize>)
         .copied();
     match upper {
         Some(upper) if upper > lower => ((extent - lower) / (upper - lower)).clamp(0.0, 1.0),
-        _ => (extent > lower) as u8 as f64,
+        _ => f64::from(u8::from(extent > lower)),
     }
 }
 
 /// How far a sheet is between its second tallest height and its tallest, from 0 to 1.
+#[must_use]
 pub fn expand_amount(extent: f64, heights: &[f64]) -> f64 {
     let Some(largest) = heights.last().copied() else {
         return 0.0;
@@ -165,13 +177,14 @@ pub fn expand_amount(extent: f64, heights: &[f64]) -> f64 {
         0.0
     };
     if largest <= lower {
-        (extent >= largest) as u8 as f64
+        f64::from(u8::from(extent >= largest))
     } else {
         ((extent - lower) / (largest - lower)).clamp(0.0, 1.0)
     }
 }
 
 /// How far a sheet is from closed to its tallest height, from 0 to 1.
+#[must_use]
 pub fn progress_amount(extent: f64, heights: &[f64]) -> f64 {
     match heights.last() {
         Some(largest) if *largest > 0.0 => (extent / largest).clamp(0.0, 1.0),
@@ -181,6 +194,7 @@ pub fn progress_amount(extent: f64, heights: &[f64]) -> f64 {
 
 impl Spring {
     /// How long the spring takes to come to rest within half a unit, in seconds.
+    #[must_use]
     pub fn settle_time(&self, from: f64, to: f64, velocity: f64) -> f64 {
         let mut seconds = 0.0;
         while seconds < 10.0 {
@@ -195,6 +209,7 @@ impl Spring {
 
     /// The spring as a timing curve a style sheet can play: a `linear(..)` easing
     /// sampled along its path, to use with a duration of `settle_time`.
+    #[must_use]
     pub fn easing(&self, from: f64, to: f64, velocity: f64) -> String {
         let distance = to - from;
         if distance.abs() < 1e-6 {

@@ -13,11 +13,12 @@ pub enum Status {
 
 impl Status {
     /// The name a primitive's `status` setting takes.
-    pub fn name(self) -> &'static str {
+    #[must_use]
+    pub const fn name(self) -> &'static str {
         match self {
-            Status::Idle => "idle",
-            Status::Loading => "loading",
-            Status::Error => "error",
+            Self::Idle => "idle",
+            Self::Loading => "loading",
+            Self::Error => "error",
         }
     }
 }
@@ -29,7 +30,8 @@ pub struct Requests {
 }
 
 impl Requests {
-    pub fn status(&self) -> Status {
+    #[must_use]
+    pub const fn status(&self) -> Status {
         self.status
     }
 
@@ -47,7 +49,7 @@ impl Requests {
 
     /// Takes an answer. Returns whether it is the newest request's, and so whether
     /// its options should be shown. An older answer is dropped.
-    pub fn finish(&mut self, request: u64, ok: bool) -> bool {
+    pub const fn finish(&mut self, request: u64, ok: bool) -> bool {
         if request != self.newest {
             return false;
         }

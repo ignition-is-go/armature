@@ -10,7 +10,8 @@ pub struct Date {
     pub day: u8,
 }
 
-pub fn days_in_month(year: i32, month: u8) -> u8 {
+#[must_use]
+pub const fn days_in_month(year: i32, month: u8) -> u8 {
     match month {
         2 if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) => 29,
         2 => 28,
@@ -21,13 +22,15 @@ pub fn days_in_month(year: i32, month: u8) -> u8 {
 
 impl Date {
     /// `None` for a date that does not exist, such as 30 February.
-    pub fn new(year: i32, month: u8, day: u8) -> Option<Date> {
+    #[must_use]
+    pub fn new(year: i32, month: u8, day: u8) -> Option<Self> {
         let valid = (1..=12).contains(&month) && (1..=days_in_month(year, month)).contains(&day);
-        valid.then_some(Date { year, month, day })
+        valid.then_some(Self { year, month, day })
     }
 
     /// Parses `YYYY-MM-DD`.
-    pub fn parse(text: &str) -> Option<Date> {
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
         // Exactly four, two and two digits: `2026-1-16` is not a date.
         let parts: Vec<&str> = text.split('-').collect();
         let [year, month, day] = parts.as_slice() else {
@@ -39,26 +42,27 @@ impl Date {
         if !(digits(year, 4) && digits(month, 2) && digits(day, 2)) {
             return None;
         }
-        Date::new(year.parse().ok()?, month.parse().ok()?, day.parse().ok()?)
+        Self::new(year.parse().ok()?, month.parse().ok()?, day.parse().ok()?)
     }
 
+    #[must_use]
     pub fn format(self) -> String {
         format!("{:04}-{:02}-{:02}", self.year, self.month, self.day)
     }
 
     /// Days since 1 January 1970.
     fn to_days(self) -> i64 {
-        let year = self.year as i64 - (self.month <= 2) as i64;
+        let year = i64::from(self.year) - i64::from(self.month <= 2);
         let era = year.div_euclid(400);
         let year_of_era = year.rem_euclid(400);
-        let month = self.month as i64;
+        let month = i64::from(self.month);
         let day_of_year =
-            (153 * (month + if month > 2 { -3 } else { 9 }) + 2) / 5 + self.day as i64 - 1;
+            (153 * (month + if month > 2 { -3 } else { 9 }) + 2) / 5 + i64::from(self.day) - 1;
         let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
         era * 146_097 + day_of_era - 719_468
     }
 
-    fn from_days(days: i64) -> Date {
+    fn from_days(days: i64) -> Self {
         let shifted = days + 719_468;
         let era = shifted.div_euclid(146_097);
         let day_of_era = shifted.rem_euclid(146_097);
@@ -72,35 +76,38 @@ impl Date {
         } else {
             shifted_month - 9
         } as u8;
-        let year = (year_of_era + era * 400 + (month <= 2) as i64) as i32;
-        Date { year, month, day }
+        let year = (year_of_era + era * 400 + i64::from(month <= 2)) as i32;
+        Self { year, month, day }
     }
 
     /// Day of the week, with Sunday as 0.
+    #[must_use]
     pub fn weekday(self) -> u8 {
         (self.to_days() + 4).rem_euclid(7) as u8
     }
 
     /// The first and last days there are. Arithmetic stops at them.
-    pub const FIRST: Date = Date {
+    pub const FIRST: Self = Self {
         year: 1,
         month: 1,
         day: 1,
     };
-    pub const LAST: Date = Date {
+    pub const LAST: Self = Self {
         year: 9999,
         month: 12,
         day: 31,
     };
 
-    pub fn add_days(self, days: i64) -> Date {
+    #[must_use]
+    pub fn add_days(self, days: i64) -> Self {
         let sum = self.to_days().saturating_add(days);
-        Date::from_days(sum.clamp(Date::FIRST.to_days(), Date::LAST.to_days()))
+        Self::from_days(sum.clamp(Self::FIRST.to_days(), Self::LAST.to_days()))
     }
 
     /// The last day of this date's month.
-    pub fn end_of_month(self) -> Date {
-        Date {
+    #[must_use]
+    pub fn end_of_month(self) -> Self {
+        Self {
             day: days_in_month(self.year, self.month),
             ..self
         }
@@ -108,33 +115,36 @@ impl Date {
 
     /// The same day in another month. A day the month lacks becomes its last day, so
     /// 31 January plus one month is the end of February.
-    pub fn add_months(self, months: i32) -> Date {
+    #[must_use]
+    pub fn add_months(self, months: i32) -> Self {
         let index = self
             .year
             .saturating_mul(12)
-            .saturating_add(self.month as i32 - 1)
+            .saturating_add(i32::from(self.month) - 1)
             .saturating_add(months);
         if index < 12 {
-            return Date::FIRST;
+            return Self::FIRST;
         }
         if index > 9999 * 12 + 11 {
-            return Date::LAST;
+            return Self::LAST;
         }
         let (year, month) = (index.div_euclid(12), index.rem_euclid(12) as u8 + 1);
-        Date {
+        Self {
             year,
             month,
             day: self.day.min(days_in_month(year, month)),
         }
     }
 
-    pub fn days_until(self, other: Date) -> i64 {
+    #[must_use]
+    pub fn days_until(self, other: Self) -> i64 {
         other.to_days() - self.to_days()
     }
 }
 
 /// The weeks a month view shows: whole weeks starting on `week_start` (Sunday is 0),
 /// padded with the neighbouring months' days.
+#[must_use]
 pub fn month_grid(year: i32, month: u8, week_start: u8) -> Vec<[Date; 7]> {
     let first = Date {
         year,
@@ -142,7 +152,7 @@ pub fn month_grid(year: i32, month: u8, week_start: u8) -> Vec<[Date; 7]> {
         day: 1,
     };
     let lead = (first.weekday() + 7 - week_start % 7) % 7;
-    let mut day = first.add_days(-(lead as i64));
+    let mut day = first.add_days(-i64::from(lead));
     let last = Date {
         year,
         month,
@@ -158,6 +168,7 @@ pub fn month_grid(year: i32, month: u8, week_start: u8) -> Vec<[Date; 7]> {
 
 /// A month view that is always six weeks tall, so the calendar never changes height
 /// from one month to the next.
+#[must_use]
 pub fn month_grid_fixed(year: i32, month: u8, week_start: u8) -> Vec<[Date; 7]> {
     let mut weeks = month_grid(year, month, week_start);
     while weeks.len() < 6 {
@@ -177,6 +188,7 @@ pub fn month_grid_fixed(year: i32, month: u8, week_start: u8) -> Vec<[Date; 7]> 
 /// Where a key moves the focused day in a calendar. Arrows move a day or a week,
 /// Ctrl with the vertical arrows moves a month, and Home and End go to the ends of the
 /// week.
+#[must_use]
 pub fn date_for_key(
     date: Date,
     key: Key,
@@ -185,7 +197,7 @@ pub fn date_for_key(
     week_start: u8,
 ) -> Option<Date> {
     let forward = if dir == Dir::Rtl { -1 } else { 1 };
-    let into_week = ((date.weekday() + 7 - week_start % 7) % 7) as i64;
+    let into_week = i64::from((date.weekday() + 7 - week_start % 7) % 7);
     Some(match key {
         Key::ArrowLeft => date.add_days(-forward),
         Key::ArrowRight => date.add_days(forward),
@@ -224,18 +236,21 @@ const WEEKDAYS: [&str; 7] = [
 ];
 
 /// A month's English name, counting from 1. Other languages are the host's to supply.
+#[must_use]
 pub fn month_name(month: u8) -> &'static str {
     MONTHS[(month.clamp(1, 12) - 1) as usize]
 }
 
 /// A weekday's English name, with Sunday as 0.
-pub fn weekday_name(weekday: u8) -> &'static str {
+#[must_use]
+pub const fn weekday_name(weekday: u8) -> &'static str {
     WEEKDAYS[(weekday % 7) as usize]
 }
 
 /// The day a week starts on where a language is spoken, with Sunday as 0. It is
 /// Sunday across the Americas and parts of Asia, Saturday in much of the Arab
 /// world, and Monday elsewhere.
+#[must_use]
 pub fn first_day_of_week(locale: &str) -> u8 {
     let region = locale
         .rsplit(['-', '_'])
@@ -250,27 +265,32 @@ pub fn first_day_of_week(locale: &str) -> u8 {
 }
 
 impl Date {
-    pub fn add_years(self, years: i32) -> Date {
+    #[must_use]
+    pub fn add_years(self, years: i32) -> Self {
         self.add_months(years * 12)
     }
 
     /// The date brought within the earliest and latest allowed.
-    pub fn clamped(self, earliest: Option<Date>, latest: Option<Date>) -> Date {
+    #[must_use]
+    pub fn clamped(self, earliest: Option<Self>, latest: Option<Self>) -> Self {
         let date = earliest.map_or(self, |earliest| self.max(earliest));
         latest.map_or(date, |latest| date.min(latest))
     }
 
     /// The first day of the week this date falls in, for a week starting on
     /// `week_start` (Sunday is 0).
-    pub fn start_of_week(self, week_start: u8) -> Date {
-        self.add_days(-(((self.weekday() + 7 - week_start % 7) % 7) as i64))
+    #[must_use]
+    pub fn start_of_week(self, week_start: u8) -> Self {
+        self.add_days(-i64::from((self.weekday() + 7 - week_start % 7) % 7))
     }
 
-    pub fn end_of_week(self, week_start: u8) -> Date {
+    #[must_use]
+    pub fn end_of_week(self, week_start: u8) -> Self {
         self.start_of_week(week_start).add_days(6)
     }
 
     /// The date for people to read, such as `17 November 2026`.
+    #[must_use]
     pub fn long(self) -> String {
         format!("{} {} {}", self.day, month_name(self.month), self.year)
     }
@@ -278,6 +298,7 @@ impl Date {
 
 /// A span of dates for people to read, saying only once what the two ends share:
 /// `12 to 20 November 2026`, `28 November to 3 December 2026`.
+#[must_use]
 pub fn format_range(first: Date, last: Date) -> String {
     if first == last {
         first.long()
@@ -297,6 +318,7 @@ pub fn format_range(first: Date, last: Date) -> String {
 
 /// A date in the short form a region writes it: month first in the United States,
 /// year first in East Asia and Scandinavia, day first elsewhere.
+#[must_use]
 pub fn format_short(date: Date, locale: &str) -> String {
     let tag = locale.to_lowercase();
     let (language, region) = (

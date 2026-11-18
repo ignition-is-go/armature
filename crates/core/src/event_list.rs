@@ -27,14 +27,14 @@ pub struct Options {
     pub dir: Dir,
     /// Whether the arrows come round from the last event to the first.
     pub wrap: bool,
-    /// Whether the events are a feed that loads more as it is read. PageDown and
-    /// PageUp then move between events from anywhere inside one.
+    /// Whether the events are a feed that loads more as it is read. `PageDown` and
+    /// `PageUp` then move between events from anywhere inside one.
     pub feed: bool,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Options {
+        Self {
             orientation: Orientation::Vertical,
             dir: Dir::Ltr,
             wrap: true,
@@ -56,19 +56,22 @@ pub struct EventList {
 }
 
 impl EventList {
+    #[must_use]
     pub fn new(opts: Options) -> Self {
-        EventList {
+        Self {
             opts,
             ..Default::default()
         }
     }
 
-    pub fn is_busy(&self) -> bool {
+    #[must_use]
+    pub const fn is_busy(&self) -> bool {
         self.busy
     }
 
     /// Whether an event is done, in progress or still to come. Every event is to
     /// come until one is marked as current.
+    #[must_use]
     pub fn status(&self, key: &str) -> Status {
         let at = |key: &str| self.events.index_of(key);
         match (self.current.as_deref().and_then(at), at(key)) {

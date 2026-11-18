@@ -34,12 +34,13 @@ pub struct Menubar {
 
 impl Menubar {
     /// Each menu is its key, its title and its entries.
+    #[must_use]
     pub fn new(menus: Vec<(&str, &str, Vec<Entry>)>, dir: Dir) -> Self {
         let menus = menus
             .into_iter()
             .map(|(key, title, entries)| (key.to_string(), title.to_string(), Menu::new(entries)))
             .collect();
-        Menubar {
+        Self {
             menus,
             dir,
             open: None,
@@ -48,12 +49,14 @@ impl Menubar {
     }
 
     /// The entries on show in a menu: its top level, or the submenu last opened.
+    #[must_use]
     pub fn shown(&self, menu: &str) -> Vec<&Entry> {
         self.at(menu)
             .map(|at| self.menus[at].2.shown())
             .unwrap_or_default()
     }
 
+    #[must_use]
     pub fn open_menu(&self) -> Option<&str> {
         self.open.map(|at| self.menus[at].0.as_str())
     }
@@ -193,7 +196,7 @@ impl Primitive for Menubar {
     fn set_order(&mut self, _: &[(String, String)]) {}
 
     fn semantics(&self, part: Part, item: Option<&str>) -> Semantics {
-        let (menu, entry) = item.map(Self::split).unwrap_or(("", None));
+        let (menu, entry) = item.map_or(("", None), Self::split);
         let at = self.at(menu);
         match (part, at) {
             (Part::Root, _) => Semantics {

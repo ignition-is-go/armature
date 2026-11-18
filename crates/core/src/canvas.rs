@@ -103,13 +103,14 @@ fn read(entry: &str) -> Option<Node> {
 
 impl Default for Canvas {
     fn default() -> Self {
-        Canvas::new(Vec::new())
+        Self::new(Vec::new())
     }
 }
 
 impl Canvas {
+    #[must_use]
     pub fn new(nodes: Vec<Node>) -> Self {
-        Canvas {
+        Self {
             view: Viewport::default(),
             history: UndoStack::new(nodes.clone(), 100),
             nodes,
@@ -119,23 +120,28 @@ impl Canvas {
         }
     }
 
+    #[must_use]
     pub fn nodes(&self) -> &[Node] {
         &self.nodes
     }
 
+    #[must_use]
     pub fn selected(&self) -> &[String] {
         &self.selected
     }
 
+    #[must_use]
     pub fn connections(&self) -> &[Connection] {
         self.links.connections()
     }
 
-    pub fn zoom(&self) -> f64 {
+    #[must_use]
+    pub const fn zoom(&self) -> f64 {
         self.view.zoom
     }
 
     /// Where to draw a node, relative to the surface's corner, after pan and zoom.
+    #[must_use]
     pub fn screen_rect(&self, key: &str) -> Option<Rect> {
         let rect = self.nodes.iter().find(|node| node.key == key)?.rect;
         let corner = self.view.to_screen(Point::new(rect.x, rect.y));
@@ -148,6 +154,7 @@ impl Canvas {
     }
 
     /// The selection rectangle being drawn, relative to the surface's corner.
+    #[must_use]
     pub fn lasso(&self) -> Option<Rect> {
         match &self.gesture {
             Some(Gesture::Lasso { from, to, .. }) => Some(Rect::from_corners(
@@ -419,7 +426,7 @@ impl Primitive for Canvas {
                     return Reaction::default();
                 }
                 let before = self.nodes.clone();
-                self.shift_selected(&before.clone(), delta);
+                self.shift_selected(&before, delta);
                 self.settle(before, Source::User, Reason::Keyboard, gate);
                 Reaction::handled()
             }
@@ -527,7 +534,7 @@ impl Primitive for Canvas {
             PointerPhase::Cancel => {
                 match self.gesture.take() {
                     Some(Gesture::Move { origin, .. } | Gesture::Resize { origin, .. }) => {
-                        self.nodes = origin
+                        self.nodes = origin;
                     }
                     Some(Gesture::Lasso { before, .. }) => self.selected = before,
                     _ => {}

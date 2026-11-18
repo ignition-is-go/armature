@@ -50,6 +50,7 @@ pub struct Page {
 }
 
 /// The slides in pages, by index.
+#[must_use]
 pub fn group_slides(slides: &[SlideBox], snapport: f64, per_page: PerPage) -> Vec<Vec<usize>> {
     let mut groups: Vec<Vec<usize>> = Vec::new();
     match per_page {
@@ -102,6 +103,7 @@ fn page_of(
 
 /// The pages of a carousel that stops at its ends. Pages that would sit at the
 /// same position, such as the last few slides of a full row, merge into one.
+#[must_use]
 pub fn carousel_pages(geometry: &Geometry, align: Align, per_page: PerPage) -> Vec<Page> {
     let mut pages: Vec<Page> = Vec::new();
     for group in group_slides(geometry.slides, geometry.snapport, per_page) {
@@ -125,6 +127,7 @@ pub fn carousel_pages(geometry: &Geometry, align: Align, per_page: PerPage) -> V
 }
 
 /// The page nearest a scroll position. `None` without pages.
+#[must_use]
 pub fn nearest_page(positions: &[f64], position: f64) -> Option<usize> {
     let mut best: Option<usize> = None;
     for (index, at) in positions.iter().enumerate() {
@@ -137,6 +140,7 @@ pub fn nearest_page(positions: &[f64], position: f64) -> Option<usize> {
 
 /// Whether a slide counts as on show: at least half of it, or for a slide larger
 /// than the view, at least half of the view.
+#[must_use]
 pub fn is_slide_in_view(slide: SlideBox, scroll: f64, viewport: f64) -> bool {
     let shown = (slide.start + slide.size).min(scroll + viewport) - slide.start.max(scroll);
     shown >= slide.size.min(viewport) / 2.0
@@ -144,6 +148,7 @@ pub fn is_slide_in_view(slide: SlideBox, scroll: f64, viewport: f64) -> bool {
 
 /// The page a step of `by` lands on, counting pages from 1. It stops at the ends,
 /// or goes round with `wrap`.
+#[must_use]
 pub fn step_page(page: usize, by: i64, count: usize, wrap: bool) -> usize {
     if count <= 1 {
         return page;
@@ -177,6 +182,7 @@ pub struct LoopView {
 }
 
 /// Where each slide is when the track starts at slide `first`.
+#[must_use]
 pub fn place_slides(track: &Track, first: usize) -> Vec<SlideBox> {
     let count = track.sizes.len();
     let mut boxes = vec![
@@ -200,6 +206,7 @@ pub fn place_slides(track: &Track, first: usize) -> Vec<SlideBox> {
 
 /// Reads the track from slides measured while slide `first` comes first. `None`
 /// if they are not laid out that way, or there are too few to rotate.
+#[must_use]
 pub fn measure_track(slides: &[SlideBox], first: usize) -> Option<Track> {
     if slides.len() < 2 || first >= slides.len() {
         return None;
@@ -224,6 +231,7 @@ fn loop_groups(track: &Track, view: &LoopView) -> Vec<Vec<usize>> {
 
 /// The pages of a looping carousel while slide `first` comes first. Pages keep
 /// their slides' own order wherever the track starts.
+#[must_use]
 pub fn loop_pages(track: &Track, view: &LoopView, first: usize) -> Vec<Page> {
     let boxes = place_slides(track, first);
     loop_groups(track, view)
@@ -247,7 +255,7 @@ pub fn can_loop(track: &Track, view: &LoopView) -> bool {
             (boxes[next[0]].start - boxes[groups[index][0]].start + length) % length
         })
         .fold(0.0, f64::max);
-    view.max_scroll >= 2.0 * step - 1.0
+    view.max_scroll >= 2.0f64.mul_add(step, -1.0)
 }
 
 /// Where a looping carousel is: how far it is scrolled, and which slide the
@@ -289,6 +297,7 @@ fn anchor_slide(boxes: &[SlideBox], view_start: f64, first: usize) -> usize {
 /// Heading for a page, it makes sure that page lies ahead; with `lazy` it leaves
 /// the track alone when it already does. `None` when the track is too short to
 /// rotate.
+#[must_use]
 pub fn loop_rotation(
     track: &Track,
     view: &LoopView,

@@ -1,14 +1,14 @@
 /// A value being tried before it is committed, such as a slider mid-drag or a colour
 /// under the pointer.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Preview<T> {
     committed: T,
     draft: Option<T>,
 }
 
 impl<T: Clone + PartialEq> Preview<T> {
-    pub fn new(committed: T) -> Self {
-        Preview {
+    pub const fn new(committed: T) -> Self {
+        Self {
             committed,
             draft: None,
         }
@@ -19,7 +19,7 @@ impl<T: Clone + PartialEq> Preview<T> {
         self.draft.as_ref().unwrap_or(&self.committed)
     }
 
-    pub fn is_trying(&self) -> bool {
+    pub const fn is_trying(&self) -> bool {
         self.draft.is_some()
     }
 

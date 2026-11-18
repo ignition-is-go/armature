@@ -29,8 +29,9 @@ pub struct SafeArea {
 
 impl SafeArea {
     /// Starts when the pointer leaves the trigger at `point`, heading for `popup`.
-    pub fn start(point: Point, popup: Rect, axis: Axis, now_ms: u64) -> Self {
-        SafeArea {
+    #[must_use]
+    pub const fn start(point: Point, popup: Rect, axis: Axis, now_ms: u64) -> Self {
+        Self {
             apex: point,
             popup,
             axis,
@@ -79,7 +80,7 @@ impl SafeArea {
 
 fn in_triangle(p: Point, a: Point, b: Point, c: Point) -> bool {
     let sign = |p1: Point, p2: Point, p3: Point| {
-        (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y)
+        (p2.x - p3.x).mul_add(-(p1.y - p3.y), (p1.x - p3.x) * (p2.y - p3.y))
     };
     let (d1, d2, d3) = (sign(p, a, b), sign(p, b, c), sign(p, c, a));
     let negative = d1 < 0.0 || d2 < 0.0 || d3 < 0.0;

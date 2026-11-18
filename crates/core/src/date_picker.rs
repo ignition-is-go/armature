@@ -38,14 +38,14 @@ pub struct DatePicker {
 
 impl Default for DatePicker {
     fn default() -> Self {
-        DatePicker::new(
+        Self::new(
             Default::default(),
             Date::new(2026, 1, 1).expect("a real date"),
         )
     }
 }
 
-fn to_calendar(part: Part) -> Option<calendar::Part> {
+const fn to_calendar(part: Part) -> Option<calendar::Part> {
     Some(match part {
         Part::Grid => calendar::Part::Grid,
         Part::Day => calendar::Part::Day,
@@ -55,7 +55,7 @@ fn to_calendar(part: Part) -> Option<calendar::Part> {
     })
 }
 
-fn from_calendar(part: calendar::Part) -> Part {
+const fn from_calendar(part: calendar::Part) -> Part {
     match part {
         calendar::Part::Grid => Part::Grid,
         calendar::Part::Day => Part::Day,
@@ -70,8 +70,9 @@ fn to_input(part: Part) -> Option<date_input::Part> {
 
 impl DatePicker {
     /// `showing` is the month the calendar opens on while no date is chosen.
+    #[must_use]
     pub fn new(opts: calendar::Options, showing: Date) -> Self {
-        DatePicker {
+        Self {
             input: DateInput::new(false),
             calendar: Calendar::new(opts, showing),
             open: false,
@@ -79,17 +80,20 @@ impl DatePicker {
         }
     }
 
-    pub fn is_open(&self) -> bool {
+    #[must_use]
+    pub const fn is_open(&self) -> bool {
         self.open
     }
 
     /// The calendar, for its weeks and the month on show.
-    pub fn calendar(&self) -> &Calendar {
+    #[must_use]
+    pub const fn calendar(&self) -> &Calendar {
         &self.calendar
     }
 
     /// The typed pieces, for their order.
-    pub fn input(&self) -> &DateInput {
+    #[must_use]
+    pub const fn input(&self) -> &DateInput {
         &self.input
     }
 }

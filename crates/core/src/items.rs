@@ -10,30 +10,37 @@ impl Items {
         self.0.iter()
     }
 
+    #[must_use]
     pub fn get(&self, key: &str) -> Option<&Item> {
         self.0.iter().find(|i| i.key == key)
     }
 
+    #[must_use]
     pub fn key_at(&self, index: usize) -> String {
         self.0[index].key.clone()
     }
 
+    #[must_use]
     pub fn index_of(&self, key: &str) -> Option<usize> {
         self.0.iter().position(|i| i.key == key)
     }
 
+    #[must_use]
     pub fn is_enabled(&self, key: &str) -> bool {
         self.get(key).is_some_and(|i| !i.disabled)
     }
 
+    #[must_use]
     pub fn first_enabled(&self) -> Option<&str> {
         self.0.iter().find(|i| !i.disabled).map(|i| i.key.as_str())
     }
 
+    #[must_use]
     pub fn enabled(&self) -> Vec<bool> {
         self.0.iter().map(|i| !i.disabled).collect()
     }
 
+    #[must_use]
     pub fn enabled_keys(&self) -> Vec<&str> {
         self.0
             .iter()
@@ -42,6 +49,7 @@ impl Items {
             .collect()
     }
 
+    #[must_use]
     pub fn step(&self, from: Option<&str>, nav: Nav, wrap: bool) -> Option<String> {
         let current = from.and_then(|key| self.index_of(key));
         roving::step(&self.enabled(), current, nav, wrap).map(|i| self.key_at(i))

@@ -40,7 +40,7 @@ pub struct Drag {
 
 impl Default for Drag {
     fn default() -> Self {
-        Drag {
+        Self {
             threshold: DRAG_THRESHOLD,
             press: None,
         }
@@ -48,18 +48,20 @@ impl Default for Drag {
 }
 
 impl Drag {
-    pub fn with_threshold(threshold: f64) -> Self {
-        Drag {
+    #[must_use]
+    pub const fn with_threshold(threshold: f64) -> Self {
+        Self {
             threshold,
             press: None,
         }
     }
 
+    #[must_use]
     pub fn is_dragging(&self) -> bool {
         self.press.is_some_and(|press| press.dragging)
     }
 
-    pub fn down(&mut self, at: Point) {
+    pub const fn down(&mut self, at: Point) {
         self.press = Some(Press {
             origin: at,
             last: at,

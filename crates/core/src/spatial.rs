@@ -34,7 +34,7 @@ pub fn nearest_in_direction<K: Clone>(
             continue;
         }
         let in_cone = aside.abs() <= ahead;
-        let score = ahead + 2.0 * aside.abs();
+        let score = 2.0f64.mul_add(aside.abs(), ahead);
         let better = match best {
             None => true,
             Some((best_cone, best_score, _)) => {

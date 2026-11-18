@@ -44,21 +44,21 @@ struct Cause {
 
 impl Cause {
     /// Typing, deleting, pasting and cutting.
-    const TYPED: Cause = Cause {
+    const TYPED: Self = Self {
         source: Source::User,
         reason: Reason::Text,
     };
     /// Choosing a suggestion.
-    const CHOSEN: Cause = Cause {
+    const CHOSEN: Self = Self {
         source: Source::User,
         reason: Reason::Press,
     };
     /// A call the owner makes on the person's behalf, such as attaching a file.
-    const OWNER: Cause = Cause {
+    const OWNER: Self = Self {
         source: Source::User,
         reason: Reason::Action,
     };
-    const AGENT: Cause = Cause {
+    const AGENT: Self = Self {
         source: Source::Agent,
         reason: Reason::Action,
     };
@@ -90,29 +90,34 @@ pub struct TokenEditor {
 
 // Reading the editor.
 impl TokenEditor {
+    #[must_use]
     pub fn new(opts: Options) -> Self {
-        TokenEditor {
+        Self {
             opts,
             ..Default::default()
         }
     }
 
     /// The content in order: runs of text, and tokens.
+    #[must_use]
     pub fn segments(&self) -> &[Segment] {
         &self.value
     }
 
-    pub fn caret(&self) -> usize {
+    #[must_use]
+    pub const fn caret(&self) -> usize {
         self.caret
     }
 
     /// What is selected, as where it starts and ends. `None` when it is empty.
+    #[must_use]
     pub fn selection(&self) -> Option<Range<usize>> {
         let anchor = self.anchor.filter(|anchor| *anchor != self.caret)?;
         Some(anchor.min(self.caret)..anchor.max(self.caret))
     }
 
     /// The content before and after the caret, for drawing the caret between them.
+    #[must_use]
     pub fn split_at_caret(&self) -> (Vec<Segment>, Vec<Segment>) {
         (
             slice_value(&self.value, 0, self.caret),
@@ -121,12 +126,14 @@ impl TokenEditor {
     }
 
     /// The content as a person reads it, with each token as its label.
+    #[must_use]
     pub fn label(&self) -> String {
         to_label(&self.value)
     }
 
     /// The trigger being typed just before the caret, such as `@al`, for offering
     /// suggestions. Tokens end a query.
+    #[must_use]
     pub fn trigger(&self, rules: &[TriggerRule]) -> Option<TriggerMatch> {
         let before: String = offset_text(&self.value).chars().take(self.caret).collect();
         find_trigger_match(&before, 0, rules)

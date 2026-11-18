@@ -24,24 +24,28 @@ pub struct Collapsible {
 }
 
 impl Collapsible {
+    #[must_use]
     pub fn new(open: bool) -> Self {
-        Collapsible {
+        Self {
             open,
             ..Default::default()
         }
     }
 
-    pub fn findable(mut self) -> Self {
+    #[must_use]
+    pub const fn findable(mut self) -> Self {
         self.findable = true;
         self
     }
 
-    pub fn disabled(mut self) -> Self {
+    #[must_use]
+    pub const fn disabled(mut self) -> Self {
         self.disabled = true;
         self
     }
 
-    pub fn is_open(&self) -> bool {
+    #[must_use]
+    pub const fn is_open(&self) -> bool {
         self.open
     }
 

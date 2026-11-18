@@ -27,7 +27,7 @@ pub struct Button {
 
 impl Default for Button {
     fn default() -> Self {
-        Button {
+        Self {
             disabled: false,
             focusable_when_disabled: false,
             pending: false,
@@ -37,18 +37,21 @@ impl Default for Button {
 }
 
 impl Button {
-    pub fn disabled(mut self, focusable: bool) -> Self {
+    #[must_use]
+    pub const fn disabled(mut self, focusable: bool) -> Self {
         self.disabled = true;
         self.focusable_when_disabled = focusable;
         self
     }
 
+    #[must_use]
     pub fn pending_message(mut self, message: &str) -> Self {
         self.pending_message = message.to_string();
         self
     }
 
-    pub fn is_pending(&self) -> bool {
+    #[must_use]
+    pub const fn is_pending(&self) -> bool {
         self.pending
     }
 

@@ -20,7 +20,7 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        Options {
+        Self {
             orientation: Orientation::Horizontal,
             dir: Dir::Ltr,
             manual: false,
@@ -49,8 +49,9 @@ pub struct Tabs {
 }
 
 impl Tabs {
+    #[must_use]
     pub fn new(opts: Options) -> Self {
-        Tabs {
+        Self {
             opts,
             ..Default::default()
         }

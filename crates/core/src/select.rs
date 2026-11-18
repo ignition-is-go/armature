@@ -31,12 +31,13 @@ pub struct Select {
 impl Select {
     /// A select that takes several options. Choosing one leaves the popup open for
     /// the next, and Escape or a press elsewhere closes it.
+    #[must_use]
     pub fn multiple() -> Self {
         let opts = listbox::Options {
             mode: crate::selection::Mode::Multiple,
             ..Default::default()
         };
-        Select {
+        Self {
             list: Listbox::new(opts),
             open: false,
             multiple: true,
@@ -44,12 +45,14 @@ impl Select {
         }
     }
 
-    pub fn is_open(&self) -> bool {
+    #[must_use]
+    pub const fn is_open(&self) -> bool {
         self.open
     }
 
     /// A select that shows its value and cannot be changed or cleared.
-    pub fn read_only(mut self) -> Self {
+    #[must_use]
+    pub const fn read_only(mut self) -> Self {
         self.locked = true;
         self
     }

@@ -37,8 +37,9 @@ pub struct Accordion {
 }
 
 impl Accordion {
+    #[must_use]
     pub fn new(opts: Options) -> Self {
-        Accordion {
+        Self {
             opts,
             ..Default::default()
         }

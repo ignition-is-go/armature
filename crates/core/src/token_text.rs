@@ -23,8 +23,9 @@ pub struct Token {
 }
 
 impl Token {
+    #[must_use]
     pub fn new(kind: &str, value: &str, label: &str) -> Self {
-        Token {
+        Self {
             kind: kind.into(),
             value: value.into(),
             label: label.into(),
@@ -33,6 +34,7 @@ impl Token {
         }
     }
 
+    #[must_use]
     pub fn with_id(mut self, id: &str) -> Self {
         self.id = id.into();
         self
@@ -47,13 +49,13 @@ pub enum Segment {
 
 impl From<&str> for Segment {
     fn from(text: &str) -> Self {
-        Segment::Text(text.to_string())
+        Self::Text(text.to_string())
     }
 }
 
 impl From<Token> for Segment {
     fn from(token: Token) -> Self {
-        Segment::Token(token)
+        Self::Token(token)
     }
 }
 
@@ -79,6 +81,7 @@ fn reserve(id: &str) {
 /// The value in its one canonical form: neighbouring text joined, empty text
 /// dropped, and every token with an id of its own. A repeated id stays with the
 /// first token that has it.
+#[must_use]
 pub fn normalize(value: Vec<Segment>) -> Vec<Segment> {
     for segment in &value {
         if let Segment::Token(token) = segment {
@@ -120,6 +123,7 @@ pub fn value_length(value: &[Segment]) -> usize {
 
 /// The value as text with each token as one placeholder character, so text
 /// functions can work on offsets.
+#[must_use]
 pub fn offset_text(value: &[Segment]) -> String {
     value
         .iter()
@@ -131,6 +135,7 @@ pub fn offset_text(value: &[Segment]) -> String {
 }
 
 /// The part of the value between two offsets. Tokens are kept whole.
+#[must_use]
 pub fn slice_value(value: &[Segment], start: usize, end: usize) -> Vec<Segment> {
     let mut result = Vec::new();
     let mut at = 0;
@@ -156,6 +161,7 @@ pub fn slice_value(value: &[Segment], start: usize, end: usize) -> Vec<Segment> 
 
 /// The value with `start..end` replaced by `content`. A token inside the range
 /// goes entirely.
+#[must_use]
 pub fn replace_range(
     value: &[Segment],
     start: usize,
@@ -169,6 +175,7 @@ pub fn replace_range(
 }
 
 /// The token at an offset, if a token sits there.
+#[must_use]
 pub fn token_at(value: &[Segment], offset: usize) -> Option<&Token> {
     let mut at = 0;
     for segment in value {
@@ -180,6 +187,7 @@ pub fn token_at(value: &[Segment], offset: usize) -> Option<&Token> {
     None
 }
 
+#[must_use]
 pub fn offset_of_token(value: &[Segment], id: &str) -> Option<usize> {
     let mut at = 0;
     for segment in value {
@@ -192,6 +200,7 @@ pub fn offset_of_token(value: &[Segment], id: &str) -> Option<usize> {
 }
 
 /// The tokens an edit took out, for telling the owner.
+#[must_use]
 pub fn removed_tokens(before: &[Segment], after: &[Segment]) -> Vec<Token> {
     let tokens = |value: &[Segment]| -> Vec<Token> {
         value
@@ -214,6 +223,7 @@ pub fn removed_tokens(before: &[Segment], after: &[Segment]) -> Vec<Token> {
 
 /// Where deleting or moving by a word from `offset` ends. It stops at a token,
 /// and takes just the token when one is next.
+#[must_use]
 pub fn word_boundary(value: &[Segment], offset: usize, forward: bool) -> usize {
     let text: Vec<char> = offset_text(value).chars().collect();
     let char_at = |index: usize| {
@@ -253,6 +263,7 @@ pub fn word_boundary(value: &[Segment], offset: usize, forward: bool) -> usize {
 
 /// Where deleting or moving to the end of the line from `offset` ends. At the
 /// edge of a line already, it takes the line break.
+#[must_use]
 pub fn line_boundary(value: &[Segment], offset: usize, forward: bool) -> usize {
     let text: Vec<char> = offset_text(value).chars().collect();
     if !forward {
@@ -308,6 +319,7 @@ fn trailing_slashes(text: &str) -> &str {
 /// The value as plain text: text as it is, and each token as a link,
 /// `[@label](kind:value)`. Text that would read as a link is escaped, so
 /// `from_text` gives the same value back.
+#[must_use]
 pub fn to_text(value: &[Segment]) -> String {
     let mut out = String::new();
     for (index, segment) in value.iter().enumerate() {
@@ -339,6 +351,7 @@ pub fn to_text(value: &[Segment]) -> String {
 }
 
 /// The value as a person reads it: text, with each token as its label.
+#[must_use]
 pub fn to_label(value: &[Segment]) -> String {
     value
         .iter()
@@ -397,6 +410,7 @@ fn link_at(text: &[char], at: usize) -> Option<(Token, usize)> {
 
 /// Reads a value written by `to_text`. Anything that is not a well-formed link
 /// stays text.
+#[must_use]
 pub fn from_text(text: &str) -> Vec<Segment> {
     let chars: Vec<char> = text.chars().collect();
     let mut value: Vec<Segment> = Vec::new();
@@ -420,16 +434,13 @@ pub fn from_text(text: &str) -> Vec<Segment> {
         } else {
             link_at(&chars, bracket)
         };
-        match link {
-            Some((token, end)) => {
-                value.push(Segment::Text(std::mem::take(&mut plain)));
-                value.push(Segment::Token(token));
-                index = end;
-            }
-            None => {
-                plain.push_str("[@");
-                index = bracket + 2;
-            }
+        if let Some((token, end)) = link {
+            value.push(Segment::Text(std::mem::take(&mut plain)));
+            value.push(Segment::Token(token));
+            index = end;
+        } else {
+            plain.push_str("[@");
+            index = bracket + 2;
         }
     }
     plain.extend(&chars[index.min(chars.len())..]);

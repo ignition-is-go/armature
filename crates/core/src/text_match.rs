@@ -5,6 +5,7 @@ use std::ops::Range;
 /// The byte ranges of `text` that `query` matches, ignoring case. A whole-substring
 /// match is preferred, at a word start if there is one. Otherwise the query's
 /// characters are matched in order with gaps. `None` means no match.
+#[must_use]
 pub fn match_ranges(query: &str, text: &str) -> Option<Vec<Range<usize>>> {
     let query: Vec<char> = query.chars().collect();
     let chars: Vec<(usize, char)> = text.char_indices().collect();
@@ -28,6 +29,7 @@ pub fn match_ranges(query: &str, text: &str) -> Option<Vec<Range<usize>>> {
 /// which score more at the start of a word or right after one another, so `gp`
 /// finds `Git push`. Among matches of one kind, covering more of the text ranks
 /// higher, so `set` puts `Set` above `Settings`.
+#[must_use]
 pub fn fuzzy_score(query: &str, text: &str) -> Option<u32> {
     let needle: Vec<char> = crate::fold::fold_text(query, None).chars().collect();
     if needle.is_empty() {
@@ -74,6 +76,7 @@ pub struct Segment<'a> {
 }
 
 /// Splits `text` into matched and unmatched pieces, in order, for rendering.
+#[must_use]
 pub fn match_segments<'a>(text: &'a str, ranges: &[Range<usize>]) -> Vec<Segment<'a>> {
     let mut segments = Vec::new();
     let mut cursor = 0;

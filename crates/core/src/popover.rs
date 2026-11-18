@@ -32,12 +32,14 @@ pub struct Popover {
 }
 
 impl Popover {
-    pub fn is_open(&self) -> bool {
+    #[must_use]
+    pub const fn is_open(&self) -> bool {
         self.open
     }
 
     /// A popover that keeps the page behind it out of reach while it is open.
-    pub fn modal(mut self) -> Self {
+    #[must_use]
+    pub const fn modal(mut self) -> Self {
         self.modal = true;
         self
     }

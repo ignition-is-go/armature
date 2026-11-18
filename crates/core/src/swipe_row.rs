@@ -36,8 +36,9 @@ pub struct SwipeRow {
 }
 
 impl SwipeRow {
+    #[must_use]
     pub fn new(shape: SwipeActions) -> Self {
-        SwipeRow {
+        Self {
             shape,
             actions: Items::default(),
             revealed: false,
@@ -49,11 +50,13 @@ impl SwipeRow {
         }
     }
 
-    pub fn is_revealed(&self) -> bool {
+    #[must_use]
+    pub const fn is_revealed(&self) -> bool {
         self.revealed
     }
 
     /// How far aside to draw the row.
+    #[must_use]
     pub fn offset(&self) -> f64 {
         if self.swiping {
             self.shape.offset(self.dragged)
@@ -81,7 +84,7 @@ impl SwipeRow {
 
 impl Default for SwipeRow {
     fn default() -> Self {
-        SwipeRow::new(SwipeActions::with_full_swipe(80.0, 320.0))
+        Self::new(SwipeActions::with_full_swipe(80.0, 320.0))
     }
 }
 

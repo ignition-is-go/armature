@@ -41,18 +41,20 @@ pub struct TriggerMenu {
 }
 
 impl TriggerMenu {
+    #[must_use]
     pub fn new(triggers: &[char]) -> Self {
-        TriggerMenu {
+        Self {
             triggers: triggers.to_vec(),
             ..Default::default()
         }
     }
 
     /// Says what a command takes after it, such as an environment for `/deploy`.
+    #[must_use]
     pub fn arguments(mut self, key: &str, names: &[&str]) -> Self {
         self.arguments.push((
             key.to_string(),
-            names.iter().map(|name| name.to_string()).collect(),
+            names.iter().map(std::string::ToString::to_string).collect(),
         ));
         self
     }
@@ -87,6 +89,7 @@ impl TriggerMenu {
     /// been typed after it. The character must start a word, or follow an opening
     /// bracket or quote, and the query runs to the end of the text. A full-width
     /// character an input method committed counts as its plain form.
+    #[must_use]
     pub fn query(&self) -> Option<(usize, char, &str)> {
         let rules: Vec<TriggerRule> = self
             .triggers
@@ -99,11 +102,13 @@ impl TriggerMenu {
         (self.dismissed != Some(start)).then_some((start, self.triggers[found.rule], typed))
     }
 
+    #[must_use]
     pub fn is_open(&self) -> bool {
         self.query().is_some()
     }
 
     /// The suggestions on show, in order.
+    #[must_use]
     pub fn results(&self) -> Vec<&str> {
         let Some((_, trigger, typed)) = self.query() else {
             return Vec::new();

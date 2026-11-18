@@ -41,7 +41,7 @@ pub struct ScrollArea {
 
 impl Default for ScrollArea {
     fn default() -> Self {
-        ScrollArea {
+        Self {
             offset: 0.0,
             viewport: 0.0,
             content: 0.0,
@@ -58,30 +58,35 @@ impl Default for ScrollArea {
 impl ScrollArea {
     /// A box that scrolls across the page. The default scrolls down it. For both,
     /// put one inside the other.
+    #[must_use]
     pub fn horizontal() -> Self {
-        ScrollArea {
+        Self {
             axis: Orientation::Horizontal,
-            ..ScrollArea::default()
+            ..Self::default()
         }
     }
 
-    pub fn stick_to_end(mut self) -> Self {
+    #[must_use]
+    pub const fn stick_to_end(mut self) -> Self {
         self.stick_to_end = true;
         self
     }
 
     /// Whether there is more content than fits.
+    #[must_use]
     pub fn overflows(&self) -> bool {
         self.content > self.viewport + 0.5
     }
 
     /// Whether the scrollbar is in use: being scrolled, dragged or pointed at. For
     /// scrollbars that fade away between uses.
-    pub fn in_use(&self) -> bool {
+    #[must_use]
+    pub const fn in_use(&self) -> bool {
         self.scrolling || self.hovered || self.drag.is_some()
     }
 
     /// Where the grip starts and how long it is, on a track of `track` length.
+    #[must_use]
     pub fn thumb(&self, track: f64) -> (f64, f64) {
         if !self.overflows() {
             return (0.0, track);

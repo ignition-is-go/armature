@@ -55,19 +55,22 @@ pub struct TreeView {
 }
 
 impl TreeView {
+    #[must_use]
     pub fn new(data: Vec<TreeItem>, dir: Dir) -> Self {
-        TreeView {
+        Self {
             data,
             dir,
             ..Default::default()
         }
     }
 
+    #[must_use]
     pub fn is_expanded(&self, key: &str) -> bool {
         self.expanded.contains(key)
     }
 
     /// The rows on screen, in order.
+    #[must_use]
     pub fn rows(&self) -> Vec<Row> {
         let mut rows = Tree::new(&self.data).visible_rows(&self.expanded);
         // A node still to be loaded can be opened, though it has nothing yet.
@@ -105,11 +108,13 @@ impl TreeView {
     /// Marks nodes whose children are loaded on demand. Opening one offers
     /// `load:<key>` to the gate, and the owner answers with
     /// `set("children", "<key>=child,child")` when they arrive.
+    #[must_use]
     pub fn lazy(mut self, keys: &[&str]) -> Self {
-        self.lazy = keys.iter().map(|key| key.to_string()).collect();
+        self.lazy = keys.iter().map(std::string::ToString::to_string).collect();
         self
     }
 
+    #[must_use]
     pub fn is_loading(&self, key: &str) -> bool {
         self.loading.contains(key)
     }
@@ -131,7 +136,8 @@ impl TreeView {
     }
 
     /// Lets several nodes be selected at once.
-    pub fn multiple(mut self) -> Self {
+    #[must_use]
+    pub const fn multiple(mut self) -> Self {
         self.multiple = true;
         self
     }
@@ -147,12 +153,14 @@ impl TreeView {
     /// Turns the tree into one of checkboxes. Choosing a node checks or unchecks it
     /// and everything beneath it, and the value becomes the checked nodes as
     /// `strategy` reports them.
-    pub fn checkable(mut self, strategy: CheckStrategy) -> Self {
+    #[must_use]
+    pub const fn checkable(mut self, strategy: CheckStrategy) -> Self {
         self.check = Some(strategy);
         self
     }
 
     /// Whether a node is checked, unchecked, or checked only in part.
+    #[must_use]
     pub fn checked_state(&self, key: &str) -> Checked {
         let states = Tree::new(&self.data).checked_states(&self.checked);
         states.get(key).copied().unwrap_or(Checked::Unchecked)
@@ -207,7 +215,8 @@ impl TreeView {
 
     /// Where a node being dragged would land, as the slot among the other rows and
     /// the depth, for drawing an indicator.
-    pub fn landing(&self) -> Option<(usize, usize)> {
+    #[must_use]
+    pub const fn landing(&self) -> Option<(usize, usize)> {
         self.landing
     }
 
@@ -542,7 +551,7 @@ impl Primitive for TreeView {
         match pointer.phase {
             PointerPhase::Down => {
                 self.drag.down(pointer.at);
-                self.pressed = pointer.item.clone().filter(|key| self.enabled(key));
+                self.pressed = pointer.item.filter(|key| self.enabled(key));
                 Reaction::handled().with(Effect::CapturePointer)
             }
             PointerPhase::Move => {

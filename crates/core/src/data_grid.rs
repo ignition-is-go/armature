@@ -31,20 +31,22 @@ fn key_of(cell: Cell) -> String {
 
 impl Default for DataGrid {
     fn default() -> Self {
-        DataGrid::new(vec![vec![String::new(); 3]; 3], Dir::Ltr)
+        Self::new(vec![vec![String::new(); 3]; 3], Dir::Ltr)
     }
 }
 
 impl DataGrid {
+    #[must_use]
     pub fn new(cells: Vec<Vec<String>>, dir: Dir) -> Self {
-        DataGrid {
+        Self {
             cells,
             dir,
             range: CellRange::new(Cell { row: 0, col: 0 }),
         }
     }
 
-    pub fn rows(&self) -> usize {
+    #[must_use]
+    pub const fn rows(&self) -> usize {
         self.cells.len()
     }
 
@@ -60,6 +62,7 @@ impl DataGrid {
     }
 
     /// The selected cells as text for the clipboard.
+    #[must_use]
     pub fn copied(&self) -> String {
         let rows: Vec<Vec<String>> = self
             .range

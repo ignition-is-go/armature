@@ -34,12 +34,14 @@ pub struct Command {
 }
 
 impl Command {
+    #[must_use]
     pub fn query(&self) -> &str {
         &self.query
     }
 
     /// Adds a page of options: `opener` opens it in place of running, and it shows
     /// only `options`. Backspace in an empty field goes back.
+    #[must_use]
     pub fn page(mut self, name: &str, opener: &str, options: &[&str]) -> Self {
         self.opens.push((opener.to_string(), name.to_string()));
         self.held.extend(
@@ -51,6 +53,7 @@ impl Command {
     }
 
     /// The pages opened, outermost first, for showing where the person is.
+    #[must_use]
     pub fn pages(&self) -> &[String] {
         &self.pages
     }
@@ -69,6 +72,7 @@ impl Command {
     }
 
     /// The options still shown, best match first.
+    #[must_use]
     pub fn results(&self) -> Vec<&str> {
         let mut scored: Vec<(u32, &str)> = self
             .items

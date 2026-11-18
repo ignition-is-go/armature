@@ -42,14 +42,15 @@ pub struct VirtualList {
 
 impl Default for VirtualList {
     fn default() -> Self {
-        VirtualList::new(1000, 24.0)
+        Self::new(1000, 24.0)
     }
 }
 
 impl VirtualList {
     /// A list of `count` rows, each `row_size` tall until measured.
+    #[must_use]
     pub fn new(count: usize, row_size: f64) -> Self {
-        VirtualList {
+        Self {
             rows: Virtualizer::new(count, row_size, 0.0),
             count,
             offset: 0.0,
@@ -61,11 +62,13 @@ impl VirtualList {
 
     /// The height of all the rows together, for the spacer that gives the scrollbar
     /// its length.
+    #[must_use]
     pub fn total_size(&self) -> f64 {
         self.rows.total_size()
     }
 
     /// The rows to render now.
+    #[must_use]
     pub fn rows(&self) -> Vec<VirtualRow> {
         self.rows
             .range(self.offset, self.viewport, OVERSCAN)
@@ -252,7 +255,7 @@ impl Primitive for VirtualList {
     fn value(&self) -> Vec<String> {
         self.selected
             .iter()
-            .map(|index| index.to_string())
+            .map(std::string::ToString::to_string)
             .collect()
     }
 

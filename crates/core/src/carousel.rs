@@ -46,7 +46,7 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        Options {
+        Self {
             wrap: false,
             autoplay_ms: None,
             dir: Dir::Ltr,
@@ -85,15 +85,17 @@ pub struct Carousel {
 }
 
 impl Carousel {
+    #[must_use]
     pub fn new(opts: Options) -> Self {
-        Carousel {
+        Self {
             opts,
             playing: opts.autoplay_ms.is_some(),
             ..Default::default()
         }
     }
 
-    pub fn index(&self) -> usize {
+    #[must_use]
+    pub const fn index(&self) -> usize {
         self.current
     }
 
@@ -169,12 +171,14 @@ impl Carousel {
 
     /// The pages as the adapter last measured them: which slides are on each and
     /// how far the strip moves to show it. Empty until the slides are drawn.
+    #[must_use]
     pub fn layout(&self) -> &[Page] {
         &self.measured
     }
 
     /// How far to move the strip to show the current page, from the last
     /// measurement.
+    #[must_use]
     pub fn strip_offset(&self) -> Option<f64> {
         self.measured
             .iter()
@@ -182,12 +186,14 @@ impl Carousel {
             .map(|page| page.position)
     }
 
-    pub fn is_playing(&self) -> bool {
+    #[must_use]
+    pub const fn is_playing(&self) -> bool {
         self.playing
     }
 
     /// Where the strip of slides sits, in slides: the index on show, shifted by a
     /// drag in progress.
+    #[must_use]
     pub fn position(&self) -> f64 {
         // A drag across the whole viewport is a whole page.
         let dragged = self.drag.map_or(0.0, |(_, moved, width)| {
@@ -211,6 +217,7 @@ impl Carousel {
     }
 
     /// How many pages of slides there are.
+    #[must_use]
     pub fn pages(&self) -> usize {
         self.count().div_ceil(self.opts.per_page.max(1)).max(1)
     }
@@ -277,7 +284,7 @@ impl Carousel {
         Reaction::handled()
     }
 
-    fn running(&self) -> bool {
+    const fn running(&self) -> bool {
         self.playing && !self.held.0 && !self.held.1 && self.opts.autoplay_ms.is_some()
     }
 

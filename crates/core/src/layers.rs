@@ -15,8 +15,9 @@ pub struct Layer {
 
 impl Layer {
     /// A layer that Escape and outside presses dismiss, as a menu or popover is.
+    #[must_use]
     pub fn popup(id: &str) -> Self {
-        Layer {
+        Self {
             id: id.to_string(),
             modal: false,
             dismiss_on_escape: true,
@@ -26,8 +27,9 @@ impl Layer {
     }
 
     /// A layer that stays usable above everything and that nothing else dismisses.
+    #[must_use]
     pub fn persistent(id: &str) -> Self {
-        Layer {
+        Self {
             id: id.to_string(),
             modal: false,
             dismiss_on_escape: false,
@@ -37,8 +39,9 @@ impl Layer {
     }
 
     /// A modal layer that Escape dismisses and outside presses do not.
+    #[must_use]
     pub fn dialog(id: &str) -> Self {
-        Layer {
+        Self {
             id: id.to_string(),
             modal: true,
             dismiss_on_escape: true,
@@ -79,12 +82,14 @@ impl LayerStack {
         }
     }
 
+    #[must_use]
     pub fn top(&self) -> Option<&str> {
         self.layers.last().map(|layer| layer.id.as_str())
     }
 
     /// Whether a layer cannot be interacted with because a modal sits above it. A
     /// persistent layer never is.
+    #[must_use]
     pub fn is_inert(&self, id: &str) -> bool {
         match self.layers.iter().position(|layer| layer.id == id) {
             Some(at) if self.layers[at].persistent => false,
@@ -147,7 +152,8 @@ impl LayerStack {
 
 /// The element Tab moves to inside a modal layer that traps focus: it wraps at both
 /// ends. `count` is how many tabbable elements the layer has.
-pub fn trapped_focus(current: Option<usize>, count: usize, backwards: bool) -> Option<usize> {
+#[must_use]
+pub const fn trapped_focus(current: Option<usize>, count: usize, backwards: bool) -> Option<usize> {
     if count == 0 {
         return None;
     }

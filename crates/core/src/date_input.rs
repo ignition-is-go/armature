@@ -20,44 +20,37 @@ pub enum Segment {
 }
 
 impl Segment {
-    pub const DATE: [Segment; 3] = [Segment::Year, Segment::Month, Segment::Day];
-    pub const DATE_TIME: [Segment; 5] = [
-        Segment::Year,
-        Segment::Month,
-        Segment::Day,
-        Segment::Hour,
-        Segment::Minute,
-    ];
-    const ALL: [Segment; 7] = [
-        Segment::Year,
-        Segment::Month,
-        Segment::Day,
-        Segment::Hour,
-        Segment::Minute,
-        Segment::Second,
-        Segment::Period,
+    pub const DATE: [Self; 3] = [Self::Year, Self::Month, Self::Day];
+    pub const DATE_TIME: [Self; 5] = [Self::Year, Self::Month, Self::Day, Self::Hour, Self::Minute];
+    const ALL: [Self; 7] = [
+        Self::Year,
+        Self::Month,
+        Self::Day,
+        Self::Hour,
+        Self::Minute,
+        Self::Second,
+        Self::Period,
     ];
 
-    pub fn name(self) -> &'static str {
+    #[must_use]
+    pub const fn name(self) -> &'static str {
         match self {
-            Segment::Year => "year",
-            Segment::Month => "month",
-            Segment::Day => "day",
-            Segment::Hour => "hour",
-            Segment::Minute => "minute",
-            Segment::Second => "second",
-            Segment::Period => "period",
+            Self::Year => "year",
+            Self::Month => "month",
+            Self::Day => "day",
+            Self::Hour => "hour",
+            Self::Minute => "minute",
+            Self::Second => "second",
+            Self::Period => "period",
         }
     }
 
-    fn named(name: &str) -> Option<Segment> {
-        Segment::ALL
-            .into_iter()
-            .find(|segment| segment.name() == name)
+    fn named(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|segment| segment.name() == name)
     }
 
     fn width(self) -> usize {
-        if self == Segment::Year { 4 } else { 2 }
+        if self == Self::Year { 4 } else { 2 }
     }
 }
 
@@ -94,13 +87,14 @@ pub struct DateInput {
 
 impl Default for DateInput {
     fn default() -> Self {
-        DateInput::new(false)
+        Self::new(false)
     }
 }
 
 impl DateInput {
-    pub fn new(with_time: bool) -> Self {
-        DateInput {
+    #[must_use]
+    pub const fn new(with_time: bool) -> Self {
+        Self {
             with_time,
             fields: [None; 6],
             focused: Segment::Year,
@@ -112,12 +106,14 @@ impl DateInput {
         }
     }
 
-    pub fn between(mut self, earliest: Option<Date>, latest: Option<Date>) -> Self {
+    #[must_use]
+    pub const fn between(mut self, earliest: Option<Date>, latest: Option<Date>) -> Self {
         self.limits = (earliest, latest);
         self
     }
 
     /// Whether a complete date lies outside the earliest and latest taken.
+    #[must_use]
     pub fn out_of_range(&self, fields: &[Option<u32>; 6]) -> bool {
         let get = |segment: Segment| fields[segment as usize];
         let (Some(year), Some(month), Some(day)) =
@@ -133,6 +129,7 @@ impl DateInput {
     }
 
     /// The pieces shown, in order.
+    #[must_use]
     pub fn segments(&self) -> Vec<Segment> {
         let mut shown = Segment::DATE.to_vec();
         if self.with_time {
@@ -144,13 +141,15 @@ impl DateInput {
     }
 
     /// Shows seconds after the minutes. Only a date with a time has them.
-    pub fn with_seconds(mut self) -> Self {
+    #[must_use]
+    pub const fn with_seconds(mut self) -> Self {
         self.seconds = true;
         self
     }
 
     /// Runs the hours from 1 to 12, with a piece after them for morning or afternoon.
-    pub fn twelve_hour(mut self) -> Self {
+    #[must_use]
+    pub const fn twelve_hour(mut self) -> Self {
         self.twelve = true;
         self
     }
@@ -159,7 +158,7 @@ impl DateInput {
     /// shown on whichever clock was asked for.
     fn get(&self, segment: Segment) -> Option<u32> {
         match segment {
-            Segment::Period => Some(self.pm as u32),
+            Segment::Period => Some(u32::from(self.pm)),
             Segment::Hour if self.twelve => {
                 self.fields[3].map(|hour| if hour % 12 == 0 { 12 } else { hour % 12 })
             }
@@ -175,7 +174,7 @@ impl DateInput {
             Segment::Day => match (self.get(Segment::Year), self.get(Segment::Month)) {
                 (year, Some(month)) => (
                     1,
-                    days_in_month(year.unwrap_or(2000) as i32, month as u8) as u32,
+                    u32::from(days_in_month(year.unwrap_or(2000) as i32, month as u8)),
                 ),
                 _ => (1, 31),
             },
@@ -223,11 +222,11 @@ impl DateInput {
                 self.pm = pm;
             }
             Segment::Hour if self.twelve => {
-                fields[3] = number.map(|shown| shown % 12 + if self.pm { 12 } else { 0 })
+                fields[3] = number.map(|shown| shown % 12 + if self.pm { 12 } else { 0 });
             }
             other => fields[other as usize] = number,
         }
-        let trial = DateInput {
+        let trial = Self {
             fields,
             ..self.clone()
         };
@@ -314,9 +313,9 @@ impl Primitive for DateInput {
                     role: Some(Role::SpinButton),
                     invalid: self.out_of_range(&self.fields),
                     range: self.get(segment).map(|now| ValueRange {
-                        now: now as f64,
-                        min: min as f64,
-                        max: max as f64,
+                        now: f64::from(now),
+                        min: f64::from(min),
+                        max: f64::from(max),
                     }),
                     // The first piece is the way in. The arrows reach the rest.
                     focusable: if segment == self.focused {
@@ -392,7 +391,7 @@ impl Primitive for DateInput {
                     Key::Char(letter @ ('a' | 'A' | 'p' | 'P')) if segment == Segment::Period => {
                         self.put(
                             segment,
-                            Some(matches!(letter, 'p' | 'P') as u32),
+                            Some(u32::from(matches!(letter, 'p' | 'P'))),
                             Source::User,
                             Reason::Text,
                             gate,
@@ -475,8 +474,8 @@ impl Primitive for DateInput {
         self.pm = hour.is_some_and(|hour| hour >= 12);
         self.fields = [
             Some(date.year as u32),
-            Some(date.month as u32),
-            Some(date.day as u32),
+            Some(u32::from(date.month)),
+            Some(u32::from(date.day)),
             hour,
             minute,
             second,

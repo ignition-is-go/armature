@@ -42,7 +42,7 @@ const KEYS: [Key; 14] = [
 type Instance<P> = (<P as Primitive>::Part, Option<String>);
 
 /// Roles whose items form one composite control, which must have a single tab stop.
-fn is_composite_item(role: Option<Role>) -> bool {
+const fn is_composite_item(role: Option<Role>) -> bool {
     matches!(
         role,
         Some(

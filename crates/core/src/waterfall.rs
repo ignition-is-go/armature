@@ -18,7 +18,7 @@ pub struct Span {
 
 impl Span {
     pub fn new(key: &str, start_ms: f64, duration_ms: f64, parent: Option<&str>) -> Self {
-        Span {
+        Self {
             key: key.into(),
             label: key.into(),
             start_ms,
@@ -29,7 +29,7 @@ impl Span {
 }
 
 /// A row to draw.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Row {
     pub key: String,
     /// How deep it is nested, from 1.
@@ -81,7 +81,7 @@ impl Waterfall {
             (start, end.max(start + 1.0))
         };
         let expanded = spans.iter().map(|span| span.key.clone()).collect();
-        Waterfall {
+        Self {
             spans,
             dir,
             domain,
@@ -93,6 +93,7 @@ impl Waterfall {
 
     /// Shows another stretch of time, to zoom or pan. Bars outside it shrink to its
     /// edges.
+    #[must_use]
     pub fn showing(mut self, start_ms: f64, end_ms: f64) -> Self {
         self.domain = (start_ms, end_ms.max(start_ms + f64::MIN_POSITIVE));
         self
@@ -110,6 +111,7 @@ impl Waterfall {
     }
 
     /// The rows on show, parents before the spans they started.
+    #[must_use]
     pub fn rows(&self) -> Vec<Row> {
         fn walk(waterfall: &Waterfall, parent: Option<&str>, level: usize, rows: &mut Vec<Row>) {
             for span in waterfall.children(parent) {
@@ -132,6 +134,7 @@ impl Waterfall {
     }
 
     /// Where a span's bar starts and how long it is, as fractions of the axis.
+    #[must_use]
     pub fn bar(&self, key: &str) -> Option<(f64, f64)> {
         let span = self.span(key)?;
         let (start, end) = self.domain;
@@ -142,6 +145,7 @@ impl Waterfall {
 
     /// At most `most` marks for the axis, on round times: where each sits as a
     /// fraction of the axis, and its time.
+    #[must_use]
     pub fn ticks(&self, most: usize) -> Vec<(f64, f64)> {
         let (start, end) = self.domain;
         let rough = (end - start) / most.max(1) as f64;

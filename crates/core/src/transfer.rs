@@ -32,6 +32,7 @@ pub fn transfer<T: PartialEq + Clone>(
 }
 
 /// What to tell a screen reader after a transfer.
+#[must_use]
 pub fn transfer_message(count: usize, destination: &str) -> String {
     match count {
         0 => "Nothing moved.".to_string(),

@@ -22,15 +22,11 @@ pub enum Scale {
 
 impl Scale {
     fn to(self, value: f64) -> f64 {
-        if self == Scale::Log {
-            value.ln()
-        } else {
-            value
-        }
+        if self == Self::Log { value.ln() } else { value }
     }
 
     fn from(self, position: f64) -> f64 {
-        if self == Scale::Log {
+        if self == Self::Log {
             position.exp()
         } else {
             position
@@ -39,8 +35,9 @@ impl Scale {
 }
 
 impl NumberRange {
-    pub fn new(min: f64, max: f64, step: f64) -> Self {
-        NumberRange {
+    #[must_use]
+    pub const fn new(min: f64, max: f64, step: f64) -> Self {
+        Self {
             min,
             max,
             step,
@@ -48,17 +45,19 @@ impl NumberRange {
         }
     }
 
-    pub fn log(mut self) -> Self {
+    #[must_use]
+    pub const fn log(mut self) -> Self {
         self.scale = Scale::Log;
         self
     }
 
-    pub fn clamp(&self, value: f64) -> f64 {
+    #[must_use]
+    pub const fn clamp(&self, value: f64) -> f64 {
         value.clamp(self.min, self.max)
     }
 
     /// Where the steps are counted from: the least value, or zero without one.
-    fn base(&self) -> f64 {
+    const fn base(&self) -> f64 {
         if self.min.is_finite() { self.min } else { 0.0 }
     }
 
@@ -80,11 +79,14 @@ impl NumberRange {
     }
 
     /// The last step at or below the most allowed.
+    #[must_use]
     pub fn max_on_grid(&self) -> f64 {
         if !self.max.is_finite() || self.step <= 0.0 {
             return self.max;
         }
-        self.base() + ((self.max - self.base()) / self.step + 1e-9).floor() * self.step
+        ((self.max - self.base()) / self.step + 1e-9)
+            .floor()
+            .mul_add(self.step, self.base())
     }
 
     /// A value brought within the range and written with only the decimals its
@@ -98,15 +100,17 @@ impl NumberRange {
     }
 
     /// The nearest step to `value`, counted from `min` and kept in range.
+    #[must_use]
     pub fn snap(&self, value: f64) -> f64 {
         if self.step <= 0.0 {
             return self.clamp(value);
         }
         let steps = self.steps_from_base(value).round();
-        self.on_grid(self.base() + steps * self.step)
+        self.on_grid(steps.mul_add(self.step, self.base()))
     }
 
     /// Where `value` sits between `min` and `max`, from 0 to 1.
+    #[must_use]
     pub fn fraction(&self, value: f64) -> f64 {
         if self.max <= self.min {
             return 0.0;
@@ -121,15 +125,20 @@ impl NumberRange {
     }
 
     /// The stepped value at `fraction` of the way from `min` to `max`.
+    #[must_use]
     pub fn at_fraction(&self, fraction: f64) -> f64 {
         let low = self.scale.to(self.min);
         self.snap(
-            self.scale
-                .from(low + fraction.clamp(0.0, 1.0) * (self.scale.to(self.max) - low)),
+            self.scale.from(
+                fraction
+                    .clamp(0.0, 1.0)
+                    .mul_add(self.scale.to(self.max) - low, low),
+            ),
         )
     }
 
     /// `value` moved by a number of steps, which may be negative.
+    #[must_use]
     pub fn nudge(&self, value: f64, steps: f64) -> f64 {
         if self.step <= 0.0 {
             return self.clamp(value + steps);
@@ -144,12 +153,13 @@ impl NumberRange {
         } else {
             position.ceil()
         };
-        self.on_grid(self.base() + (from + steps) * self.step)
+        self.on_grid((from + steps).mul_add(self.step, self.base()))
     }
 }
 
 /// Reads a number the way people type one: surrounding spaces, thousands separators
 /// and a trailing percent sign are accepted.
+#[must_use]
 pub fn parse_number(text: &str) -> Option<f64> {
     let cleaned: String = text
         .trim()
@@ -165,6 +175,7 @@ pub fn parse_number(text: &str) -> Option<f64> {
 }
 
 /// Formats with a fixed number of decimals and thousands separators.
+#[must_use]
 pub fn format_number(value: f64, decimals: usize) -> String {
     let fixed = format!("{:.*}", decimals, value.abs());
     let (whole, fraction) = fixed.split_once('.').unwrap_or((&fixed, ""));
@@ -188,6 +199,7 @@ pub fn format_number(value: f64, decimals: usize) -> String {
 }
 
 /// How many decimal places a step calls for: none for 1, two for 0.25.
+#[must_use]
 pub fn decimals_of(step: f64) -> usize {
     if !step.is_finite() || step.fract() == 0.0 {
         return 0;
@@ -199,6 +211,7 @@ pub fn decimals_of(step: f64) -> usize {
 
 /// `value` brought round into the span from `min` up to, but not including, `max`,
 /// as an angle is brought back within a turn.
+#[must_use]
 pub fn wrap(value: f64, min: f64, max: f64) -> f64 {
     let span = max - min;
     if span <= 0.0 {
@@ -208,6 +221,7 @@ pub fn wrap(value: f64, min: f64, max: f64) -> f64 {
 }
 
 /// A number written for reading, with thousands separated: `1,234.50`.
+#[must_use]
 pub fn format_grouped(value: f64, decimals: usize) -> String {
     let text = format!("{:.*}", decimals, value.abs());
     let (whole, fraction) = text.split_once('.').unwrap_or((&text, ""));
@@ -231,6 +245,7 @@ pub fn format_grouped(value: f64, decimals: usize) -> String {
 }
 
 /// A size in bytes written for reading: `512 B`, `1.5 KB`, `3.2 MB`.
+#[must_use]
 pub fn format_file_size(bytes: u64) -> String {
     const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
     let mut size = bytes as f64;
@@ -244,7 +259,7 @@ pub fn format_file_size(bytes: u64) -> String {
     } else {
         format!(
             "{} {}",
-            format_number(size, if size < 10.0 { 1 } else { 0 }),
+            format_number(size, usize::from(size < 10.0)),
             UNITS[unit]
         )
     }
@@ -264,6 +279,7 @@ fn separators(locale: &str) -> (&'static str, &'static str) {
 
 /// A number written the way a language writes it: `1,234.5` in English, `1.234,5`
 /// in German, with a space in French.
+#[must_use]
 pub fn format_localized(value: f64, decimals: usize, locale: &str) -> String {
     let (group, point) = separators(locale);
     format_grouped(value, decimals)
@@ -277,6 +293,7 @@ pub fn format_localized(value: f64, decimals: usize, locale: &str) -> String {
 }
 
 /// Reads a number written the way a language writes it.
+#[must_use]
 pub fn parse_localized(text: &str, locale: &str) -> Option<f64> {
     let (group, point) = separators(locale);
     let plain: String = text

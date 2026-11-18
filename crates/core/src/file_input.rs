@@ -22,6 +22,7 @@ pub enum Part {
 /// `.csv`, a media type such as `application/pdf`, or a family such as `image/*`.
 /// An extension goes by the file's name, whatever type the platform reports, and
 /// no rules at all takes anything.
+#[must_use]
 pub fn accepts_file(name: &str, kind: &str, accept: &[String]) -> bool {
     let rules: Vec<String> = accept
         .iter()
@@ -80,18 +81,21 @@ pub struct FileInput {
 }
 
 impl FileInput {
+    #[must_use]
     pub fn new(opts: Options) -> Self {
-        FileInput {
+        Self {
             opts,
             ..Default::default()
         }
     }
 
+    #[must_use]
     pub fn files(&self) -> &[FileInfo] {
         &self.files
     }
 
     /// The files turned away the last time some were offered, and why.
+    #[must_use]
     pub fn rejected(&self) -> &[(String, Rejection)] {
         &self.rejected
     }

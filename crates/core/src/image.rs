@@ -12,19 +12,21 @@ pub enum Rotation {
 }
 
 impl Rotation {
-    pub fn degrees(self) -> u16 {
+    #[must_use]
+    pub const fn degrees(self) -> u16 {
         match self {
-            Rotation::None => 0,
-            Rotation::Quarter => 90,
-            Rotation::Half => 180,
-            Rotation::ThreeQuarters => 270,
+            Self::None => 0,
+            Self::Quarter => 90,
+            Self::Half => 180,
+            Self::ThreeQuarters => 270,
         }
     }
 
     /// The image's size once turned. An odd quarter turn swaps width and height.
-    pub fn turned(self, width: f64, height: f64) -> (f64, f64) {
+    #[must_use]
+    pub const fn turned(self, width: f64, height: f64) -> (f64, f64) {
         match self {
-            Rotation::Quarter | Rotation::ThreeQuarters => (height, width),
+            Self::Quarter | Self::ThreeQuarters => (height, width),
             _ => (width, height),
         }
     }
@@ -66,11 +68,12 @@ impl Crop {
 
     /// The crop moved and shrunk as little as needed to lie inside an image of the
     /// given size (before turning).
-    pub fn clamped(&self, image_width: f64, image_height: f64) -> Crop {
+    #[must_use]
+    pub fn clamped(&self, image_width: f64, image_height: f64) -> Self {
         let (bound_w, bound_h) = self.rotation.turned(image_width, image_height);
         let width = self.width.min(bound_w);
         let height = self.height.min(bound_h);
-        Crop {
+        Self {
             x: self.x.clamp(0.0, bound_w - width),
             y: self.y.clamp(0.0, bound_h - height),
             width,
@@ -82,6 +85,7 @@ impl Crop {
 
 /// The name for a cropped file: the source's name with the extension of the type it
 /// was written as.
+#[must_use]
 pub fn cropped_name(source_name: Option<&str>, mime_type: &str) -> String {
     let extension = match mime_type {
         "image/jpeg" => "jpg",

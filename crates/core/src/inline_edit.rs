@@ -6,22 +6,26 @@ pub struct InlineEdit {
 }
 
 impl InlineEdit {
+    #[must_use]
     pub fn new(value: &str) -> Self {
-        InlineEdit {
+        Self {
             value: value.to_string(),
             draft: None,
         }
     }
 
+    #[must_use]
     pub fn value(&self) -> &str {
         &self.value
     }
 
-    pub fn is_editing(&self) -> bool {
+    #[must_use]
+    pub const fn is_editing(&self) -> bool {
         self.draft.is_some()
     }
 
     /// The text to show in the field while editing.
+    #[must_use]
     pub fn draft(&self) -> Option<&str> {
         self.draft.as_deref()
     }

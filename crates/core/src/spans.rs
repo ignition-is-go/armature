@@ -8,18 +8,21 @@ pub struct Span {
 
 impl Span {
     /// Spans that only touch at an edge do not overlap.
-    pub fn overlaps(&self, other: &Span) -> bool {
+    #[must_use]
+    pub fn overlaps(&self, other: &Self) -> bool {
         self.start < other.end && other.start < self.end
     }
 }
 
 /// Whether `candidate` fits on a track without overlapping any of `others`.
+#[must_use]
 pub fn is_span_free(candidate: Span, others: &[Span]) -> bool {
     !others.iter().any(|other| candidate.overlaps(other))
 }
 
 /// The lane for each span so that overlapping spans sit in separate lanes. Each span
 /// takes the lowest lane that is free, in order of start.
+#[must_use]
 pub fn stack_spans(spans: &[Span]) -> Vec<usize> {
     let mut order: Vec<usize> = (0..spans.len()).collect();
     order.sort_by(|a, b| spans[*a].start.total_cmp(&spans[*b].start));
@@ -57,6 +60,7 @@ pub enum SpanEdge {
 
 /// The span drawn by pressing at `from` and dragging to `to`, in either direction. It
 /// is never shorter than `min_length`.
+#[must_use]
 pub fn draw_span(from: f64, to: f64, min_length: f64, grid: Option<f64>) -> Span {
     let (from, to) = (snap(from, grid), snap(to, grid));
     if to >= from {
@@ -73,6 +77,7 @@ pub fn draw_span(from: f64, to: f64, min_length: f64, grid: Option<f64>) -> Span
 }
 
 /// `span` slid by `delta`, keeping its length and staying on `track`.
+#[must_use]
 pub fn move_span(span: Span, delta: f64, track: Span, grid: Option<f64>) -> Span {
     let length = span.end - span.start;
     let start = snap(span.start + delta, grid)
@@ -86,6 +91,7 @@ pub fn move_span(span: Span, delta: f64, track: Span, grid: Option<f64>) -> Span
 
 /// `span` with one edge dragged to `to`. The other edge stays put and the span keeps
 /// at least `min_length`.
+#[must_use]
 pub fn resize_span(
     span: Span,
     edge: SpanEdge,
@@ -107,6 +113,7 @@ pub fn resize_span(
 }
 
 /// What to tell a screen reader after a span changes.
+#[must_use]
 pub fn span_message(label: &str, span: Span) -> String {
     format!("{label} now runs from {} to {}.", span.start, span.end)
 }

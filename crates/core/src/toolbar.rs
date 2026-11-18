@@ -26,13 +26,14 @@ pub struct Toolbar {
 impl Default for Toolbar {
     /// A horizontal toolbar, as most are.
     fn default() -> Self {
-        Toolbar::new(Orientation::Horizontal, Dir::Ltr)
+        Self::new(Orientation::Horizontal, Dir::Ltr)
     }
 }
 
 impl Toolbar {
+    #[must_use]
     pub fn new(orientation: Orientation, dir: Dir) -> Self {
-        Toolbar {
+        Self {
             orientation,
             dir,
             items: Items::default(),

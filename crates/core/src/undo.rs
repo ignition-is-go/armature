@@ -9,13 +9,14 @@ pub struct UndoStack<T> {
 impl<T> UndoStack<T> {
     /// Keeps at most `limit` states, dropping the oldest.
     pub fn new(initial: T, limit: usize) -> Self {
-        UndoStack {
+        Self {
             states: vec![initial],
             current: 0,
             limit: limit.max(1),
         }
     }
 
+    #[must_use]
     pub fn current(&self) -> &T {
         &self.states[self.current]
     }
@@ -30,11 +31,13 @@ impl<T> UndoStack<T> {
         self.current = self.states.len() - 1;
     }
 
-    pub fn can_undo(&self) -> bool {
+    #[must_use]
+    pub const fn can_undo(&self) -> bool {
         self.current > 0
     }
 
-    pub fn can_redo(&self) -> bool {
+    #[must_use]
+    pub const fn can_redo(&self) -> bool {
         self.current + 1 < self.states.len()
     }
 

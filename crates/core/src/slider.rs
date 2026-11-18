@@ -19,13 +19,13 @@ pub struct Options {
     pub range: NumberRange,
     pub orientation: Orientation,
     pub dir: Dir,
-    /// Steps taken by PageUp, PageDown and Shift with an arrow.
+    /// Steps taken by `PageUp`, `PageDown` and Shift with an arrow.
     pub large_step: f64,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Options {
+        Self {
             range: NumberRange::new(0.0, 100.0, 1.0),
             orientation: Orientation::Horizontal,
             dir: Dir::Ltr,
@@ -46,24 +46,27 @@ pub struct Slider {
 
 impl Default for Slider {
     fn default() -> Self {
-        Slider::new(Options::default(), 0.0)
+        Self::new(Options::default(), 0.0)
     }
 }
 
 impl Slider {
+    #[must_use]
     pub fn new(opts: Options, value: f64) -> Self {
-        Slider {
+        Self {
             opts,
             value: opts.range.snap(value),
             dragging: false,
         }
     }
 
-    pub fn number(&self) -> f64 {
+    #[must_use]
+    pub const fn number(&self) -> f64 {
         self.value
     }
 
     /// How far along the track the thumb sits, from 0 to 1, for positioning it.
+    #[must_use]
     pub fn fraction(&self) -> f64 {
         self.opts.range.fraction(self.value)
     }

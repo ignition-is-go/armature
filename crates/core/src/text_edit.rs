@@ -24,18 +24,21 @@ pub enum Edit {
 
 impl TextEdit {
     /// Starts with the caret at the end, where typing continues.
+    #[must_use]
     pub fn new(text: &str) -> Self {
-        TextEdit {
+        Self {
             text: text.to_string(),
             caret: text.chars().count(),
         }
     }
 
+    #[must_use]
     pub fn text(&self) -> &str {
         &self.text
     }
 
-    pub fn caret(&self) -> usize {
+    #[must_use]
+    pub const fn caret(&self) -> usize {
         self.caret
     }
 
@@ -56,7 +59,8 @@ impl TextEdit {
 
     /// The edit a key means, if any. Keys held with Ctrl or Alt are shortcuts, not
     /// text.
-    pub fn edit_for(key: Key, mods: Modifiers) -> Option<Edit> {
+    #[must_use]
+    pub const fn edit_for(key: Key, mods: Modifiers) -> Option<Edit> {
         if mods.ctrl || mods.alt {
             return None;
         }
@@ -114,6 +118,7 @@ impl TextEdit {
 
 /// What changed between two texts, as one replaced stretch: where it starts, what
 /// was taken out and what was put in. Enough to say what a single edit did.
+#[must_use]
 pub fn text_diff(before: &str, after: &str) -> (usize, String, String) {
     let (old, new): (Vec<char>, Vec<char>) = (before.chars().collect(), after.chars().collect());
     let start = old.iter().zip(&new).take_while(|(a, b)| a == b).count();

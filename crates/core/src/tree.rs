@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 pub struct TreeItem {
     pub key: String,
     pub label: String,
-    pub children: Vec<TreeItem>,
+    pub children: Vec<Self>,
 }
 
 struct Node {
@@ -46,8 +46,9 @@ pub struct Tree {
 }
 
 impl Tree {
+    #[must_use]
     pub fn new(items: &[TreeItem]) -> Self {
-        let mut tree = Tree {
+        let mut tree = Self {
             nodes: Vec::new(),
             index: HashMap::new(),
         };
@@ -75,11 +76,13 @@ impl Tree {
         at
     }
 
+    #[must_use]
     pub fn parent(&self, key: &str) -> Option<&str> {
         let parent = self.nodes[*self.index.get(key)?].parent?;
         Some(&self.nodes[parent].key)
     }
 
+    #[must_use]
     pub fn children(&self, key: &str) -> Vec<&str> {
         self.index
             .get(key)
@@ -93,11 +96,13 @@ impl Tree {
             .unwrap_or_default()
     }
 
+    #[must_use]
     pub fn level(&self, key: &str) -> Option<usize> {
         Some(self.nodes[*self.index.get(key)?].level)
     }
 
     /// Keys of a node and everything beneath it, in display order.
+    #[must_use]
     pub fn subtree(&self, key: &str) -> Vec<&str> {
         self.index
             .get(key)
@@ -111,6 +116,7 @@ impl Tree {
     }
 
     /// The rows on screen when the branches in `expanded` are open.
+    #[must_use]
     pub fn visible_rows(&self, expanded: &HashSet<String>) -> Vec<Row> {
         let roots = self.roots();
         let mut rows = Vec::new();
@@ -137,6 +143,7 @@ impl Tree {
 
     /// The state of every node given the checked leaves. A branch is checked when all
     /// its leaves are, and mixed when only some are.
+    #[must_use]
     pub fn checked_states(&self, checked: &HashSet<String>) -> HashMap<String, Checked> {
         self.nodes
             .iter()
@@ -159,6 +166,7 @@ impl Tree {
 
     /// The checked leaves after toggling a node. Toggling a branch checks every leaf
     /// beneath it, unless they all already are, in which case it clears them.
+    #[must_use]
     pub fn toggle_checked(&self, key: &str, checked: &HashSet<String>) -> HashSet<String> {
         let mut next = checked.clone();
         let Some(at) = self.index.get(key) else {
@@ -170,12 +178,13 @@ impl Tree {
                 next.remove(*leaf);
             });
         } else {
-            next.extend(leaves.iter().map(|leaf| leaf.to_string()));
+            next.extend(leaves.iter().map(std::string::ToString::to_string));
         }
         next
     }
 
     /// Every node's key, in the order the tree lists them with everything open.
+    #[must_use]
     pub fn subtree_order(&self) -> Vec<String> {
         fn walk(tree: &Tree, at: usize, keys: &mut Vec<String>) {
             keys.push(tree.nodes[at].key.clone());
@@ -191,6 +200,7 @@ impl Tree {
     }
 
     /// The checked nodes as `strategy` reports them, in display order.
+    #[must_use]
     pub fn checked_value(&self, checked: &HashSet<String>, strategy: CheckStrategy) -> Vec<String> {
         let states = self.checked_states(checked);
         let full = |at: usize| states.get(&self.nodes[at].key) == Some(&Checked::Checked);
@@ -230,6 +240,7 @@ pub enum DropPosition {
 
 /// Which drop the pointer means at `fraction` of the way down a row, from 0 at its top
 /// to 1 at its bottom. The middle half nests when the row can take children.
+#[must_use]
 pub fn drop_position(fraction: f64, can_nest: bool) -> DropPosition {
     match fraction {
         f if can_nest && (0.25..=0.75).contains(&f) => DropPosition::Inside,
@@ -301,6 +312,7 @@ pub fn move_node(
 }
 
 /// What to tell a screen reader after a node is moved.
+#[must_use]
 pub fn tree_reorder_message(label: &str, target: &str, position: DropPosition) -> String {
     match position {
         DropPosition::Before => format!("{label} moved before {target}."),
@@ -315,6 +327,7 @@ pub const TREE_INDENT: f64 = 24.0;
 /// The depth a dragged row lands at. Dragging sideways changes it one level per
 /// `indent`. It can be no deeper than a child of the row above, and no shallower than
 /// the row below, which would otherwise be adopted. Depths start at 1.
+#[must_use]
 pub fn drop_depth(
     start: usize,
     sideways: f64,
@@ -331,6 +344,7 @@ pub fn drop_depth(
 /// Where a row dropped at `slot` among `rows`, at `depth`, belongs: its parent and its
 /// place among that parent's children. `rows` are the rows on screen without the row
 /// being moved or anything beneath it.
+#[must_use]
 pub fn slot_target(
     rows: &[Row],
     slot: usize,
@@ -434,6 +448,7 @@ pub enum CheckStrategy {
 
 /// Builds a tree from slash-separated paths. Each node's key is its full path and its
 /// label is the last segment.
+#[must_use]
 pub fn tree_from_paths(paths: &[&str]) -> Vec<TreeItem> {
     let mut roots: Vec<TreeItem> = Vec::new();
     for path in paths {
@@ -444,16 +459,15 @@ pub fn tree_from_paths(paths: &[&str]) -> Vec<TreeItem> {
                 key.push('/');
             }
             key.push_str(segment);
-            let at = match level.iter().position(|item| item.key == key) {
-                Some(at) => at,
-                None => {
-                    level.push(TreeItem {
-                        key: key.clone(),
-                        label: segment.to_string(),
-                        children: Vec::new(),
-                    });
-                    level.len() - 1
-                }
+            let at = if let Some(at) = level.iter().position(|item| item.key == key) {
+                at
+            } else {
+                level.push(TreeItem {
+                    key: key.clone(),
+                    label: segment.to_string(),
+                    children: Vec::new(),
+                });
+                level.len() - 1
             };
             level = &mut level[at].children;
         }

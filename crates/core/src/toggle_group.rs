@@ -24,7 +24,7 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        Options {
+        Self {
             multiple: false,
             deselectable: true,
             orientation: Orientation::Horizontal,
@@ -47,13 +47,15 @@ pub struct ToggleGroup {
 }
 
 impl ToggleGroup {
+    #[must_use]
     pub fn new(opts: Options) -> Self {
-        ToggleGroup {
+        Self {
             opts,
             ..Default::default()
         }
     }
 
+    #[must_use]
     pub fn is_pressed(&self, key: &str) -> bool {
         self.pressed.iter().any(|p| p == key)
     }

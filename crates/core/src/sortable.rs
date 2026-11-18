@@ -35,8 +35,9 @@ pub struct Sortable {
 }
 
 impl Sortable {
+    #[must_use]
     pub fn new(orientation: Orientation) -> Self {
-        Sortable {
+        Self {
             orientation,
             ..Default::default()
         }
@@ -44,11 +45,13 @@ impl Sortable {
 
     /// The item being dragged and how far the pointer has carried it, for drawing it
     /// under the pointer while the others make room.
+    #[must_use]
     pub fn dragging(&self) -> Option<(&str, Point)> {
         Some((self.pressed.as_deref()?, self.carried?))
     }
 
     /// The move in progress, for showing where the item would land.
+    #[must_use]
     pub fn moving(&self) -> Option<Reorder> {
         self.session.current()
     }

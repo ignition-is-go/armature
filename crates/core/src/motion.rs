@@ -11,6 +11,7 @@ fn snap(value: f64, grid: Option<f64>) -> f64 {
 }
 
 /// The movement an arrow key asks for. Shift takes the larger step.
+#[must_use]
 pub fn key_delta(key: Key, mods: Modifiers, step: f64, large_step: f64) -> Option<Point> {
     let by = if mods.shift { large_step } else { step };
     Some(match key {
@@ -23,6 +24,7 @@ pub fn key_delta(key: Key, mods: Modifiers, step: f64, large_step: f64) -> Optio
 }
 
 /// `rect` moved by `delta`, snapped to `grid` and kept inside `bounds`.
+#[must_use]
 pub fn moved(rect: Rect, delta: Point, bounds: Option<Rect>, grid: Option<f64>) -> Rect {
     let mut x = snap(rect.x + delta.x, grid);
     let mut y = snap(rect.y + delta.y, grid);
@@ -43,27 +45,27 @@ pub struct Handle {
 }
 
 impl Handle {
-    pub const LEFT: Handle = Handle {
+    pub const LEFT: Self = Self {
         horizontal: -1,
         vertical: 0,
     };
-    pub const RIGHT: Handle = Handle {
+    pub const RIGHT: Self = Self {
         horizontal: 1,
         vertical: 0,
     };
-    pub const TOP: Handle = Handle {
+    pub const TOP: Self = Self {
         horizontal: 0,
         vertical: -1,
     };
-    pub const BOTTOM: Handle = Handle {
+    pub const BOTTOM: Self = Self {
         horizontal: 0,
         vertical: 1,
     };
-    pub const TOP_LEFT: Handle = Handle {
+    pub const TOP_LEFT: Self = Self {
         horizontal: -1,
         vertical: -1,
     };
-    pub const BOTTOM_RIGHT: Handle = Handle {
+    pub const BOTTOM_RIGHT: Self = Self {
         horizontal: 1,
         vertical: 1,
     };
@@ -78,6 +80,7 @@ pub struct ResizeLimits {
 
 /// `rect` with `handle` dragged by `delta`. The opposite edge stays put, and the size
 /// stays within the limits.
+#[must_use]
 pub fn resized(rect: Rect, handle: Handle, delta: Point, limits: ResizeLimits) -> Rect {
     let axis = |start: f64,
                 length: f64,
@@ -132,11 +135,13 @@ pub fn resized(rect: Rect, handle: Handle, delta: Point, limits: ResizeLimits) -
 }
 
 /// What to tell a screen reader after a move.
+#[must_use]
 pub fn move_message(rect: Rect) -> String {
     format!("Moved to {}, {}.", rect.x.round(), rect.y.round())
 }
 
 /// What to tell a screen reader after a resize.
+#[must_use]
 pub fn resize_message(rect: Rect) -> String {
     format!(
         "Resized to {} by {}.",
@@ -147,7 +152,8 @@ pub fn resize_message(rect: Rect) -> String {
 
 /// The cursor that shows which way an edge or corner can be dragged, by its
 /// conventional name: `ew-resize`, `ns-resize`, `nwse-resize` or `nesw-resize`.
-pub fn resize_cursor(handle: Handle) -> &'static str {
+#[must_use]
+pub const fn resize_cursor(handle: Handle) -> &'static str {
     match (handle.horizontal, handle.vertical) {
         (0, _) => "ns-resize",
         (_, 0) => "ew-resize",

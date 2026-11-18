@@ -16,11 +16,13 @@ pub struct Connect {
 }
 
 impl Connect {
+    #[must_use]
     pub fn connections(&self) -> &[Connection] {
         &self.connections
     }
 
     /// The port a connection is being drawn from.
+    #[must_use]
     pub fn pending(&self) -> Option<&str> {
         self.pending.as_deref()
     }
@@ -64,6 +66,7 @@ impl Connect {
 }
 
 /// The port under the pointer, or the nearest one within `reach` of it.
+#[must_use]
 pub fn port_at(ports: &[(String, Rect)], at: Point, reach: f64) -> Option<&str> {
     ports
         .iter()
@@ -91,6 +94,7 @@ pub enum ConnectStep {
 }
 
 /// What to tell a screen reader at each step.
+#[must_use]
 pub fn connect_message(step: ConnectStep, from: &str, to: &str) -> String {
     match step {
         ConnectStep::Begun => format!(

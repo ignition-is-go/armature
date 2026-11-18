@@ -38,13 +38,15 @@ pub struct Listbox {
 }
 
 impl Listbox {
+    #[must_use]
     pub fn new(opts: Options) -> Self {
-        Listbox {
+        Self {
             opts,
             ..Default::default()
         }
     }
 
+    #[must_use]
     pub fn highlighted(&self) -> Option<&str> {
         self.highlighted.as_deref()
     }

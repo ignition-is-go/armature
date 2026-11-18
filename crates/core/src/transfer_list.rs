@@ -38,10 +38,14 @@ pub struct TransferList {
 impl TransferList {
     /// Starts with every key in the available list. The lists own their items, so
     /// what is rendered only supplies labels.
+    #[must_use]
     pub fn new(available: &[&str]) -> Self {
-        TransferList {
+        Self {
             lists: [
-                available.iter().map(|key| key.to_string()).collect(),
+                available
+                    .iter()
+                    .map(std::string::ToString::to_string)
+                    .collect(),
                 Vec::new(),
             ],
             ..Default::default()
@@ -49,8 +53,9 @@ impl TransferList {
     }
 
     /// The keys in the available list (`false`) or the chosen one (`true`), in order.
+    #[must_use]
     pub fn list(&self, chosen: bool) -> &[String] {
-        &self.lists[chosen as usize]
+        &self.lists[usize::from(chosen)]
     }
 
     fn side_of(&self, key: &str) -> Option<usize> {
@@ -120,7 +125,7 @@ impl TransferList {
         reason: Reason,
         gate: Gate,
     ) -> Reaction<Part> {
-        let to = if part == Part::Add { 1 } else { 0 };
+        let to = usize::from(part == Part::Add);
         self.move_to(to, self.selected.clone(), source, reason, gate)
             .unwrap_or_else(Reaction::handled)
     }
@@ -208,7 +213,7 @@ impl Primitive for TransferList {
                 ..Default::default()
             },
             (button, _) => {
-                let enabled = has_selection(if button == Part::Add { 0 } else { 1 });
+                let enabled = has_selection(usize::from(button != Part::Add));
                 Semantics {
                     role: Some(Role::Button),
                     disabled: !enabled,

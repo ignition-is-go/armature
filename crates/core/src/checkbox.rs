@@ -31,7 +31,7 @@ pub struct Checkbox {
 
 impl Default for Checkbox {
     fn default() -> Self {
-        Checkbox::new(CheckState::Unchecked)
+        Self::new(CheckState::Unchecked)
     }
 }
 
@@ -44,19 +44,22 @@ fn written(state: CheckState) -> Vec<String> {
 }
 
 impl Checkbox {
-    pub fn new(state: CheckState) -> Self {
-        Checkbox {
+    #[must_use]
+    pub const fn new(state: CheckState) -> Self {
+        Self {
             state,
             disabled: false,
         }
     }
 
-    pub fn disabled(mut self) -> Self {
+    #[must_use]
+    pub const fn disabled(mut self) -> Self {
         self.disabled = true;
         self
     }
 
-    pub fn state(&self) -> CheckState {
+    #[must_use]
+    pub const fn state(&self) -> CheckState {
         self.state
     }
 
@@ -204,6 +207,7 @@ pub struct CheckboxGroup {
 
 impl CheckboxGroup {
     /// What the box that stands for the group shows.
+    #[must_use]
     pub fn all_state(&self) -> CheckState {
         let enabled = self.items.enabled_keys();
         let on = enabled

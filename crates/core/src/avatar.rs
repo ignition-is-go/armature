@@ -36,14 +36,16 @@ pub struct Avatar {
 
 impl Avatar {
     /// An avatar whose picture is on its way.
+    #[must_use]
     pub fn loading() -> Self {
-        Avatar {
+        Self {
             status: ImageStatus::Loading,
             ..Default::default()
         }
     }
 
-    pub fn fallback_after(mut self, delay_ms: u64) -> Self {
+    #[must_use]
+    pub const fn fallback_after(mut self, delay_ms: u64) -> Self {
         self.fallback_delay_ms = delay_ms;
         self
     }
@@ -52,7 +54,8 @@ impl Avatar {
         self.fallback_delay_ms > 0 && !self.waited.1 && self.status == ImageStatus::Loading
     }
 
-    pub fn status(&self) -> ImageStatus {
+    #[must_use]
+    pub const fn status(&self) -> ImageStatus {
         self.status
     }
 }

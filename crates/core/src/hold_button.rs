@@ -29,13 +29,14 @@ pub struct HoldButton {
 
 impl Default for HoldButton {
     fn default() -> Self {
-        HoldButton::new(800)
+        Self::new(800)
     }
 }
 
 impl HoldButton {
+    #[must_use]
     pub fn new(delay_ms: u64) -> Self {
-        HoldButton {
+        Self {
             hold: Hold::new(delay_ms),
             delay_ms,
             pressed: None,
@@ -43,6 +44,7 @@ impl HoldButton {
     }
 
     /// How far through the hold the press is, from 0 to 1, for drawing progress.
+    #[must_use]
     pub fn progress(&self, now_ms: u64) -> f64 {
         match self.pressed {
             Some((since, _)) => {

@@ -1,9 +1,11 @@
 //! Letters without their case or accents, so that typing `lodz` finds `Łódź`.
+//!
 //! Some languages count an accented letter as a letter of its own, and for them it
 //! is kept: `ä` is not `a` in Swedish, and Turkish has a dotless `ı`.
 
 /// A letter folded for comparison in the language `locale` names. `None` folds as
 /// English does.
+#[must_use]
 pub fn fold_char(ch: char, locale: Option<&str>) -> char {
     let language = locale.map(|tag| {
         tag.split(['-', '_'])
@@ -50,6 +52,7 @@ pub fn fold_char(ch: char, locale: Option<&str>) -> char {
 
 /// Text folded letter by letter. It keeps its length in characters, so a place in
 /// the folded text is the same place in the original.
+#[must_use]
 pub fn fold_text(text: &str, locale: Option<&str>) -> String {
     text.chars().map(|ch| fold_char(ch, locale)).collect()
 }

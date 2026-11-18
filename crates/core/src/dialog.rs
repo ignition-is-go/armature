@@ -54,12 +54,13 @@ pub enum Refusal {
 }
 
 impl Options {
-    fn is_modal(&self) -> bool {
+    const fn is_modal(&self) -> bool {
         self.modal || self.alert
     }
 
     /// Whether a way of closing is refused, and whether that counts as a try.
     /// Close buttons, triggers and the controller always close.
+    #[must_use]
     pub fn refusal(&self, dismiss: Dismiss) -> Option<Refusal> {
         match dismiss {
             Dismiss::ClosePress | Dismiss::TriggerPress | Dismiss::Controller => None,
@@ -84,7 +85,7 @@ impl Options {
 
 impl Default for Options {
     fn default() -> Self {
-        Options {
+        Self {
             dismiss_on_backdrop: true,
             dismiss_on_escape: true,
             alert: false,
@@ -107,8 +108,9 @@ pub struct Dialog {
 }
 
 impl Dialog {
-    pub fn new(opts: Options) -> Self {
-        Dialog {
+    #[must_use]
+    pub const fn new(opts: Options) -> Self {
+        Self {
             opts,
             open: false,
             focused: None,
@@ -116,13 +118,15 @@ impl Dialog {
         }
     }
 
-    pub fn is_open(&self) -> bool {
+    #[must_use]
+    pub const fn is_open(&self) -> bool {
         self.open
     }
 
     /// How many times someone has tried to dismiss it and been refused by its
     /// options. Watch it to nudge the dialog or explain why it stays.
-    pub fn attempts(&self) -> u32 {
+    #[must_use]
+    pub const fn attempts(&self) -> u32 {
         self.attempts
     }
 

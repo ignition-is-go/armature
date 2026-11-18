@@ -18,11 +18,13 @@ pub struct Toggle {
 }
 
 impl Toggle {
-    pub fn new(on: bool) -> Self {
-        Toggle { on }
+    #[must_use]
+    pub const fn new(on: bool) -> Self {
+        Self { on }
     }
 
-    pub fn is_on(&self) -> bool {
+    #[must_use]
+    pub const fn is_on(&self) -> bool {
         self.on
     }
 

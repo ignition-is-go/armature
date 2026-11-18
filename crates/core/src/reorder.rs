@@ -7,6 +7,7 @@ use crate::keys::Orientation;
 /// The index `from` ends up at when dropped at `at`: it passes every item whose
 /// centre the pointer has crossed. `rects` are the items' boxes in their original
 /// order.
+#[must_use]
 pub fn drop_index(rects: &[Rect], from: usize, at: Point, axis: Orientation) -> usize {
     let along = |point: Point| {
         if axis == Orientation::Vertical {
@@ -44,11 +45,12 @@ pub struct ReorderSession {
 }
 
 impl ReorderSession {
-    pub fn current(&self) -> Option<Reorder> {
+    #[must_use]
+    pub const fn current(&self) -> Option<Reorder> {
         self.active
     }
 
-    pub fn grab(&mut self, index: usize) {
+    pub const fn grab(&mut self, index: usize) {
         self.active = Some(Reorder {
             from: index,
             to: index,
@@ -79,11 +81,12 @@ impl ReorderSession {
             .filter(|reorder| reorder.from != reorder.to)
     }
 
-    pub fn cancel(&mut self) {
+    pub const fn cancel(&mut self) {
         self.active = None;
     }
 
     /// The order to show while the grab is in progress, as original indices.
+    #[must_use]
     pub fn preview(&self, count: usize) -> Vec<usize> {
         let mut order: Vec<usize> = (0..count).collect();
         if let Some(active) = self.active {
@@ -102,6 +105,7 @@ pub enum ReorderStep {
 }
 
 /// What to tell a screen reader at each step. Positions are spoken from 1.
+#[must_use]
 pub fn reorder_message(step: ReorderStep, label: &str, reorder: Reorder, count: usize) -> String {
     let (from, to) = (reorder.from + 1, reorder.to + 1);
     match step {

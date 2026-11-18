@@ -30,8 +30,12 @@ pub struct Form {
 
 impl Form {
     /// Adds a field with the value it starts with. A reset returns to it.
+    #[must_use]
     pub fn field(mut self, name: &str, initial: &[&str], required: bool) -> Self {
-        let value: Vec<String> = initial.iter().map(|entry| entry.to_string()).collect();
+        let value: Vec<String> = initial
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect();
         self.fields.push(Field {
             name: name.into(),
             value: value.clone(),
@@ -58,6 +62,7 @@ impl Form {
         }
     }
 
+    #[must_use]
     pub fn value(&self, name: &str) -> &[String] {
         self.fields
             .iter()
@@ -76,6 +81,7 @@ impl Form {
 
     /// The problem to show beside a field. Nothing is shown until a submit has been
     /// tried, except what was reported from outside.
+    #[must_use]
     pub fn error(&self, name: &str) -> Option<String> {
         let field = self.fields.iter().find(|field| field.name == name)?;
         if self.tried {
@@ -86,6 +92,7 @@ impl Form {
     }
 
     /// Whether any field differs from what it started with.
+    #[must_use]
     pub fn is_dirty(&self) -> bool {
         self.fields.iter().any(|field| field.value != field.initial)
     }

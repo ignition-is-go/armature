@@ -45,7 +45,7 @@ pub enum Selecting {
 
 impl Default for Options {
     fn default() -> Self {
-        Options {
+        Self {
             week_start: 0,
             dir: Dir::Ltr,
             min: None,
@@ -74,8 +74,9 @@ pub struct Calendar {
 
 impl Calendar {
     /// Opens on the month containing `showing`.
-    pub fn new(opts: Options, showing: Date) -> Self {
-        Calendar {
+    #[must_use]
+    pub const fn new(opts: Options, showing: Date) -> Self {
+        Self {
             opts,
             focused: showing,
             selected: Vec::new(),
@@ -84,25 +85,29 @@ impl Calendar {
     }
 
     /// The year and month on show.
-    pub fn month(&self) -> (i32, u8) {
+    #[must_use]
+    pub const fn month(&self) -> (i32, u8) {
         (self.focused.year, self.focused.month)
     }
 
     /// The weeks on show, padded with the neighbouring months' days.
+    #[must_use]
     pub fn weeks(&self) -> Vec<[Date; 7]> {
         month_grid(self.focused.year, self.focused.month, self.opts.week_start)
     }
 
     /// Whether a day belongs to the month on show, for dimming the padding days.
+    #[must_use]
     pub fn in_month(&self, date: Date) -> bool {
         self.shown_months().contains(&(date.year, date.month))
     }
 
     /// The months on show, in order. With several, they are fixed runs of that many
     /// months, so the view only changes when focus leaves the run.
+    #[must_use]
     pub fn shown_months(&self) -> Vec<(i32, u8)> {
         let run = self.opts.months.max(1) as i32;
-        let index = self.focused.year * 12 + self.focused.month as i32 - 1;
+        let index = self.focused.year * 12 + i32::from(self.focused.month) - 1;
         let first = index.div_euclid(run) * run;
         (first..first + run)
             .map(|month| (month.div_euclid(12), (month.rem_euclid(12) + 1) as u8))
@@ -112,6 +117,7 @@ impl Calendar {
     /// One shown month's weeks, padded with its neighbours' days. Where several
     /// months show, draw a padding day only if `in_month` says no for it, and leave
     /// it out, so no day is drawn twice.
+    #[must_use]
     pub fn weeks_of(&self, year: i32, month: u8) -> Vec<[Date; 7]> {
         month_grid(year, month, self.opts.week_start)
     }
@@ -130,6 +136,7 @@ impl Calendar {
     }
 
     /// Whether a day is chosen, or lies inside the chosen span.
+    #[must_use]
     pub fn is_selected(&self, date: Date) -> bool {
         match (self.opts.mode, self.selected.as_slice()) {
             (Selecting::Range, [first, last]) => (*first..=*last).contains(&date),
@@ -138,7 +145,8 @@ impl Calendar {
     }
 
     /// The first and last day of the span, once both are chosen.
-    pub fn range(&self) -> Option<(Date, Date)> {
+    #[must_use]
+    pub const fn range(&self) -> Option<(Date, Date)> {
         match (self.opts.mode, self.selected.as_slice()) {
             (Selecting::Range, [first, last]) => Some((*first, *last)),
             _ => None,

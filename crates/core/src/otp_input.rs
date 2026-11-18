@@ -26,9 +26,9 @@ pub enum Accept {
 impl Accept {
     fn takes(self, ch: char) -> bool {
         match self {
-            Accept::Digits => ch.is_ascii_digit(),
-            Accept::Alphanumeric => ch.is_ascii_alphanumeric(),
-            Accept::Custom(test) => test(ch),
+            Self::Digits => ch.is_ascii_digit(),
+            Self::Alphanumeric => ch.is_ascii_alphanumeric(),
+            Self::Custom(test) => test(ch),
         }
     }
 }
@@ -51,13 +51,14 @@ pub struct OtpInput {
 
 impl Default for OtpInput {
     fn default() -> Self {
-        OtpInput::new(6)
+        Self::new(6)
     }
 }
 
 impl OtpInput {
-    pub fn new(length: usize) -> Self {
-        OtpInput {
+    #[must_use]
+    pub const fn new(length: usize) -> Self {
+        Self {
             length,
             code: String::new(),
             accept: Accept::Digits,
@@ -67,17 +68,20 @@ impl OtpInput {
         }
     }
 
-    pub fn accepting(mut self, accept: Accept) -> Self {
+    #[must_use]
+    pub const fn accepting(mut self, accept: Accept) -> Self {
         self.accept = accept;
         self
     }
 
-    pub fn direction(mut self, dir: Dir) -> Self {
+    #[must_use]
+    pub const fn direction(mut self, dir: Dir) -> Self {
         self.dir = dir;
         self
     }
 
     /// The cell that has the caret or the selection, while the field has focus.
+    #[must_use]
     pub fn active_cell(&self) -> Option<usize> {
         self.focused.then_some(self.slot)
     }
@@ -103,17 +107,20 @@ impl OtpInput {
         allowed
     }
 
-    pub fn is_complete(&self) -> bool {
+    #[must_use]
+    pub const fn is_complete(&self) -> bool {
         self.code.len() == self.length
     }
 
     /// One entry per cell: the digit in it, if any.
+    #[must_use]
     pub fn cells(&self) -> Vec<Option<char>> {
         let mut digits = self.code.chars();
         (0..self.length).map(|_| digits.next()).collect()
     }
 
     /// The cell the next digit goes into, for showing a caret.
+    #[must_use]
     pub fn next_cell(&self) -> Option<usize> {
         (!self.is_complete()).then_some(self.code.len())
     }

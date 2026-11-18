@@ -9,6 +9,7 @@ use crate::primitive::{Input, Item, PartOf, Primitive, Reaction, Role, Semantics
 
 /// Where `value` sits between `min` and `max`, from 0 to 100. Readings outside the
 /// limits are clamped.
+#[must_use]
 pub fn percent(value: f64, min: f64, max: f64) -> f64 {
     // A range with no room in it is full.
     if max <= min {
@@ -38,18 +39,19 @@ pub struct Meter {
 
 impl Default for Meter {
     fn default() -> Self {
-        Meter::new(0.0, 0.0, 100.0)
+        Self::new(0.0, 0.0, 100.0)
     }
 }
 
 impl Meter {
-    pub fn new(value: f64, min: f64, max: f64) -> Self {
-        Meter { value, min, max }
+    #[must_use]
+    pub const fn new(value: f64, min: f64, max: f64) -> Self {
+        Self { value, min, max }
     }
 
     /// The value as it reads: within the range, and the least value for something
     /// that is not a number.
-    fn reading(&self) -> f64 {
+    const fn reading(&self) -> f64 {
         if self.value.is_finite() {
             self.value.clamp(self.min, self.max)
         } else {
@@ -57,11 +59,13 @@ impl Meter {
         }
     }
 
+    #[must_use]
     pub fn percent(&self) -> f64 {
         percent(self.reading(), self.min, self.max)
     }
 
     /// The reading as a percentage, such as `40%`.
+    #[must_use]
     pub fn value_text(&self) -> String {
         format!("{}%", format_number(self.percent(), 0))
     }
@@ -167,19 +171,22 @@ pub struct Progress {
 
 impl Default for Progress {
     fn default() -> Self {
-        Progress::new(None, 0.0, 100.0)
+        Self::new(None, 0.0, 100.0)
     }
 }
 
 impl Progress {
-    pub fn new(value: Option<f64>, min: f64, max: f64) -> Self {
-        Progress { value, min, max }
+    #[must_use]
+    pub const fn new(value: Option<f64>, min: f64, max: f64) -> Self {
+        Self { value, min, max }
     }
 
+    #[must_use]
     pub fn percent(&self) -> Option<f64> {
         self.value.map(|value| percent(value, self.min, self.max))
     }
 
+    #[must_use]
     pub fn state(&self) -> ProgressState {
         match self.value {
             None => ProgressState::Indeterminate,
@@ -189,6 +196,7 @@ impl Progress {
     }
 
     /// The progress as a percentage, or empty while it is unknown.
+    #[must_use]
     pub fn value_text(&self) -> String {
         self.percent()
             .map(|percent| format!("{}%", format_number(percent, 0)))
@@ -285,13 +293,14 @@ pub struct Separator {
 
 impl Default for Separator {
     fn default() -> Self {
-        Separator::new(Orientation::Horizontal, false)
+        Self::new(Orientation::Horizontal, false)
     }
 }
 
 impl Separator {
-    pub fn new(orientation: Orientation, decorative: bool) -> Self {
-        Separator {
+    #[must_use]
+    pub const fn new(orientation: Orientation, decorative: bool) -> Self {
+        Self {
             orientation,
             decorative,
         }

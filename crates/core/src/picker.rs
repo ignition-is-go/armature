@@ -22,6 +22,7 @@ const ACTIONS: &[&str] = &["select"];
 const REST_MS: u64 = 120;
 
 /// A column of options that is scrolled to choose one, as a time or date wheel is.
+///
 /// The option in the middle is the value. It follows the scroll as it moves, and the
 /// column settles on it once scrolling rests.
 #[derive(Clone, Debug)]
@@ -38,13 +39,14 @@ pub struct Picker {
 
 impl Default for Picker {
     fn default() -> Self {
-        Picker::new(32.0)
+        Self::new(32.0)
     }
 }
 
 impl Picker {
+    #[must_use]
     pub fn new(option_size: f64) -> Self {
-        Picker {
+        Self {
             items: Items::default(),
             option_size,
             selected: None,
@@ -56,6 +58,7 @@ impl Picker {
     }
 
     /// Where the column scrolls to for the chosen option to sit in the middle.
+    #[must_use]
     pub fn offset(&self) -> f64 {
         let index = self
             .selected

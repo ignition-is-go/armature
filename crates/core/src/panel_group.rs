@@ -33,7 +33,7 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        Options {
+        Self {
             orientation: Orientation::Horizontal,
             dir: Dir::Ltr,
             min: 10.0,
@@ -67,12 +67,13 @@ pub struct PanelGroup {
 
 impl Default for PanelGroup {
     fn default() -> Self {
-        PanelGroup::new(Options::default(), &[25.0, 50.0, 25.0])
+        Self::new(Options::default(), &[25.0, 50.0, 25.0])
     }
 }
 
 impl PanelGroup {
     /// `sizes` are brought to a total of a hundred, keeping their proportions.
+    #[must_use]
     pub fn new(opts: Options, sizes: &[f64]) -> Self {
         let total: f64 = sizes.iter().sum();
         let sizes: Vec<f64> = sizes
@@ -92,7 +93,7 @@ impl PanelGroup {
                 ..Default::default()
             })
             .collect();
-        PanelGroup {
+        Self {
             opts,
             sizes,
             panels,
@@ -107,6 +108,7 @@ impl PanelGroup {
     /// Gives each panel its own limits: a least and greatest size, and whether it
     /// can shut. The sizes are brought within them, and a panel with a default
     /// size starts at it.
+    #[must_use]
     pub fn with_panels(mut self, panels: &[PanelConstraints]) -> Self {
         if panels.len() == self.sizes.len() {
             self.panels = panels.to_vec();
@@ -121,6 +123,7 @@ impl PanelGroup {
 
     /// Gives each panel its limits as written, which may be in pixels or rems.
     /// Those take effect once the group has been measured.
+    #[must_use]
     pub fn with_sizes(mut self, sizes: &[PanelSizes]) -> Self {
         if sizes.len() == self.sizes.len() {
             self.written_sizes = sizes.to_vec();
@@ -134,6 +137,7 @@ impl PanelGroup {
     }
 
     /// Fixes dividers in place, by their index. Resizing does not reach past one.
+    #[must_use]
     pub fn locking(mut self, dividers: &[usize]) -> Self {
         self.locked = (0..self.sizes.len())
             .map(|at| dividers.contains(&at))
@@ -142,6 +146,7 @@ impl PanelGroup {
     }
 
     /// Whether a panel that can shut is shut.
+    #[must_use]
     pub fn is_collapsed(&self, panel: usize) -> bool {
         self.panels.get(panel).is_some_and(|limits| {
             limits.collapsible
@@ -151,6 +156,7 @@ impl PanelGroup {
     }
 
     /// Each panel's share, in percent.
+    #[must_use]
     pub fn sizes(&self) -> &[f64] {
         &self.sizes
     }

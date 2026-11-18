@@ -19,6 +19,7 @@ pub enum PanelSize {
 
 /// A size as a percentage of `space`. `None` for a pixel or rem size while the
 /// space is not yet measured.
+#[must_use]
 pub fn to_percent(size: PanelSize, space: f64, rem: f64) -> Option<f64> {
     match size {
         PanelSize::Percent(value) => Some(value),
@@ -52,7 +53,7 @@ pub struct PanelConstraints {
 
 impl Default for PanelConstraints {
     fn default() -> Self {
-        PanelConstraints {
+        Self {
             min: 0.0,
             max: 100.0,
             collapsible: false,
@@ -64,6 +65,7 @@ impl Default for PanelConstraints {
 
 /// A panel's limits in percent of `space`. The collapsed size is kept at most the
 /// minimum, and the maximum at least the minimum.
+#[must_use]
 pub fn constraints_of(sizes: PanelSizes, space: f64, rem: f64) -> PanelConstraints {
     let percent = |size: Option<PanelSize>| size.and_then(|size| to_percent(size, space, rem));
     let min = percent(sizes.min_size).unwrap_or(0.0).clamp(0.0, 100.0);
@@ -76,7 +78,7 @@ pub fn constraints_of(sizes: PanelSizes, space: f64, rem: f64) -> PanelConstrain
     }
 }
 
-fn lowest(panel: &PanelConstraints) -> f64 {
+const fn lowest(panel: &PanelConstraints) -> f64 {
     if panel.collapsible {
         panel.collapsed
     } else {
@@ -96,6 +98,7 @@ fn allowed(panel: &PanelConstraints, size: f64) -> bool {
 /// The size a panel takes when asked for `target` from `current`. Below its
 /// minimum it either stays at the minimum or shuts, depending on whether the
 /// target is past `threshold` of the way: half for a drag, all of it for a key.
+#[must_use]
 pub fn settle(panel: &PanelConstraints, target: f64, current: f64, threshold: f64) -> f64 {
     if target >= panel.min - EPSILON {
         return target.clamp(panel.min, panel.max);
@@ -105,13 +108,13 @@ pub fn settle(panel: &PanelConstraints, target: f64, current: f64, threshold: f6
     }
     let span = panel.min - panel.collapsed;
     if current <= panel.collapsed + EPSILON {
-        return if target > panel.collapsed + span * (1.0 - threshold) + EPSILON {
+        return if target > span.mul_add(1.0 - threshold, panel.collapsed) + EPSILON {
             panel.min
         } else {
             panel.collapsed
         };
     }
-    if target < panel.collapsed + span * threshold - EPSILON {
+    if target < span.mul_add(threshold, panel.collapsed) - EPSILON {
         panel.collapsed
     } else {
         panel.min
@@ -142,6 +145,7 @@ fn shrinkable(count: usize, handle: usize, forward: bool, locked: &[bool]) -> Ve
 /// panels on the other side in turn: one at its minimum passes the rest on.
 /// `locked` marks handles that cannot move, which the taking does not cross.
 /// `None` when nothing can move.
+#[must_use]
 pub fn resize_at(
     layout: &[f64],
     panels: &[PanelConstraints],
@@ -190,17 +194,20 @@ pub fn resize_at(
 }
 
 /// How far Home moves a handle: until the panel before it is as small as it goes.
+#[must_use]
 pub fn home_delta(layout: &[f64], panels: &[PanelConstraints], handle: usize) -> f64 {
     lowest(&panels[handle]) - layout[handle]
 }
 
 /// How far End moves a handle: until the panel before it is as large as it goes.
+#[must_use]
 pub fn end_delta(layout: &[f64], panels: &[PanelConstraints], handle: usize) -> f64 {
     panels[handle].max - layout[handle]
 }
 
 /// The least and greatest size the panel before a handle can reach by moving it,
 /// for the handle's value range.
+#[must_use]
 pub fn handle_bounds(
     layout: &[f64],
     panels: &[PanelConstraints],
@@ -219,6 +226,7 @@ pub fn handle_bounds(
 
 /// Every handle's bounds. Where no panel can collapse and all are within their
 /// limits this is worked out in one pass.
+#[must_use]
 pub fn all_handle_bounds(
     layout: &[f64],
     panels: &[PanelConstraints],
@@ -259,6 +267,7 @@ pub fn all_handle_bounds(
 /// A layout brought to a total of a hundred with every panel inside its limits.
 /// What is left over goes to the panels that can take it. Collapsed panels stay
 /// collapsed.
+#[must_use]
 pub fn fit_layout(layout: &[f64], panels: &[PanelConstraints]) -> Vec<f64> {
     let total: f64 = layout.iter().sum();
     let scale = if total > EPSILON && !same(total, 100.0) {
@@ -297,6 +306,7 @@ pub fn fit_layout(layout: &[f64], panels: &[PanelConstraints]) -> Vec<f64> {
 
 /// The layout panels start at: each at its own default, and those without one
 /// sharing what is left evenly.
+#[must_use]
 pub fn initial_layout(panels: &[PanelConstraints]) -> Vec<f64> {
     let given: Vec<f64> = panels.iter().filter_map(|panel| panel.initial).collect();
     let left = (100.0 - given.iter().sum::<f64>()).max(0.0);
@@ -314,6 +324,7 @@ pub fn initial_layout(panels: &[PanelConstraints]) -> Vec<f64> {
 
 /// The layout after panels come or go. Those that stay keep their sizes relative
 /// to each other, and a new one takes its default.
+#[must_use]
 pub fn carry_layout(
     previous: &[(&str, f64)],
     ids: &[&str],
@@ -358,6 +369,7 @@ pub fn carry_layout(
 
 /// The layout after setting one panel to `target`, through the handle after it,
 /// or the one before it where that gets closer. `None` when it cannot change.
+#[must_use]
 pub fn resize_panel(
     layout: &[f64],
     panels: &[PanelConstraints],
@@ -385,6 +397,7 @@ pub fn resize_panel(
 
 /// Which panel Enter on a handle collapses or opens: the one before it, or the
 /// one after when only that one can collapse.
+#[must_use]
 pub fn toggle_target(panels: &[PanelConstraints], handle: usize) -> Option<usize> {
     [handle, handle + 1]
         .into_iter()
@@ -392,6 +405,7 @@ pub fn toggle_target(panels: &[PanelConstraints], handle: usize) -> Option<usize
 }
 
 /// The key a group's layouts are stored under, for an id the owner gives it.
+#[must_use]
 pub fn storage_key(save_id: &str) -> String {
     format!("armature-panels:{save_id}")
 }
@@ -401,7 +415,7 @@ struct Reader<'a> {
     rest: &'a str,
 }
 
-impl<'a> Reader<'a> {
+impl Reader<'_> {
     /// Steps past `expected`, and any space before it. `false` if it is not next.
     fn take(&mut self, expected: char) -> bool {
         match self.rest.trim_start().strip_prefix(expected) {
@@ -486,6 +500,7 @@ fn stored_layouts(stored: &str) -> Vec<(String, Vec<f64>)> {
 
 /// The layout saved for exactly this set of panels, from what was stored. Each
 /// set of panels keeps its own, so adding or removing one does not lose the rest.
+#[must_use]
 pub fn load_layout(stored: &str, ids: &[&str]) -> Option<Vec<f64>> {
     let wanted = ids.join(",");
     stored_layouts(stored)
@@ -496,6 +511,7 @@ pub fn load_layout(stored: &str, ids: &[&str]) -> Option<Vec<f64>> {
 
 /// What to store after saving a layout for this set of panels, keeping the
 /// layouts already stored for other sets. Sizes are rounded to a thousandth.
+#[must_use]
 pub fn save_layout(stored: &str, ids: &[&str], layout: &[f64]) -> String {
     let wanted = ids.join(",");
     let mut entries: Vec<(String, Vec<f64>)> = stored_layouts(stored)

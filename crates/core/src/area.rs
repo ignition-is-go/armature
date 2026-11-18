@@ -16,6 +16,7 @@ pub struct Area {
 impl Area {
     /// The value under the pointer on a pad occupying `pad`. Positions outside it are
     /// held at the nearest edge.
+    #[must_use]
     pub fn value_at(&self, pad: Rect, at: Point, dir: Dir) -> (f64, f64) {
         let across = (at.x - pad.x) / pad.width.max(f64::MIN_POSITIVE);
         let down = (at.y - pad.y) / pad.height.max(f64::MIN_POSITIVE);
@@ -28,6 +29,7 @@ impl Area {
     }
 
     /// Where on the pad a value sits, as fractions from its left and top edges.
+    #[must_use]
     pub fn position_of(&self, value: (f64, f64), dir: Dir) -> (f64, f64) {
         let across = self.x.fraction(value.0);
         (
@@ -41,6 +43,7 @@ impl Area {
     }
 
     /// The value after an arrow key. Shift moves ten steps.
+    #[must_use]
     pub fn nudge(
         &self,
         value: (f64, f64),

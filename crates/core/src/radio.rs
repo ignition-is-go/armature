@@ -25,8 +25,9 @@ pub struct Radio {
 }
 
 impl Radio {
+    #[must_use]
     pub fn new(dir: Dir) -> Self {
-        Radio {
+        Self {
             dir,
             ..Default::default()
         }
@@ -34,6 +35,7 @@ impl Radio {
 
     /// Whether an option is at or before the chosen one, which is how a rating fills
     /// its stars.
+    #[must_use]
     pub fn is_filled(&self, key: &str) -> bool {
         match (
             self.items.index_of(key),
@@ -46,7 +48,8 @@ impl Radio {
         }
     }
 
-    pub fn deselectable(mut self) -> Self {
+    #[must_use]
+    pub const fn deselectable(mut self) -> Self {
         self.deselectable = true;
         self
     }

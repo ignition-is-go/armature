@@ -11,17 +11,17 @@ pub enum PlaceSide {
 }
 
 impl PlaceSide {
-    fn opposite(self) -> Self {
+    const fn opposite(self) -> Self {
         match self {
-            PlaceSide::Top => PlaceSide::Bottom,
-            PlaceSide::Bottom => PlaceSide::Top,
-            PlaceSide::Left => PlaceSide::Right,
-            PlaceSide::Right => PlaceSide::Left,
+            Self::Top => Self::Bottom,
+            Self::Bottom => Self::Top,
+            Self::Left => Self::Right,
+            Self::Right => Self::Left,
         }
     }
 
-    fn is_vertical(self) -> bool {
-        matches!(self, PlaceSide::Top | PlaceSide::Bottom)
+    const fn is_vertical(self) -> bool {
+        matches!(self, Self::Top | Self::Bottom)
     }
 }
 
@@ -107,12 +107,12 @@ fn available(side: PlaceSide, anchor: Rect, viewport: Rect, options: &PlaceOptio
             viewport.y + viewport.height - padding - (anchor.y + anchor.height + gap)
         }
         PlaceSide::Top => anchor.y - gap - padding - viewport.y,
-        _ => viewport.height - padding * 2.0,
+        _ => f64::mul_add(padding, -2.0, viewport.height),
     };
     let width = match side {
         PlaceSide::Right => viewport.x + viewport.width - padding - (anchor.x + anchor.width + gap),
         PlaceSide::Left => anchor.x - gap - padding - viewport.x,
-        _ => viewport.width - padding * 2.0,
+        _ => f64::mul_add(padding, -2.0, viewport.width),
     };
     Size {
         width: width.max(0.0),
@@ -121,7 +121,7 @@ fn available(side: PlaceSide, anchor: Rect, viewport: Rect, options: &PlaceOptio
 }
 
 /// `clamp` that does not panic when the range is empty: the lower bound wins.
-fn held(value: f64, least: f64, most: f64) -> f64 {
+const fn held(value: f64, least: f64, most: f64) -> f64 {
     value.min(most).max(least)
 }
 
@@ -129,6 +129,7 @@ fn held(value: f64, least: f64, most: f64) -> f64 {
 /// page on show. It flips to the other side when that overflows less, slides
 /// along the anchor to stay on screen without ever leaving the anchor behind, and
 /// goes inside an anchor bigger than it when neither side has room.
+#[must_use]
 pub fn compute_placement(
     anchor: Rect,
     size: Size,
@@ -161,7 +162,7 @@ pub fn compute_placement(
                 viewport.y + viewport.height - size.height - padding,
             );
             at.1 = held(on_screen, anchor.y, anchor.y + anchor.height - size.height);
-            room.height = (viewport.height - padding * 2.0).max(0.0);
+            room.height = padding.mul_add(-2.0, viewport.height).max(0.0);
         } else if !side.is_vertical() && size.width > 0.0 && anchor.width >= size.width {
             let on_screen = held(
                 at.0,
@@ -169,7 +170,7 @@ pub fn compute_placement(
                 viewport.x + viewport.width - size.width - padding,
             );
             at.0 = held(on_screen, anchor.x, anchor.x + anchor.width - size.width);
-            room.width = (viewport.width - padding * 2.0).max(0.0);
+            room.width = padding.mul_add(-2.0, viewport.width).max(0.0);
         }
     }
     if side.is_vertical() {
@@ -205,6 +206,7 @@ pub fn compute_placement(
 
 /// Where the anchor's middle falls along the popup edge that faces it, kept
 /// `padding` clear of the corners, for pointing an arrow or a transform origin.
+#[must_use]
 pub fn arrow_offset(anchor: Rect, popup: Rect, side: PlaceSide, padding: f64) -> f64 {
     let (center, length) = if side.is_vertical() {
         (anchor.x + anchor.width / 2.0 - popup.x, popup.width)

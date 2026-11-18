@@ -50,19 +50,22 @@ pub struct TextField {
 }
 
 impl TextField {
+    #[must_use]
     pub fn new(kind: Kind) -> Self {
-        TextField {
+        Self {
             kind,
             ..Default::default()
         }
     }
 
-    pub fn required(mut self) -> Self {
+    #[must_use]
+    pub const fn required(mut self) -> Self {
         self.required = true;
         self
     }
 
-    pub fn disabled(mut self) -> Self {
+    #[must_use]
+    pub const fn disabled(mut self) -> Self {
         self.disabled = true;
         self
     }
@@ -74,6 +77,7 @@ impl TextField {
 
     /// What is wrong with the value, once the person has left the field or tried to
     /// submit it. Nobody is told off while still typing.
+    #[must_use]
     pub fn error(&self) -> Option<String> {
         if !self.judged {
             return None;
@@ -84,7 +88,8 @@ impl TextField {
         self.validate.and_then(|check| check(&self.text))
     }
 
-    pub fn is_revealed(&self) -> bool {
+    #[must_use]
+    pub const fn is_revealed(&self) -> bool {
         self.revealed
     }
 

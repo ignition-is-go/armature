@@ -30,7 +30,7 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        Options {
+        Self {
             hover: true,
             open_delay_ms: 50,
             close_delay_ms: 50,
@@ -61,23 +61,26 @@ pub struct NavigationMenu {
 
 impl NavigationMenu {
     /// `entries` are the top-level keys in order, with whether each opens a panel.
+    #[must_use]
     pub fn new(opts: Options, entries: &[(&str, bool)]) -> Self {
         let entries = entries
             .iter()
             .map(|(key, panel)| (key.to_string(), *panel))
             .collect();
-        NavigationMenu {
+        Self {
             opts,
             entries,
             ..Default::default()
         }
     }
 
+    #[must_use]
     pub fn current(mut self, key: &str) -> Self {
         self.current = Some(key.to_string());
         self
     }
 
+    #[must_use]
     pub fn open_panel(&self) -> Option<&str> {
         self.open.as_deref()
     }

@@ -10,7 +10,8 @@ pub enum Nav {
 
 /// Whether the held modifiers leave arrow keys to the platform: Ctrl, Cmd and Alt with
 /// an arrow belong to the browser or the operating system.
-pub fn leaves_arrows_alone(mods: Modifiers) -> bool {
+#[must_use]
+pub const fn leaves_arrows_alone(mods: Modifiers) -> bool {
     mods.ctrl || mods.alt
 }
 
@@ -25,7 +26,8 @@ pub fn is_platform_arrow<Part>(input: &crate::primitive::Input<Part>) -> bool {
     matches!(input, crate::primitive::Input::Key { key, mods, .. } if arrow(key) && leaves_arrows_alone(*mods))
 }
 
-pub fn nav_for_key(key: Key, orientation: Orientation, dir: Dir) -> Option<Nav> {
+#[must_use]
+pub const fn nav_for_key(key: Key, orientation: Orientation, dir: Dir) -> Option<Nav> {
     use Orientation::{Horizontal, Vertical};
     Some(match (key, orientation, dir) {
         (Key::Home, _, _) => Nav::First,
@@ -43,6 +45,7 @@ pub fn nav_for_key(key: Key, orientation: Orientation, dir: Dir) -> Option<Nav> 
 }
 
 /// Index to move to, skipping disabled items. `None` means there is nowhere to go.
+#[must_use]
 pub fn step(enabled: &[bool], current: Option<usize>, nav: Nav, wrap: bool) -> Option<usize> {
     let n = enabled.len();
     let first = || enabled.iter().position(|e| *e);
@@ -142,6 +145,7 @@ pub struct Stop<'a> {
 /// can still take focus. Otherwise it is the first preferred item that is enabled,
 /// then the first enabled one, then any that can take focus, so a group whose
 /// items are all disabled can still be reached.
+#[must_use]
 pub fn roving_stop<'a>(items: &[Stop<'a>], remembered: Option<&str>) -> Option<&'a str> {
     let remembered =
         remembered.and_then(|key| items.iter().find(|item| item.key == key && item.focusable));
@@ -173,6 +177,7 @@ pub struct FieldCaret {
 /// Whether a key pressed in such a field is the field's own, or moves on to the
 /// next item of the group. Left and Right leave only from the end they point at,
 /// with nothing selected. Home and End always stay.
+#[must_use]
 pub fn field_keeps_key(key: Key, field: FieldCaret) -> bool {
     let Some((start, end)) = field.selection else {
         return false;

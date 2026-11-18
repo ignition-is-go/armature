@@ -18,7 +18,8 @@ pub enum Platform {
 impl Shortcut {
     /// Parses `mod+shift+b`, `alt+enter`, `escape` and the like. `None` if a part is
     /// not a known modifier or key.
-    pub fn parse(text: &str) -> Option<Shortcut> {
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
         let mut mods = Modifiers::default();
         let mut key = None;
         for part in text.split('+').map(|part| part.trim().to_lowercase()) {
@@ -30,10 +31,11 @@ impl Shortcut {
                 _ => return None,
             }
         }
-        Some(Shortcut { key: key?, mods })
+        Some(Self { key: key?, mods })
     }
 
     /// Whether a key press is this shortcut. Letters match in either case.
+    #[must_use]
     pub fn matches(&self, key: Key, mods: Modifiers) -> bool {
         let same_key = match (self.key, key) {
             (Key::Char(a), Key::Char(b)) => a.to_lowercase().eq(b.to_lowercase()),
@@ -48,6 +50,7 @@ impl Shortcut {
     /// digit there: Option+N on a Mac types `˜`, Shift+1 types `!`, and other
     /// alphabets type their own letters. A layout that types a different Latin
     /// letter keeps its letters, so AZERTY's A is not QWERTY's.
+    #[must_use]
     pub fn matches_typed(&self, typed: &str, code: &str, mods: Modifiers) -> bool {
         if self.mods != mods {
             return false;
@@ -78,6 +81,7 @@ impl Shortcut {
     }
 
     /// `format`, wrapped so that a right-to-left layout never reorders it.
+    #[must_use]
     pub fn display(&self, platform: Platform) -> String {
         format!("\u{2066}{}\u{2069}", self.format(platform))
     }
@@ -85,9 +89,7 @@ impl Shortcut {
     /// How to show the shortcut to a person on `platform`.
     pub fn format(&self, platform: Platform) -> String {
         let key = match (platform, self.key) {
-            (Platform::Mac, key) => mac_glyph(key)
-                .map(String::from)
-                .unwrap_or_else(|| key_label(key)),
+            (Platform::Mac, key) => mac_glyph(key).map_or_else(|| key_label(key), String::from),
             (Platform::Other, Key::Escape) => "Esc".to_string(),
             (Platform::Other, Key::ArrowUp) => "Up".to_string(),
             (Platform::Other, Key::ArrowDown) => "Down".to_string(),
@@ -114,6 +116,7 @@ impl Shortcut {
     }
 
     /// The value for an `aria-keyshortcuts` attribute.
+    #[must_use]
     pub fn aria(&self, platform: Platform) -> String {
         let main = if platform == Platform::Mac {
             "Meta"
@@ -142,11 +145,12 @@ impl Shortcut {
 /// Whether a shortcut may run. `order` is the layer it belongs to: 0 for the page,
 /// and `None` for a popup that is closed. `blocking` is the lowest layer that is
 /// modal, if any: only shortcuts at or above it run.
+#[must_use]
 pub fn shortcut_allowed(order: Option<u32>, blocking: Option<u32>) -> bool {
     order.is_some_and(|order| blocking.is_none_or(|blocking| order >= blocking))
 }
 
-fn mac_glyph(key: Key) -> Option<&'static str> {
+const fn mac_glyph(key: Key) -> Option<&'static str> {
     Some(match key {
         Key::Backspace => "⌫",
         Key::Enter => "↩",

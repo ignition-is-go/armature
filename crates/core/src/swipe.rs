@@ -10,6 +10,7 @@ pub const FLICK_SPEED: f64 = 300.0;
 
 /// Whether a press that has moved by `dx` and `dy` has become a swipe. A move that is
 /// mostly vertical is left to scrolling.
+#[must_use]
 pub fn is_swipe(dx: f64, dy: f64) -> bool {
     dx.abs() >= SWIPE_SLOP && dx.abs() > dy.abs()
 }
@@ -26,8 +27,9 @@ pub struct SwipeActions {
 
 impl SwipeActions {
     /// A row whose full swipe needs 60% of its width.
-    pub fn with_full_swipe(reveal: f64, row_width: f64) -> Self {
-        SwipeActions {
+    #[must_use]
+    pub const fn with_full_swipe(reveal: f64, row_width: f64) -> Self {
+        Self {
             reveal,
             full: Some(0.6),
             row_width,
@@ -50,6 +52,7 @@ impl SwipeActions {
 
     /// How far to show the row moved while the finger is down. Past the furthest stop
     /// it resists.
+    #[must_use]
     pub fn offset(&self, dragged: f64) -> f64 {
         let dragged = dragged.max(0.0);
         let limit = self.full_distance().unwrap_or(self.reveal);
@@ -64,6 +67,7 @@ impl SwipeActions {
     /// (units per second, positive in the swipe direction). Far enough is a full
     /// swipe. Otherwise a flick decides by its direction, and without one the row
     /// stays open only if it is at least half revealed.
+    #[must_use]
     pub fn settle(&self, dragged: f64, velocity: f64) -> Swipe {
         if self.full_distance().is_some_and(|full| dragged >= full) {
             Swipe::Full
@@ -81,7 +85,8 @@ impl SwipeActions {
     }
 
     /// The offset a settled row rests at. A full swipe runs its action and closes.
-    pub fn rest(&self, swipe: Swipe) -> f64 {
+    #[must_use]
+    pub const fn rest(&self, swipe: Swipe) -> f64 {
         match swipe {
             Swipe::Revealed => self.reveal,
             Swipe::Closed | Swipe::Full => 0.0,

@@ -28,7 +28,7 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        Options {
+        Self {
             max: 5,
             halves: false,
             deselectable: true,
@@ -51,23 +51,25 @@ pub struct Rating {
 }
 
 impl Rating {
-    pub fn new(opts: Options) -> Self {
-        Rating {
+    #[must_use]
+    pub const fn new(opts: Options) -> Self {
+        Self {
             opts,
             value: 0.0,
             hover: None,
         }
     }
 
-    fn step(&self) -> f64 {
+    const fn step(&self) -> f64 {
         if self.opts.halves { 0.5 } else { 1.0 }
     }
 
     /// How much of a star to fill: 0, a half or 1. It follows the pointer's preview
     /// while there is one.
+    #[must_use]
     pub fn fill(&self, star: u32) -> f64 {
         let shown = self.hover.unwrap_or(self.value);
-        (shown - (star as f64 - 1.0)).clamp(0.0, 1.0)
+        (shown - (f64::from(star) - 1.0)).clamp(0.0, 1.0)
     }
 
     fn written(value: f64) -> Vec<String> {
@@ -79,7 +81,8 @@ impl Rating {
     }
 
     fn set(&mut self, value: f64, source: Source, reason: Reason, gate: Gate) -> bool {
-        let value = ((value / self.step()).round() * self.step()).clamp(0.0, self.opts.max as f64);
+        let value =
+            ((value / self.step()).round() * self.step()).clamp(0.0, f64::from(self.opts.max));
         if value == self.value {
             return true;
         }
@@ -151,7 +154,7 @@ impl Primitive for Rating {
                 range: Some(ValueRange {
                     now: self.value,
                     min: 0.0,
-                    max: self.opts.max as f64,
+                    max: f64::from(self.opts.max),
                 }),
                 focusable: Focusable::TabStop,
                 ..Default::default()
@@ -182,12 +185,12 @@ impl Primitive for Rating {
                 let next = match key {
                     Key::ArrowUp => self.value + self.step(),
                     Key::ArrowDown => self.value - self.step(),
-                    Key::ArrowRight => self.value + self.step() * forward,
-                    Key::ArrowLeft => self.value - self.step() * forward,
+                    Key::ArrowRight => self.step().mul_add(forward, self.value),
+                    Key::ArrowLeft => self.step().mul_add(-forward, self.value),
                     Key::Home => 0.0,
-                    Key::End => self.opts.max as f64,
+                    Key::End => f64::from(self.opts.max),
                     Key::Char(digit) if digit.is_ascii_digit() => {
-                        digit.to_digit(10).unwrap_or(0) as f64
+                        f64::from(digit.to_digit(10).unwrap_or(0))
                     }
                     _ => return Reaction::default(),
                 };
@@ -239,7 +242,7 @@ impl Primitive for Rating {
             .and_then(|text| text.parse::<f64>().ok())
             .unwrap_or(0.0);
         self.value =
-            ((number / self.step()).round() * self.step()).clamp(0.0, self.opts.max as f64);
+            ((number / self.step()).round() * self.step()).clamp(0.0, f64::from(self.opts.max));
     }
 
     fn snapshot(&self, label: &str) -> Snapshot {

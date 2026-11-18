@@ -36,30 +36,35 @@ pub struct Toast {
 const SEPARATOR: char = '\u{1f}';
 
 impl Toast {
+    #[must_use]
     pub fn new(id: &str, title: &str) -> Self {
-        Toast {
+        Self {
             id: id.into(),
             title: title.into(),
             ..Default::default()
         }
     }
 
-    pub fn of(mut self, kind: Kind) -> Self {
+    #[must_use]
+    pub const fn of(mut self, kind: Kind) -> Self {
         self.kind = kind;
         self
     }
 
+    #[must_use]
     pub fn action(mut self, label: &str) -> Self {
         self.action = label.into();
         self
     }
 
-    pub fn lasting(mut self, duration_ms: u64) -> Self {
+    #[must_use]
+    pub const fn lasting(mut self, duration_ms: u64) -> Self {
         self.duration_ms = Some(duration_ms);
         self
     }
 
     /// The toast as one entry of a toaster's value.
+    #[must_use]
     pub fn encode(&self) -> String {
         let kind = match self.kind {
             Kind::Default => "default",
@@ -82,7 +87,8 @@ impl Toast {
         .join(&SEPARATOR.to_string())
     }
 
-    pub fn parse(entry: &str) -> Option<Toast> {
+    #[must_use]
+    pub fn parse(entry: &str) -> Option<Self> {
         let mut fields = entry.split(SEPARATOR);
         let id = fields.next()?.to_string();
         let kind = match fields.next()? {
@@ -93,7 +99,7 @@ impl Toast {
         };
         let duration_ms = fields.next()?.parse().ok();
         let mut text = || fields.next().unwrap_or_default().to_string();
-        Some(Toast {
+        Some(Self {
             id,
             kind,
             duration_ms,
@@ -142,13 +148,14 @@ pub struct Toaster {
 
 impl Default for Toaster {
     fn default() -> Self {
-        Toaster::new(3, 5000)
+        Self::new(3, 5000)
     }
 }
 
 impl Toaster {
-    pub fn new(limit: usize, duration_ms: u64) -> Self {
-        Toaster {
+    #[must_use]
+    pub const fn new(limit: usize, duration_ms: u64) -> Self {
+        Self {
             toasts: Vec::new(),
             limit,
             duration_ms,
@@ -161,11 +168,13 @@ impl Toaster {
     }
 
     /// The notifications on show, oldest first.
+    #[must_use]
     pub fn visible(&self) -> &[Toast] {
         &self.toasts[..self.toasts.len().min(self.limit)]
     }
 
     /// How far a notification being dragged has moved sideways.
+    #[must_use]
     pub fn offset(&self, id: &str) -> f64 {
         self.drag
             .as_ref()

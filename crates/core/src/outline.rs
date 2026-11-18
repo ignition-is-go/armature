@@ -17,6 +17,7 @@ pub struct Place {
 }
 
 /// The index just past a row and everything under it.
+#[must_use]
 pub fn subtree_end(rows: &[OutlineRow], index: usize) -> usize {
     let depth = rows[index].depth;
     rows[index + 1..]
@@ -26,6 +27,7 @@ pub fn subtree_end(rows: &[OutlineRow], index: usize) -> usize {
 }
 
 /// The parent of the row at `index` and its place among that parent's children.
+#[must_use]
 pub fn place_of(rows: &[OutlineRow], index: usize) -> Place {
     let depth = rows[index].depth;
     let parent = rows[..index].iter().rposition(|row| row.depth < depth);
@@ -40,6 +42,7 @@ pub fn place_of(rows: &[OutlineRow], index: usize) -> Place {
 /// How shallow and how deep a row may sit between two neighbours: no deeper than
 /// a child of the row above, and no shallower than the row below, which it would
 /// otherwise take from its parent. Returns `(min, max)`.
+#[must_use]
 pub fn depth_range(
     above: Option<&OutlineRow>,
     below: Option<&OutlineRow>,
@@ -55,6 +58,7 @@ pub fn depth_range(
 /// The outline with a row and its children moved before the row `before`, or to
 /// the end, and set to `depth`. `None` when nothing would change or a key is
 /// unknown.
+#[must_use]
 pub fn moved_rows(
     rows: &[OutlineRow],
     key: &str,
@@ -127,6 +131,7 @@ fn block_max_depth(rows: &[OutlineRow], from: usize, max_depth: Option<usize>) -
 /// Moves a row and its children before `before`, or to the end, as near `depth`
 /// as fits between its new neighbours, in one step. `None` when that changes
 /// nothing or cannot be done, such as moving a row into itself.
+#[must_use]
 pub fn move_row(
     rows: &[OutlineRow],
     key: &str,
@@ -167,13 +172,14 @@ pub struct OutlineMove {
 
 impl OutlineMove {
     /// Picks up a row. `None` if there is no such row.
+    #[must_use]
     pub fn grab(rows: &[OutlineRow], key: &str, max_depth: Option<usize>) -> Option<Self> {
         let at = rows.iter().position(|row| row.key == key)?;
         let keys = rows[at..subtree_end(rows, at)]
             .iter()
             .map(|row| row.key.clone())
             .collect();
-        Some(OutlineMove {
+        Some(Self {
             key: key.to_string(),
             keys,
             rows: rows.to_vec(),
@@ -183,11 +189,13 @@ impl OutlineMove {
     }
 
     /// The rows as they stand with the move so far.
+    #[must_use]
     pub fn rows(&self) -> &[OutlineRow] {
         &self.rows
     }
 
     /// The rows being moved: the one picked up, then those under it.
+    #[must_use]
     pub fn keys(&self) -> &[String] {
         &self.keys
     }
@@ -267,6 +275,7 @@ impl OutlineMove {
     }
 
     /// Drops it where it is. `None` when it is back where it started.
+    #[must_use]
     pub fn dropped(self, before: &[OutlineRow]) -> Option<Landing> {
         (self.rows != before)
             .then(|| landing(self.rows, &self.key))
@@ -276,12 +285,14 @@ impl OutlineMove {
 
 /// The slot a dragged row belongs in: after every other row whose middle the
 /// pointer has passed.
+#[must_use]
 pub fn slot_at(middles: &[f64], y: f64) -> usize {
     middles.iter().filter(|middle| **middle < y).count()
 }
 
 /// The depth a drag aims for: one level for every indent the pointer has moved
 /// sideways from where the drag began.
+#[must_use]
 pub fn depth_at(start_depth: usize, moved_x: f64, indent: f64) -> usize {
     let levels = (moved_x / indent).round() as i64;
     (start_depth as i64 + levels).max(0) as usize
@@ -315,7 +326,7 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        Options {
+        Self {
             max_depth: None,
             indent: 24.0,
             dir: Dir::Ltr,
@@ -348,8 +359,9 @@ fn written(rows: &[OutlineRow]) -> Vec<String> {
 }
 
 impl Outline {
+    #[must_use]
     pub fn new(opts: Options, rows: Vec<OutlineRow>) -> Self {
-        Outline {
+        Self {
             opts,
             rows,
             ..Default::default()
@@ -358,12 +370,14 @@ impl Outline {
 
     /// The rows to draw, in order: as they would be if the row being moved were
     /// dropped now.
+    #[must_use]
     pub fn rows(&self) -> &[OutlineRow] {
         self.moving
             .as_ref()
             .map_or(&self.rows, |moving| moving.rows())
     }
 
+    #[must_use]
     pub fn depth_of(&self, key: &str) -> Option<usize> {
         self.rows()
             .iter()
@@ -372,6 +386,7 @@ impl Outline {
     }
 
     /// The rows being moved: the one picked up, then those under it.
+    #[must_use]
     pub fn moving(&self) -> &[String] {
         self.moving.as_ref().map_or(&[], |moving| moving.keys())
     }

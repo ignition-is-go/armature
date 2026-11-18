@@ -26,12 +26,14 @@ pub struct Hsl {
 }
 
 impl Rgb {
-    pub fn new(r: u8, g: u8, b: u8) -> Self {
-        Rgb { r, g, b }
+    #[must_use]
+    pub const fn new(r: u8, g: u8, b: u8) -> Self {
+        Self { r, g, b }
     }
 
     /// Parses `#rgb` or `#rrggbb`, with or without the `#`.
-    pub fn from_hex(text: &str) -> Option<Rgb> {
+    #[must_use]
+    pub fn from_hex(text: &str) -> Option<Self> {
         let hex = text.trim().trim_start_matches('#');
         if !hex.is_ascii() {
             return None;
@@ -39,10 +41,10 @@ impl Rgb {
         let channel = |digits: &str| u8::from_str_radix(digits, 16).ok();
         match hex.len() {
             3 => {
-                let double = |i: usize| channel(&hex[i..i + 1].repeat(2));
-                Some(Rgb::new(double(0)?, double(1)?, double(2)?))
+                let double = |i: usize| channel(&hex[i..=i].repeat(2));
+                Some(Self::new(double(0)?, double(1)?, double(2)?))
             }
-            6 => Some(Rgb::new(
+            6 => Some(Self::new(
                 channel(&hex[0..2])?,
                 channel(&hex[2..4])?,
                 channel(&hex[4..6])?,
@@ -51,21 +53,22 @@ impl Rgb {
         }
     }
 
+    #[must_use]
     pub fn to_hex(self) -> String {
         format!("#{:02x}{:02x}{:02x}", self.r, self.g, self.b)
     }
 
     fn unit(self) -> (f64, f64, f64) {
         (
-            self.r as f64 / 255.0,
-            self.g as f64 / 255.0,
-            self.b as f64 / 255.0,
+            f64::from(self.r) / 255.0,
+            f64::from(self.g) / 255.0,
+            f64::from(self.b) / 255.0,
         )
     }
 
-    fn from_unit(r: f64, g: f64, b: f64) -> Rgb {
+    fn from_unit(r: f64, g: f64, b: f64) -> Self {
         let byte = |value: f64| (value.clamp(0.0, 1.0) * 255.0).round() as u8;
-        Rgb::new(byte(r), byte(g), byte(b))
+        Self::new(byte(r), byte(g), byte(b))
     }
 
     fn hue_and_range(self) -> (f64, f64, f64) {
@@ -84,6 +87,7 @@ impl Rgb {
         (hue, max, min)
     }
 
+    #[must_use]
     pub fn to_hsv(self) -> Hsv {
         let (h, max, min) = self.hue_and_range();
         Hsv {
@@ -93,18 +97,20 @@ impl Rgb {
         }
     }
 
+    #[must_use]
     pub fn to_hsl(self) -> Hsl {
         let (h, max, min) = self.hue_and_range();
-        let l = (max + min) / 2.0;
+        let l = f64::midpoint(max, min);
         let s = if max == min {
             0.0
         } else {
-            (max - min) / (1.0 - (2.0 * l - 1.0).abs())
+            (max - min) / (1.0 - 2.0f64.mul_add(l, -1.0).abs())
         };
         Hsl { h, s, l }
     }
 
     /// Relative luminance, from 0 for black to 1 for white.
+    #[must_use]
     pub fn luminance(self) -> f64 {
         let linear = |c: f64| {
             if c <= 0.04045 {
@@ -114,11 +120,12 @@ impl Rgb {
             }
         };
         let (r, g, b) = self.unit();
-        0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
+        0.0722f64.mul_add(linear(b), 0.7152f64.mul_add(linear(g), 0.2126 * linear(r)))
     }
 
     /// Contrast ratio against another colour, from 1 to 21. Body text needs 4.5.
-    pub fn contrast(self, other: Rgb) -> f64 {
+    #[must_use]
+    pub fn contrast(self, other: Self) -> f64 {
         let (a, b) = (self.luminance(), other.luminance());
         (a.max(b) + 0.05) / (a.min(b) + 0.05)
     }
@@ -139,6 +146,7 @@ fn from_hue(h: f64, chroma: f64, floor: f64) -> Rgb {
 }
 
 impl Hsv {
+    #[must_use]
     pub fn to_rgb(self) -> Rgb {
         let chroma = self.v * self.s;
         from_hue(self.h, chroma, self.v - chroma)
@@ -146,18 +154,22 @@ impl Hsv {
 }
 
 impl Hsl {
+    #[must_use]
     pub fn to_rgb(self) -> Rgb {
-        let chroma = (1.0 - (2.0 * self.l - 1.0).abs()) * self.s;
+        let chroma = (1.0 - 2.0f64.mul_add(self.l, -1.0).abs()) * self.s;
         from_hue(self.h, chroma, self.l - chroma / 2.0)
     }
 }
 
 impl Rgb {
     /// This colour with `amount` of `other` mixed in, from 0 for none to 1 for all.
-    pub fn mix(self, other: Rgb, amount: f64) -> Rgb {
+    #[must_use]
+    pub fn mix(self, other: Self, amount: f64) -> Self {
         let amount = amount.clamp(0.0, 1.0);
-        let blend = |a: u8, b: u8| (a as f64 + (b as f64 - a as f64) * amount).round() as u8;
-        Rgb::new(
+        let blend = |a: u8, b: u8| {
+            f64::mul_add(f64::from(b) - f64::from(a), amount, f64::from(a)).round() as u8
+        };
+        Self::new(
             blend(self.r, other.r),
             blend(self.g, other.g),
             blend(self.b, other.b),
@@ -165,7 +177,8 @@ impl Rgb {
     }
 
     /// The colour a basic colour name stands for, in any case.
-    pub fn named(name: &str) -> Option<Rgb> {
+    #[must_use]
+    pub fn named(name: &str) -> Option<Self> {
         let hex = match name.trim().to_lowercase().as_str() {
             "black" => "#000000",
             "silver" => "#c0c0c0",
@@ -188,12 +201,13 @@ impl Rgb {
             "brown" => "#a52a2a",
             _ => return None,
         };
-        Rgb::from_hex(hex)
+        Self::from_hex(hex)
     }
 
     /// Text read as a colour: a hex value or a basic colour name.
-    pub fn parse(text: &str) -> Option<Rgb> {
-        Rgb::from_hex(text).or_else(|| Rgb::named(text))
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
+        Self::from_hex(text).or_else(|| Self::named(text))
     }
 }
 
@@ -216,17 +230,23 @@ impl Rgb {
     /// How different two colours look, from 0 for the same to about 765 for black
     /// against white. Red, green and blue are weighted by how strongly the eye
     /// answers to each.
-    pub fn distance(self, other: Rgb) -> f64 {
-        let mean = (self.r as f64 + other.r as f64) / 2.0;
+    #[must_use]
+    pub fn distance(self, other: Self) -> f64 {
+        let mean = f64::midpoint(f64::from(self.r), f64::from(other.r));
         let (dr, dg, db) = (
-            self.r as f64 - other.r as f64,
-            self.g as f64 - other.g as f64,
-            self.b as f64 - other.b as f64,
+            f64::from(self.r) - f64::from(other.r),
+            f64::from(self.g) - f64::from(other.g),
+            f64::from(self.b) - f64::from(other.b),
         );
-        ((2.0 + mean / 256.0) * dr * dr + 4.0 * dg * dg + (2.0 + (255.0 - mean) / 256.0) * db * db)
-            .sqrt()
+        f64::mul_add(
+            (2.0 + (255.0 - mean) / 256.0) * db,
+            db,
+            f64::mul_add(4.0 * dg, dg, (2.0 + mean / 256.0) * dr * dr),
+        )
+        .sqrt()
     }
 
+    #[must_use]
     pub fn write(self, notation: Notation) -> String {
         match notation {
             Notation::Hex => self.to_hex(),
@@ -262,41 +282,74 @@ impl Rgb {
     }
 
     /// Lightness from 0 to 100 and the two colour axes of CIE Lab.
+    #[must_use]
     pub fn to_lab(self) -> (f64, f64, f64) {
-        let [r, g, b] = [self.r, self.g, self.b].map(|part| to_linear(part as f64 / 255.0));
+        let [r, g, b] = [self.r, self.g, self.b].map(|part| to_linear(f64::from(part) / 255.0));
         // To XYZ under D65, then adapted to the D50 white Lab is measured against,
         // with the matrices CSS Color gives.
         let (x, y, z) = (
-            506752.0 / 1228815.0 * r + 87881.0 / 245763.0 * g + 12673.0 / 70218.0 * b,
-            87098.0 / 409605.0 * r + 175762.0 / 245763.0 * g + 12673.0 / 175545.0 * b,
-            7918.0 / 409605.0 * r + 87881.0 / 737289.0 * g + 1001167.0 / 1053270.0 * b,
+            f64::mul_add(
+                12673.0 / 70218.0,
+                b,
+                f64::mul_add(87881.0 / 245763.0, g, 506752.0 / 1228815.0 * r),
+            ),
+            f64::mul_add(
+                12673.0 / 175545.0,
+                b,
+                f64::mul_add(175762.0 / 245763.0, g, 87098.0 / 409605.0 * r),
+            ),
+            f64::mul_add(
+                1001167.0 / 1053270.0,
+                b,
+                f64::mul_add(87881.0 / 737289.0, g, 7918.0 / 409605.0 * r),
+            ),
         );
         let adapted = [
-            1.0479297925449969 * x + 0.022946870601609652 * y - 0.05019226628920524 * z,
-            0.02962780877005599 * x + 0.9904344267538799 * y - 0.017073799063418826 * z,
-            -0.009243040646204504 * x + 0.015055191490298152 * y + 0.7518742814281371 * z,
+            0.05019226628920524f64.mul_add(
+                -z,
+                0.022946870601609652f64.mul_add(y, 1.0479297925449969 * x),
+            ),
+            0.017073799063418826f64.mul_add(
+                -z,
+                0.9904344267538799f64.mul_add(y, 0.02962780877005599 * x),
+            ),
+            0.7518742814281371f64.mul_add(
+                z,
+                0.015055191490298152f64.mul_add(y, -0.009243040646204504 * x),
+            ),
         ];
         let white = [0.3457 / 0.3585, 1.0, (1.0 - 0.3457 - 0.3585) / 0.3585];
         let curve = |t: f64| {
             if t > 216.0 / 24389.0 {
                 t.cbrt()
             } else {
-                (24389.0 / 27.0 * t + 16.0) / 116.0
+                f64::mul_add(24389.0 / 27.0, t, 16.0) / 116.0
             }
         };
         let [fx, fy, fz] = [0, 1, 2].map(|at| curve(adapted[at] / white[at]));
-        (116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz))
+        (
+            116.0f64.mul_add(fy, -16.0),
+            500.0 * (fx - fy),
+            200.0 * (fy - fz),
+        )
     }
 
     /// Lightness from 0 to 1, colourfulness, and hue in degrees, in OKLCH.
+    #[must_use]
     pub fn to_oklch(self) -> (f64, f64, f64) {
-        let [r, g, b] = [self.r, self.g, self.b].map(|part| to_linear(part as f64 / 255.0));
-        let l = (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b).cbrt();
-        let m = (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b).cbrt();
-        let s = (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b).cbrt();
-        let lightness = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
-        let a = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
-        let b = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
+        let [r, g, b] = [self.r, self.g, self.b].map(|part| to_linear(f64::from(part) / 255.0));
+        let l = 0.0514459929f64
+            .mul_add(b, 0.5363325363f64.mul_add(g, 0.4122214708 * r))
+            .cbrt();
+        let m = 0.1073969566f64
+            .mul_add(b, 0.6806995451f64.mul_add(g, 0.2119034982 * r))
+            .cbrt();
+        let s = 0.6299787005f64
+            .mul_add(b, 0.2817188376f64.mul_add(g, 0.0883024619 * r))
+            .cbrt();
+        let lightness = 0.0040720468f64.mul_add(-s, 0.7936177850f64.mul_add(m, 0.2104542553 * l));
+        let a = 0.4505937099f64.mul_add(s, 2.4285922050f64.mul_add(-m, 1.9779984951 * l));
+        let b = 0.8086757660f64.mul_add(-s, 0.7827717662f64.mul_add(m, 0.0259040371 * l));
         (
             lightness,
             a.hypot(b),
@@ -306,6 +359,7 @@ impl Rgb {
 
     /// The colour written with how see-through it is, from 0 to 1. A colour that
     /// is not see-through at all is written without it.
+    #[must_use]
     pub fn write_alpha(self, notation: Notation, alpha: f64) -> String {
         let alpha = alpha.clamp(0.0, 1.0);
         let plain = self.write(notation);
@@ -324,11 +378,12 @@ impl Rgb {
 
     /// Text read as a colour and how see-through it is: `rgb(255 0 0 / 0.5)`,
     /// `#00000080`. Without one, it is not see-through.
-    pub fn read_alpha(text: &str) -> Option<(Rgb, f64)> {
+    #[must_use]
+    pub fn read_alpha(text: &str) -> Option<(Self, f64)> {
         let text = text.trim();
         if let Some(hex) = text.strip_prefix('#').filter(|hex| hex.len() == 8) {
-            let alpha = u8::from_str_radix(&hex[6..], 16).ok()? as f64 / 255.0;
-            return Some((Rgb::from_hex(&text[..7])?, alpha));
+            let alpha = f64::from(u8::from_str_radix(&hex[6..], 16).ok()?) / 255.0;
+            return Some((Self::from_hex(&text[..7])?, alpha));
         }
         let alpha = match text.rsplit_once('/') {
             Some((_, alpha)) => {
@@ -344,11 +399,12 @@ impl Rgb {
             Some((colour, _)) => format!("{})", colour.trim()),
             None => text.to_string(),
         };
-        Some((Rgb::read(&colour)?, alpha.clamp(0.0, 1.0)))
+        Some((Self::read(&colour)?, alpha.clamp(0.0, 1.0)))
     }
 
     /// Text read as a colour in any notation: hex, `rgb(..)`, `hsl(..)` or a name.
-    pub fn read(text: &str) -> Option<Rgb> {
+    #[must_use]
+    pub fn read(text: &str) -> Option<Self> {
         let text = text.trim();
         let numbers = |body: &str| -> Vec<f64> {
             body.split(|ch: char| ch == ',' || ch == '/' || ch.is_whitespace())
@@ -364,7 +420,7 @@ impl Rgb {
         if let Some(body) = inside("rgb").or_else(|| inside("rgba")) {
             let n = numbers(body);
             return (n.len() >= 3).then(|| {
-                Rgb::new(
+                Self::new(
                     n[0].clamp(0.0, 255.0) as u8,
                     n[1].clamp(0.0, 255.0) as u8,
                     n[2].clamp(0.0, 255.0) as u8,
@@ -382,7 +438,7 @@ impl Rgb {
                 .to_rgb()
             });
         }
-        Rgb::parse(text)
+        Self::parse(text)
     }
 }
 
@@ -407,7 +463,7 @@ fn from_linear(part: f64) -> f64 {
     if part <= 0.0031308 {
         part * 12.92
     } else {
-        1.055 * part.powf(1.0 / 2.4) - 0.055
+        1.055f64.mul_add(part.powf(1.0 / 2.4), -0.055)
     }
 }
 
@@ -416,26 +472,28 @@ impl P3 {
     fn in_srgb(self) -> [f64; 3] {
         let (r, g, b) = (to_linear(self.r), to_linear(self.g), to_linear(self.b));
         [
-            1.2249401 * r - 0.2249404 * g,
-            -0.0420569 * r + 1.0420571 * g,
-            -0.0196376 * r - 0.0786361 * g + 1.0982735 * b,
+            0.2249404f64.mul_add(-g, 1.2249401 * r),
+            1.0420571f64.mul_add(g, -0.0420569 * r),
+            1.0982735f64.mul_add(b, 0.0786361f64.mul_add(-g, -0.0196376 * r)),
         ]
     }
 
-    pub fn from_rgb(color: Rgb) -> P3 {
+    #[must_use]
+    pub fn from_rgb(color: Rgb) -> Self {
         let (r, g, b) = (
-            to_linear(color.r as f64 / 255.0),
-            to_linear(color.g as f64 / 255.0),
-            to_linear(color.b as f64 / 255.0),
+            to_linear(f64::from(color.r) / 255.0),
+            to_linear(f64::from(color.g) / 255.0),
+            to_linear(f64::from(color.b) / 255.0),
         );
-        P3 {
-            r: from_linear(0.8224621 * r + 0.1775380 * g),
-            g: from_linear(0.0331941 * r + 0.9668058 * g),
-            b: from_linear(0.0170827 * r + 0.0723974 * g + 0.9105199 * b),
+        Self {
+            r: from_linear(0.1775380f64.mul_add(g, 0.8224621 * r)),
+            g: from_linear(0.9668058f64.mul_add(g, 0.0331941 * r)),
+            b: from_linear(0.9105199f64.mul_add(b, 0.0723974f64.mul_add(g, 0.0170827 * r))),
         }
     }
 
     /// Whether an ordinary screen can show this colour as it is.
+    #[must_use]
     pub fn is_in_srgb(self) -> bool {
         self.in_srgb()
             .iter()
@@ -443,6 +501,7 @@ impl P3 {
     }
 
     /// The nearest colour an ordinary screen can show.
+    #[must_use]
     pub fn to_rgb(self) -> Rgb {
         let [r, g, b] = self
             .in_srgb()
@@ -451,7 +510,8 @@ impl P3 {
     }
 
     /// Reads `color(display-p3 1 0.5 0)`.
-    pub fn read(text: &str) -> Option<P3> {
+    #[must_use]
+    pub fn read(text: &str) -> Option<Self> {
         let body = text
             .trim()
             .strip_prefix("color(")?
@@ -462,13 +522,14 @@ impl P3 {
             .split_whitespace()
             .filter_map(|part| part.parse().ok())
             .collect();
-        (parts.len() >= 3).then(|| P3 {
+        (parts.len() >= 3).then(|| Self {
             r: parts[0],
             g: parts[1],
             b: parts[2],
         })
     }
 
+    #[must_use]
     pub fn write(self) -> String {
         let round = |part: f64| (part * 10_000.0).round() / 10_000.0;
         format!(

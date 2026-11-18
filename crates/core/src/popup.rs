@@ -35,6 +35,7 @@ pub struct Placed {
 
 /// Positions a popup beside its anchor. It flips to the other side when the preferred
 /// one overflows and the other fits, and slides along the anchor to stay on screen.
+#[must_use]
 pub fn place(
     anchor: Rect,
     popup: Size,
@@ -79,6 +80,7 @@ pub fn place(
 
 /// Where along a popup's edge its arrow sits so that it points at the middle of the
 /// anchor, measured from the popup's left. It stays `inset` clear of the corners.
+#[must_use]
 pub fn arrow_offset(anchor: Rect, placed: Placed, popup: Size, inset: f64) -> f64 {
     let target = anchor.x + anchor.width / 2.0 - placed.x;
     target.clamp(
@@ -91,6 +93,7 @@ pub fn arrow_offset(anchor: Rect, placed: Placed, popup: Size, inset: f64) -> f6
 /// points at the middle of the anchor, and whether it had to stop short of a
 /// corner to stay `padding` clear of it. Along the width for a popup above or
 /// below, and along the height for one beside.
+#[must_use]
 pub fn arrow_along(
     anchor: Rect,
     popup: Rect,
@@ -121,6 +124,7 @@ pub fn arrow_along(
 /// Whether a point lies on the way between a trigger and its popup: inside the
 /// smallest shape with no dents that holds both, each grown by `padding`. A pointer
 /// there has not left, so the popup stays while it crosses the gap.
+#[must_use]
 pub fn bridges(trigger: Rect, popup: Rect, padding: f64, point: Point) -> bool {
     let mut corners: Vec<Point> = [trigger, popup]
         .iter()
@@ -137,7 +141,7 @@ pub fn bridges(trigger: Rect, popup: Rect, padding: f64, point: Point) -> bool {
         .collect();
     corners.sort_by(|a, b| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y)));
     let cross =
-        |a: Point, b: Point, c: Point| (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+        |a: Point, b: Point, c: Point| (b.y - a.y).mul_add(-(c.x - a.x), (b.x - a.x) * (c.y - a.y));
     let half = |points: &mut dyn Iterator<Item = Point>| {
         let mut chain: Vec<Point> = Vec::new();
         for point in points {

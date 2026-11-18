@@ -15,25 +15,26 @@ impl Presence {
     /// Follows the open state. Returns whether anything changed.
     pub fn set(&mut self, open: bool) -> bool {
         let next = match (*self, open) {
-            (Presence::Absent | Presence::Exiting, true) => Presence::Entering,
-            (Presence::Entering | Presence::Present, false) => Presence::Exiting,
+            (Self::Absent | Self::Exiting, true) => Self::Entering,
+            (Self::Entering | Self::Present, false) => Self::Exiting,
             (unchanged, _) => unchanged,
         };
         std::mem::replace(self, next) != next
     }
 
     /// The running animation finished.
-    pub fn animation_ended(&mut self) {
+    pub const fn animation_ended(&mut self) {
         *self = match *self {
-            Presence::Entering => Presence::Present,
-            Presence::Exiting => Presence::Absent,
+            Self::Entering => Self::Present,
+            Self::Exiting => Self::Absent,
             settled => settled,
         };
     }
 
     /// Whether to render it at all.
+    #[must_use]
     pub fn is_rendered(self) -> bool {
-        self != Presence::Absent
+        self != Self::Absent
     }
 }
 

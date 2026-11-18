@@ -49,6 +49,7 @@ pub fn page_range(page: usize, count: usize, siblings: usize, boundaries: usize)
 }
 
 /// How many pages `total` items fill at `page_size` to a page. Never less than one.
+#[must_use]
 pub fn page_count(total: usize, page_size: usize) -> usize {
     if page_size == 0 {
         1
@@ -82,14 +83,15 @@ pub struct Pagination {
 
 impl Default for Pagination {
     fn default() -> Self {
-        Pagination::new(1, 10)
+        Self::new(1, 10)
     }
 }
 
 impl Pagination {
+    #[must_use]
     pub fn new(page: usize, count: usize) -> Self {
         let count = count.max(1);
-        Pagination {
+        Self {
             page: page.clamp(1, count),
             count,
             siblings: 1,
@@ -98,11 +100,13 @@ impl Pagination {
         }
     }
 
-    pub fn page(&self) -> usize {
+    #[must_use]
+    pub const fn page(&self) -> usize {
         self.page
     }
 
     /// The row of links to draw.
+    #[must_use]
     pub fn range(&self) -> Vec<PageItem> {
         page_range(self.page, self.count, self.siblings, self.boundaries)
     }

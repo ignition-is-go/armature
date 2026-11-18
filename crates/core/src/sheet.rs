@@ -39,6 +39,7 @@ pub enum Edge {
 const ACTIONS: &[&str] = &["open", "close", "snap"];
 
 /// A panel that slides up from the bottom edge and rests at one of several heights.
+///
 /// Dragging its grip moves it between them, and dragging it well below the lowest
 /// dismisses it. The value is the index of the height it rests at, or empty when
 /// closed.
@@ -68,14 +69,14 @@ pub struct Sheet {
 
 impl Default for Sheet {
     fn default() -> Self {
-        Sheet::new(vec![200.0, 480.0], true)
+        Self::new(vec![200.0, 480.0], true)
     }
 }
 
 impl Sheet {
     pub fn new(mut detents: Vec<f64>, dismissible: bool) -> Self {
         detents.sort_by(f64::total_cmp);
-        Sheet {
+        Self {
             detents,
             dismissible,
             at: None,
@@ -92,12 +93,14 @@ impl Sheet {
 
     /// Slides in from another edge, as a navigation drawer does from the side. Its
     /// sizes are then widths, and it is dragged along that edge's own direction.
-    pub fn from_edge(mut self, side: Edge) -> Self {
+    #[must_use]
+    pub const fn from_edge(mut self, side: Edge) -> Self {
         self.side = side;
         self
     }
 
-    pub fn edge(&self) -> Edge {
+    #[must_use]
+    pub const fn edge(&self) -> Edge {
         self.side
     }
 
@@ -111,11 +114,13 @@ impl Sheet {
         }
     }
 
-    pub fn is_open(&self) -> bool {
+    #[must_use]
+    pub const fn is_open(&self) -> bool {
         self.at.is_some()
     }
 
     /// How tall to draw the sheet now: its resting height, or wherever a drag has it.
+    #[must_use]
     pub fn height(&self) -> f64 {
         if let (Some((offset, _)), Some(_)) = (self.scrolled, self.at) {
             return offset;
@@ -128,7 +133,7 @@ impl Sheet {
     }
 
     fn written(at: Option<usize>) -> Vec<String> {
-        at.iter().map(|index| index.to_string()).collect()
+        at.iter().map(std::string::ToString::to_string).collect()
     }
 
     fn settle(&mut self, at: Option<usize>, source: Source, reason: Reason, gate: Gate) -> bool {
@@ -297,7 +302,7 @@ impl Primitive for Sheet {
                     return Reaction::default();
                 }
                 let _ = at;
-                self.scrolled = Some(((now - delta * 40.0).clamp(0.0, tallest), 0));
+                self.scrolled = Some((f64::mul_add(delta, -40.0, now).clamp(0.0, tallest), 0));
                 self.wheeled = true;
                 Reaction::handled()
             }

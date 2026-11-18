@@ -27,17 +27,13 @@ const MIN_SIDE: f64 = 8.0;
 fn handle(name: &str) -> Option<Handle> {
     let vertical = if name.contains('n') {
         -1
-    } else if name.contains('s') {
-        1
     } else {
-        0
+        i8::from(name.contains('s'))
     };
     let horizontal = if name.contains('w') {
         -1
-    } else if name.contains('e') {
-        1
     } else {
-        0
+        i8::from(name.contains('e'))
     };
     HANDLES.contains(&name).then_some(Handle {
         horizontal,
@@ -66,7 +62,7 @@ pub struct ImageCropper {
 
 impl Default for ImageCropper {
     fn default() -> Self {
-        ImageCropper::new(
+        Self::new(
             Size {
                 width: 800.0,
                 height: 600.0,
@@ -77,12 +73,13 @@ impl Default for ImageCropper {
 }
 
 impl ImageCropper {
+    #[must_use]
     pub fn new(image: Size, aspect: Option<f64>) -> Self {
         let min = Size {
             width: MIN_SIDE,
             height: MIN_SIDE,
         };
-        let mut cropper = ImageCropper {
+        let mut cropper = Self {
             image,
             aspect,
             min,
@@ -97,7 +94,8 @@ impl ImageCropper {
     }
 
     /// Sets the smallest selection allowed, so what is kept is never too small to use.
-    pub fn at_least(mut self, width: f64, height: f64) -> Self {
+    #[must_use]
+    pub const fn at_least(mut self, width: f64, height: f64) -> Self {
         self.min = Size {
             width: width.max(MIN_SIDE),
             height: height.max(MIN_SIDE),
@@ -105,12 +103,14 @@ impl ImageCropper {
         self
     }
 
-    pub fn zoom(&self) -> f64 {
+    #[must_use]
+    pub const fn zoom(&self) -> f64 {
         self.zoom
     }
 
     /// The part of the picture on show at this magnification, centred on the
     /// selection and kept inside the picture. Draw the picture so this fills the area.
+    #[must_use]
     pub fn view(&self) -> Rect {
         let (width, height) = (self.image.width / self.zoom, self.image.height / self.zoom);
         let centre = self.selection.center();
@@ -119,17 +119,19 @@ impl ImageCropper {
         Rect::new(x, y, width, height)
     }
 
-    fn zoom_to(&mut self, zoom: f64) {
+    const fn zoom_to(&mut self, zoom: f64) {
         self.zoom = zoom.clamp(1.0, self.max_zoom);
     }
 
     /// The selection, in the picture's own pixels.
-    pub fn selection(&self) -> Rect {
+    #[must_use]
+    pub const fn selection(&self) -> Rect {
         self.selection
     }
 
     /// The selection as fractions of the picture, for placing it over the picture
     /// whatever size that is shown at: left, top, width and height from 0 to 1.
+    #[must_use]
     pub fn fractions(&self) -> [f64; 4] {
         let view = self.view();
         [

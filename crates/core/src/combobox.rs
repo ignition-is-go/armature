@@ -84,18 +84,21 @@ pub struct Combobox {
 impl Combobox {
     /// Whether results are loading or failed. The owner says so with
     /// `set("status", "loading")`, `"error"` or `"idle"`.
-    pub fn loading(&self) -> Loading {
+    #[must_use]
+    pub const fn loading(&self) -> Loading {
         self.loading
     }
 
+    #[must_use]
     pub fn new(opts: Options) -> Self {
-        Combobox {
+        Self {
             opts,
             ..Default::default()
         }
     }
 
-    pub fn is_open(&self) -> bool {
+    #[must_use]
+    pub const fn is_open(&self) -> bool {
         self.open
     }
 
@@ -116,6 +119,7 @@ impl Combobox {
 
     /// The rest of the first option that begins with what was typed, to show after
     /// the caret as a suggestion. Tab takes it.
+    #[must_use]
     pub fn completion(&self) -> Option<String> {
         let typed = self.text.to_lowercase();
         if typed.is_empty() {
@@ -134,6 +138,7 @@ impl Combobox {
     }
 
     /// The options on show, in order.
+    #[must_use]
     pub fn results(&self) -> Vec<&str> {
         self.items
             .iter()
@@ -441,7 +446,7 @@ impl Primitive for Combobox {
                 let first = results
                     .iter()
                     .find(|key| self.items.is_enabled(key))
-                    .map(|key| key.to_string());
+                    .map(std::string::ToString::to_string);
                 let message = match results.len() {
                     _ if self.loading == Loading::Loading => "Loading".to_string(),
                     0 => "No results".to_string(),

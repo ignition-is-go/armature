@@ -13,7 +13,7 @@ pub struct Viewport {
 
 impl Default for Viewport {
     fn default() -> Self {
-        Viewport {
+        Self {
             pan: Point::default(),
             zoom: 1.0,
             min_zoom: 0.1,
@@ -23,6 +23,7 @@ impl Default for Viewport {
 }
 
 impl Viewport {
+    #[must_use]
     pub fn to_canvas(&self, screen: Point) -> Point {
         Point::new(
             (screen.x - self.pan.x) / self.zoom,
@@ -30,10 +31,11 @@ impl Viewport {
         )
     }
 
+    #[must_use]
     pub fn to_screen(&self, canvas: Point) -> Point {
         Point::new(
-            canvas.x * self.zoom + self.pan.x,
-            canvas.y * self.zoom + self.pan.y,
+            canvas.x.mul_add(self.zoom, self.pan.x),
+            canvas.y.mul_add(self.zoom, self.pan.y),
         )
     }
 
@@ -46,22 +48,25 @@ impl Viewport {
     pub fn zoom_at(&mut self, screen: Point, factor: f64) {
         let held = self.to_canvas(screen);
         self.zoom = (self.zoom * factor).clamp(self.min_zoom, self.max_zoom);
-        self.pan = Point::new(screen.x - held.x * self.zoom, screen.y - held.y * self.zoom);
+        self.pan = Point::new(
+            held.x.mul_add(-self.zoom, screen.x),
+            held.y.mul_add(-self.zoom, screen.y),
+        );
     }
 
     /// Shows all of `content`, centred in a view of `size` with `padding` around it.
     pub fn fit(&mut self, content: Rect, size: Size, padding: f64) {
         let room = Size {
-            width: (size.width - 2.0 * padding).max(1.0),
-            height: (size.height - 2.0 * padding).max(1.0),
+            width: 2.0f64.mul_add(-padding, size.width).max(1.0),
+            height: 2.0f64.mul_add(-padding, size.height).max(1.0),
         };
         let scale =
             (room.width / content.width.max(1.0)).min(room.height / content.height.max(1.0));
         self.zoom = scale.clamp(self.min_zoom, self.max_zoom);
         let center = content.center();
         self.pan = Point::new(
-            size.width / 2.0 - center.x * self.zoom,
-            size.height / 2.0 - center.y * self.zoom,
+            center.x.mul_add(-self.zoom, size.width / 2.0),
+            center.y.mul_add(-self.zoom, size.height / 2.0),
         );
     }
 }

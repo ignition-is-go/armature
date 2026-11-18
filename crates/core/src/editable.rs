@@ -23,12 +23,14 @@ pub struct Editable {
 }
 
 impl Editable {
+    #[must_use]
     pub fn new(value: &str) -> Self {
-        Editable {
+        Self {
             edit: InlineEdit::new(value),
         }
     }
 
+    #[must_use]
     pub fn is_editing(&self) -> bool {
         self.edit.is_editing()
     }
@@ -115,11 +117,8 @@ impl Primitive for Editable {
                 Input::Press {
                     part: Part::Preview,
                     ..
-                },
-                false,
-            )
-            | (
-                Input::Key {
+                }
+                | Input::Key {
                     key: Key::Enter | Key::F2,
                     ..
                 },
@@ -158,9 +157,9 @@ impl Primitive for Editable {
                 }
             }
             // Tab saves and is left to move focus on.
-            (Input::Key { key: Key::Tab, .. }, true)
-            | (
-                Input::Blur {
+            (
+                Input::Key { key: Key::Tab, .. }
+                | Input::Blur {
                     part: Part::Input, ..
                 },
                 true,

@@ -37,7 +37,7 @@ pub struct ColorPicker {
 
 impl Default for ColorPicker {
     fn default() -> Self {
-        ColorPicker::new(Rgb::new(59, 111, 224))
+        Self::new(Rgb::new(59, 111, 224))
     }
 }
 
@@ -49,8 +49,9 @@ fn pad() -> Area {
 }
 
 impl ColorPicker {
+    #[must_use]
     pub fn new(color: Rgb) -> Self {
-        ColorPicker {
+        Self {
             color: color.to_hsv(),
             draft: None,
             focused: None,
@@ -58,11 +59,13 @@ impl ColorPicker {
         }
     }
 
+    #[must_use]
     pub fn color(&self) -> Rgb {
         self.color.to_rgb()
     }
 
     /// The pure hue behind the square, for painting it.
+    #[must_use]
     pub fn hue_color(&self) -> Rgb {
         Hsv {
             h: self.color.h,
@@ -73,11 +76,13 @@ impl ColorPicker {
     }
 
     /// Where the square's thumb sits, as fractions from its left and top edges.
+    #[must_use]
     pub fn area_position(&self) -> (f64, f64) {
         (self.color.s, 1.0 - self.color.v)
     }
 
     /// Where the hue thumb sits along its strip, from 0 to 1.
+    #[must_use]
     pub fn hue_position(&self) -> f64 {
         self.color.h / 360.0
     }

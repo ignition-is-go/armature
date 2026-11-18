@@ -5,6 +5,7 @@ use crate::keys::Dir;
 
 /// A tag such as `en_US`, `PT-br` or `de_DE.UTF-8@euro` in standard form: `en-US`,
 /// `pt-BR`, `de-DE`. `None` if it is not a language tag.
+#[must_use]
 pub fn to_locale(tag: &str) -> Option<String> {
     // A POSIX tag carries an encoding and a modifier, as in `de_DE.UTF-8@euro`.
     let tag = tag.trim().split(['.', '@']).next().unwrap_or_default();
@@ -36,11 +37,13 @@ pub fn to_locale(tag: &str) -> Option<String> {
 }
 
 /// The language part of a tag, lowercased.
+#[must_use]
 pub fn language_of(tag: &str) -> Option<String> {
     Some(to_locale(tag)?.split('-').next()?.to_string())
 }
 
 /// Which way text in a language runs.
+#[must_use]
 pub fn direction_of(tag: &str) -> Dir {
     const RIGHT_TO_LEFT: [&str; 10] = ["ar", "he", "fa", "ur", "yi", "ps", "sd", "ug", "dv", "ckb"];
     let arabic_script = tag
@@ -54,6 +57,7 @@ pub fn direction_of(tag: &str) -> Dir {
 
 /// The first of the person's preferred languages that the application supports,
 /// matching on language when the region differs.
+#[must_use]
 pub fn pick_locale<'a>(preferred: &[&str], supported: &[&'a str]) -> Option<&'a str> {
     preferred.iter().find_map(|wanted| {
         let wanted_locale = to_locale(wanted)?;

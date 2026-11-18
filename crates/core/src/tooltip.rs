@@ -42,6 +42,7 @@ impl Warmth {
         self.0.store(now_ms + 1, Ordering::Relaxed);
     }
 
+    #[must_use]
     pub fn is_warm(&self, now_ms: u64) -> bool {
         let closed = self.0.load(Ordering::Relaxed);
         closed > 0 && now_ms + 1 >= closed && now_ms + 1 - closed <= Self::WINDOW_MS
@@ -50,7 +51,7 @@ impl Warmth {
 
 impl Default for Options {
     fn default() -> Self {
-        Options {
+        Self {
             open_delay_ms: 500,
             close_delay_ms: 0,
             card: false,
@@ -73,8 +74,9 @@ pub struct Tooltip {
 }
 
 impl Tooltip {
+    #[must_use]
     pub fn new(opts: Options) -> Self {
-        Tooltip {
+        Self {
             opts,
             ..Default::default()
         }
@@ -82,8 +84,9 @@ impl Tooltip {
 
     /// A hover card: it waits longer to open and lingers after the pointer leaves,
     /// so there is time to move into it.
+    #[must_use]
     pub fn hover_card() -> Self {
-        Tooltip::new(Options {
+        Self::new(Options {
             open_delay_ms: 600,
             close_delay_ms: 300,
             card: true,
@@ -91,11 +94,13 @@ impl Tooltip {
         })
     }
 
-    pub fn is_open(&self) -> bool {
+    #[must_use]
+    pub const fn is_open(&self) -> bool {
         self.open
     }
 
     /// Joins the tooltips that share `warmth`.
+    #[must_use]
     pub fn sharing(mut self, warmth: Warmth) -> Self {
         self.warmth = Some(warmth);
         self

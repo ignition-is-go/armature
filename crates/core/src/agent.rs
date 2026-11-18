@@ -42,17 +42,17 @@ pub enum ActError {
 impl fmt::Display for ActError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ActError::UnknownAction { action, valid } => {
+            Self::UnknownAction { action, valid } => {
                 write!(
                     f,
                     "unknown action \"{action}\"; valid actions: {}",
                     valid.join(", ")
                 )
             }
-            ActError::MissingItem { action } => write!(f, "action \"{action}\" needs an item"),
-            ActError::UnknownItem(key) => write!(f, "no item \"{key}\""),
-            ActError::Disabled(key) => write!(f, "item \"{key}\" is disabled"),
-            ActError::Refused => write!(f, "the application refused this change"),
+            Self::MissingItem { action } => write!(f, "action \"{action}\" needs an item"),
+            Self::UnknownItem(key) => write!(f, "no item \"{key}\""),
+            Self::Disabled(key) => write!(f, "item \"{key}\" is disabled"),
+            Self::Refused => write!(f, "the application refused this change"),
         }
     }
 }
@@ -91,7 +91,7 @@ pub struct Target<Cx> {
 
 impl<Cx> Clone for Target<Cx> {
     fn clone(&self) -> Self {
-        Target {
+        Self {
             snapshot: self.snapshot.clone(),
             act: self.act.clone(),
             set: self.set.clone(),
@@ -153,20 +153,20 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::UnknownRef(r) => write!(f, "no component with ref \"{r}\""),
-            Error::UnknownLabel { label, matches } if matches.is_empty() => {
+            Self::UnknownRef(r) => write!(f, "no component with ref \"{r}\""),
+            Self::UnknownLabel { label, matches } if matches.is_empty() => {
                 write!(f, "no component labelled \"{label}\"")
             }
-            Error::UnknownLabel { label, matches } => {
+            Self::UnknownLabel { label, matches } => {
                 write!(
                     f,
                     "\"{label}\" names several components; use a ref: {}",
                     matches.join(", ")
                 )
             }
-            Error::NeedsApproval(what) => write!(f, "this needs a person's approval: {what}"),
-            Error::NotApproved => write!(f, "the action was not approved"),
-            Error::Act(e) => e.fmt(f),
+            Self::NeedsApproval(what) => write!(f, "this needs a person's approval: {what}"),
+            Self::NotApproved => write!(f, "the action was not approved"),
+            Self::Act(e) => e.fmt(f),
         }
     }
 }
@@ -211,7 +211,8 @@ pub struct Run {
 }
 
 impl Run {
-    pub fn ok(&self) -> bool {
+    #[must_use]
+    pub const fn ok(&self) -> bool {
         self.failed.is_none()
     }
 }
@@ -229,7 +230,7 @@ pub struct Registry<Cx> {
 
 impl<Cx> Default for Registry<Cx> {
     fn default() -> Self {
-        Registry {
+        Self {
             next_id: 1,
             targets: Vec::new(),
         }
@@ -238,7 +239,7 @@ impl<Cx> Default for Registry<Cx> {
 
 impl<Cx> Clone for Registry<Cx> {
     fn clone(&self) -> Self {
-        Registry {
+        Self {
             next_id: self.next_id,
             targets: self.targets.clone(),
         }
@@ -431,6 +432,7 @@ pub struct Entry {
 }
 
 /// A short sentence saying what an entry changed and who changed it.
+#[must_use]
 pub fn describe_entry(entry: &Entry) -> String {
     let list = |value: &[String]| {
         if value.is_empty() {

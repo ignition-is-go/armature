@@ -14,27 +14,28 @@ pub const HOLD_TOLERANCE: f64 = 10.0;
 impl Default for Hold {
     /// Half a second, as a long-press conventionally is.
     fn default() -> Self {
-        Hold::new(500)
+        Self::new(500)
     }
 }
 
 impl Hold {
-    pub fn new(delay_ms: u64) -> Self {
-        Hold {
+    #[must_use]
+    pub const fn new(delay_ms: u64) -> Self {
+        Self {
             delay_ms,
             fires_at: None,
         }
     }
 
     /// Begins the press. Returns when to call `tick`.
-    pub fn start(&mut self, now_ms: u64) -> u64 {
+    pub const fn start(&mut self, now_ms: u64) -> u64 {
         let at = now_ms + self.delay_ms;
         self.fires_at = Some(at);
         at
     }
 
     /// Whether the hold completes now. It fires at most once per press.
-    pub fn tick(&mut self, now_ms: u64) -> bool {
+    pub const fn tick(&mut self, now_ms: u64) -> bool {
         match self.fires_at {
             Some(at) if now_ms >= at => {
                 self.fires_at = None;
@@ -45,7 +46,7 @@ impl Hold {
     }
 
     /// The press ended early.
-    pub fn release(&mut self) {
+    pub const fn release(&mut self) {
         self.fires_at = None;
     }
 
@@ -69,7 +70,7 @@ pub struct Repeat {
 
 impl Default for Repeat {
     fn default() -> Self {
-        Repeat {
+        Self {
             delay_ms: 400,
             interval_ms: 60,
             next_at: None,
@@ -78,8 +79,9 @@ impl Default for Repeat {
 }
 
 impl Repeat {
+    #[must_use]
     pub fn new(delay_ms: u64, interval_ms: u64) -> Self {
-        Repeat {
+        Self {
             delay_ms,
             interval_ms: interval_ms.max(1),
             next_at: None,
@@ -87,7 +89,7 @@ impl Repeat {
     }
 
     /// Begins the press, which counts as the first step. Returns when to call `tick`.
-    pub fn start(&mut self, now_ms: u64) -> u64 {
+    pub const fn start(&mut self, now_ms: u64) -> u64 {
         let at = now_ms + self.delay_ms;
         self.next_at = Some(at);
         at
@@ -95,7 +97,7 @@ impl Repeat {
 
     /// How many steps are due now, and when to call `tick` next. A late tick catches
     /// up on the steps it missed.
-    pub fn tick(&mut self, now_ms: u64) -> (u32, Option<u64>) {
+    pub const fn tick(&mut self, now_ms: u64) -> (u32, Option<u64>) {
         let Some(next_at) = self.next_at else {
             return (0, None);
         };
@@ -108,7 +110,7 @@ impl Repeat {
         (steps as u32, Some(following))
     }
 
-    pub fn release(&mut self) {
+    pub const fn release(&mut self) {
         self.next_at = None;
     }
 }

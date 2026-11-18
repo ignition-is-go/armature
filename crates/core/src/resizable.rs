@@ -27,7 +27,7 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        Options {
+        Self {
             orientation: Orientation::Horizontal,
             dir: Dir::Ltr,
             min: 10.0,
@@ -49,13 +49,14 @@ pub struct Resizable {
 
 impl Default for Resizable {
     fn default() -> Self {
-        Resizable::new(Options::default(), 50.0)
+        Self::new(Options::default(), 50.0)
     }
 }
 
 impl Resizable {
-    pub fn new(opts: Options, percent: f64) -> Self {
-        Resizable {
+    #[must_use]
+    pub const fn new(opts: Options, percent: f64) -> Self {
+        Self {
             opts,
             percent: percent.clamp(opts.min, opts.max),
             dragging: false,
@@ -63,7 +64,8 @@ impl Resizable {
     }
 
     /// The first panel's share of the box, in percent.
-    pub fn percent(&self) -> f64 {
+    #[must_use]
+    pub const fn percent(&self) -> f64 {
         self.percent
     }
 

@@ -42,13 +42,14 @@ pub struct NumberInput {
 
 impl Default for NumberInput {
     fn default() -> Self {
-        NumberInput::new(NumberRange::new(0.0, 100.0, 1.0), 0.0)
+        Self::new(NumberRange::new(0.0, 100.0, 1.0), 0.0)
     }
 }
 
 impl NumberInput {
+    #[must_use]
     pub fn new(range: NumberRange, value: f64) -> Self {
-        NumberInput {
+        Self {
             range,
             value: range.snap(value),
             draft: None,
@@ -59,7 +60,8 @@ impl NumberInput {
         }
     }
 
-    pub fn number(&self) -> f64 {
+    #[must_use]
+    pub const fn number(&self) -> f64 {
         self.value
     }
 
@@ -243,7 +245,7 @@ impl Primitive for NumberInput {
             Input::Tick { now_ms } => {
                 let (steps, next) = self.repeat.tick(now_ms);
                 if steps > 0 {
-                    self.step(self.held * steps as f64, Reason::Press, gate);
+                    self.step(self.held * f64::from(steps), Reason::Press, gate);
                 }
                 match next {
                     Some(at_ms) => Reaction::handled().with(Effect::Wake { at_ms }),
