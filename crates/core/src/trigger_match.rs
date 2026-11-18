@@ -158,6 +158,47 @@ pub fn look_behind(rules: &[TriggerRule]) -> usize {
     .saturating_add(1)
 }
 
+/// The match that starts at `index`: a rule's trigger sitting there, where that rule
+/// allows one, with a query it accepts running up to the caret.
+fn match_starting_at(
+    raw: &[char],
+    source: &[char],
+    index: usize,
+    offset: usize,
+    rules: &[TriggerRule],
+) -> Option<TriggerMatch> {
+    let from_here = source.get(index..).unwrap_or_default();
+    rules.iter().enumerate().find_map(|(at, rule)| {
+        let trigger: Vec<char> = rule.trigger.chars().collect();
+        if trigger.is_empty() || !from_here.starts_with(&trigger) {
+            return None;
+        }
+        let after_trigger = index.saturating_add(trigger.len());
+        let query: String = raw
+            .get(after_trigger..)
+            .unwrap_or_default()
+            .iter()
+            .collect();
+        let accepted = is_valid_query(&normalize_trigger_text(&query), rule)
+            && is_at_boundary(source, index, offset, rule.boundary);
+        accepted.then(|| TriggerMatch {
+            rule: at,
+            trigger: rule.trigger.clone(),
+            start: offset.saturating_add(index),
+            end: offset.saturating_add(source.len()),
+            query,
+        })
+    })
+}
+
+/// Whether a character could be part of some rule's trigger or query. Once one
+/// could not, nothing further back can reach the caret.
+fn may_belong_to_a_match(rules: &[TriggerRule], ch: char) -> bool {
+    rules.iter().any(|rule| {
+        rule.trigger.contains(ch) || (ch == ' ' && rule.spaces != Spaces::None) || rule.takes(ch)
+    })
+}
+
 /// The nearest trigger before the caret whose query runs up to it. `text` is the
 /// text that ends at the caret, and `offset` how many characters come before it.
 #[must_use]
@@ -168,46 +209,13 @@ pub fn find_trigger_match(
 ) -> Option<TriggerMatch> {
     let raw: Vec<char> = text.chars().collect();
     let source: Vec<char> = normalize_trigger_text(text).chars().collect();
-    let caret = source.len();
-    let limit = look_behind(rules);
-    for index in (0..caret)
-        .rev()
-        .take_while(|index| caret.saturating_sub(*index) <= limit)
-    {
-        for (at, rule) in rules.iter().enumerate() {
-            let trigger: Vec<char> = rule.trigger.chars().collect();
-            if trigger.is_empty()
-                || !source
-                    .get(index..)
-                    .unwrap_or_default()
-                    .starts_with(&trigger)
-            {
-                continue;
-            }
-            let query: String = raw
-                .get(index.saturating_add(trigger.len())..)
-                .unwrap_or_default()
-                .iter()
-                .collect();
-            if is_valid_query(&normalize_trigger_text(&query), rule)
-                && is_at_boundary(&source, index, offset, rule.boundary)
-            {
-                return Some(TriggerMatch {
-                    rule: at,
-                    trigger: rule.trigger.clone(),
-                    start: offset.saturating_add(index),
-                    end: offset.saturating_add(caret),
-                    query,
-                });
-            }
+    // Looking back from the caret, as far as a match could start.
+    for index in (0..source.len()).rev().take(look_behind(rules)) {
+        if let Some(found) = match_starting_at(&raw, &source, index, offset, rules) {
+            return Some(found);
         }
         let ch = source.get(index).copied().unwrap_or_default();
-        let continues = rules.iter().any(|rule| {
-            rule.trigger.contains(ch)
-                || (ch == ' ' && rule.spaces != Spaces::None)
-                || rule.takes(ch)
-        });
-        if !continues {
+        if !may_belong_to_a_match(rules, ch) {
             break;
         }
     }
@@ -231,7 +239,8 @@ pub fn map_dismissed(
     to: usize,
     inserted: usize,
 ) -> Option<Dismissed> {
-    let shift = |at: usize| (at.saturating_add(inserted)).saturating_sub(to.saturating_sub(from));
+    let removed = to.saturating_sub(from);
+    let shift = |at: usize| at.saturating_add(inserted).saturating_sub(removed);
     let trigger_end = dismissed
         .start
         .saturating_add(dismissed.trigger.chars().count());
