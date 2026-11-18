@@ -22,7 +22,7 @@ Each lives in `armature_core::<module>` and exports a `Part` enum.
 | Sortable list | `sortable` | `Root`, `Item` | The keys in order. |
 | Calendar | `calendar` | `Grid`, `Day`, `PreviousMonth`, `NextMonth` | The day as `YYYY-MM-DD`. Draw days from `weeks()`. `Options::mode` chooses several days or a span, and `unavailable` rules days out. |
 | Resizable panels | `resizable` | `Root`, `Handle` | The first panel's share, in percent. |
-| Dialog | `dialog` | `Trigger`, `Backdrop`, `Content`, `Close` | `["open"]` or empty; `is_open()`. `Options` has `alert`, `dismissible` and `modal`. |
+| Dialog | `dialog` | `Trigger`, `Backdrop`, `Content`, `Close` | `["open"]` or empty; `is_open()`. `Options` has `modality` (`Modeless`, `Modal`, `Alert`) and `closes` (`Never`, or `By` which gestures). |
 | Popover | `popover` | `Trigger`, `Content`, `Title`, `Description`, `Arrow`, `Close` | None. `Content` is a popup. |
 | Tooltip | `tooltip` | `Trigger`, `Content` | None. Shows on hover after a delay, and on focus. |
 | Sheet and drawer | `sheet` | `Trigger`, `Backdrop`, `Content`, `Handle`, `Scroller` | The index of the height it rests at. Size it to `height()`. |

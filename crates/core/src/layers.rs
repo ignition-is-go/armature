@@ -1,17 +1,42 @@
 //! The stack of floating layers on screen: popups, menus, dialogs. It decides which
 //! layer Escape or an outside press dismisses, and which layers a modal makes inert.
 
+/// Which of a person's own gestures close a layer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DismissedBy {
+    pub escape: bool,
+    pub outside_press: bool,
+}
+
+impl DismissedBy {
+    /// Escape and a press outside both close it.
+    pub const EITHER: Self = Self {
+        escape: true,
+        outside_press: true,
+    };
+    /// Escape closes it and a press outside does not.
+    pub const ESCAPE: Self = Self {
+        escape: true,
+        outside_press: false,
+    };
+    /// A press outside closes it and Escape does not.
+    pub const OUTSIDE_PRESS: Self = Self {
+        escape: false,
+        outside_press: true,
+    };
+    /// Neither closes it.
+    pub const NEITHER: Self = Self {
+        escape: false,
+        outside_press: false,
+    };
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "each flag is an independent setting"
-)]
 pub struct Layer {
     pub id: String,
     /// Blocks interaction with everything beneath it.
     pub modal: bool,
-    pub dismiss_on_escape: bool,
-    pub dismiss_on_outside_press: bool,
+    pub dismissed_by: DismissedBy,
     /// Stays usable whatever opens above it, even a modal, and is never dismissed by
     /// a press elsewhere. A stack of notifications is the usual case.
     pub persistent: bool,
@@ -24,8 +49,7 @@ impl Layer {
         Self {
             id: id.to_string(),
             modal: false,
-            dismiss_on_escape: true,
-            dismiss_on_outside_press: true,
+            dismissed_by: DismissedBy::EITHER,
             persistent: false,
         }
     }
@@ -36,8 +60,7 @@ impl Layer {
         Self {
             id: id.to_string(),
             modal: false,
-            dismiss_on_escape: false,
-            dismiss_on_outside_press: false,
+            dismissed_by: DismissedBy::NEITHER,
             persistent: true,
         }
     }
@@ -48,8 +71,7 @@ impl Layer {
         Self {
             id: id.to_string(),
             modal: true,
-            dismiss_on_escape: true,
-            dismiss_on_outside_press: false,
+            dismissed_by: DismissedBy::ESCAPE,
             persistent: false,
         }
     }
@@ -115,7 +137,7 @@ impl LayerStack {
     /// Escape was pressed. Only the top layer may answer. Returns what closed.
     pub fn escape(&mut self) -> Vec<String> {
         match self.layers.iter().rev().find(|layer| !layer.persistent) {
-            Some(top) if top.dismiss_on_escape => {
+            Some(top) if top.dismissed_by.escape => {
                 let id = top.id.clone();
                 self.remove(&id)
             }
@@ -158,7 +180,7 @@ impl LayerStack {
             if !self
                 .layers
                 .get(index)
-                .is_some_and(|layer| layer.dismiss_on_outside_press)
+                .is_some_and(|layer| layer.dismissed_by.outside_press)
             {
                 break;
             }

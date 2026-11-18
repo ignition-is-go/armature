@@ -1,6 +1,7 @@
 use crate::agent::{ActError, Snapshot};
 use crate::change::{Gate, Reason, Source, ValueChange};
 use crate::keys::Key;
+use crate::layers::DismissedBy;
 use crate::primitive::{
     Focusable, Input, Item, Measure, PartOf, Pointer, PointerPhase, Primitive, Reaction, Relations,
     Role, Semantics,
@@ -16,23 +17,41 @@ pub enum Part {
     Close,
 }
 
-#[derive(Clone, Copy, Debug)]
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "each flag is an independent setting"
-)]
+/// How much of the page a dialog takes over while it is open.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Modality {
+    /// The page stays usable, so a press beside the dialog is the page's.
+    Modeless,
+    /// The page behind is out of reach.
+    #[default]
+    Modal,
+    /// Modal, and interrupting with something that must be answered, such as
+    /// confirming a deletion. Assistive technology announces it at once, and a
+    /// press outside never closes it.
+    Alert,
+}
+
+/// Which of a person's own gestures may close a dialog. A refused one is counted
+/// in `attempts`, so the owner can say why it stays. Close parts, the trigger and
+/// the controller close it whatever this says.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Closes {
+    /// Nothing the person does closes it: not Escape, a press outside, or Back.
+    Never,
+    /// Back closes it, and Escape and a press outside close it as they say.
+    By(DismissedBy),
+}
+
+#[derive(Clone, Copy, Debug, Default)]
 pub struct Options {
-    pub dismiss_on_backdrop: bool,
-    pub dismiss_on_escape: bool,
-    /// Whether it interrupts with something that must be answered, such as
-    /// confirming a deletion. Assistive technology then announces it at once.
-    pub alert: bool,
-    /// Whether Escape and a press outside may close it. When they may not, each
-    /// try is counted in `attempts`, so the owner can say why it stays.
-    pub dismissible: bool,
-    /// Whether the page behind is out of reach while it is open. A dialog that is
-    /// not modal leaves the page usable, so a press beside it is the page's.
-    pub modal: bool,
+    pub modality: Modality,
+    pub closes: Closes,
+}
+
+impl Default for Closes {
+    fn default() -> Self {
+        Self::By(DismissedBy::EITHER)
+    }
 }
 
 /// What asked a dialog to close.
@@ -59,41 +78,34 @@ pub enum Refusal {
 
 impl Options {
     const fn is_modal(self) -> bool {
-        self.modal || self.alert
+        !matches!(self.modality, Modality::Modeless)
+    }
+
+    /// Whether the person's own gesture closes it.
+    const fn allows(self, dismiss: Dismiss) -> bool {
+        match (self.closes, dismiss) {
+            (Closes::Never, _) => false,
+            (Closes::By(by), Dismiss::Escape) => by.escape,
+            (Closes::By(by), Dismiss::OutsidePress) => by.outside_press,
+            (Closes::By(_), _) => true,
+        }
     }
 
     /// Whether a way of closing is refused, and whether that counts as a try.
     /// Close buttons, triggers and the controller always close.
     #[must_use]
     pub const fn refusal(&self, dismiss: Dismiss) -> Option<Refusal> {
-        match dismiss {
-            Dismiss::OutsidePress
-                if !(self.is_modal() || self.dismiss_on_backdrop && self.dismissible) =>
-            {
+        match (self.modality, dismiss) {
+            (Modality::Modeless, Dismiss::OutsidePress) if !self.allows(dismiss) => {
                 Some(Refusal::Silent)
             }
-            Dismiss::OutsidePress
-                if self.alert || !self.dismiss_on_backdrop || !self.dismissible =>
+            (Modality::Alert, Dismiss::OutsidePress) => Some(Refusal::Attempt),
+            (_, Dismiss::Escape | Dismiss::OutsidePress | Dismiss::Back)
+                if !self.allows(dismiss) =>
             {
                 Some(Refusal::Attempt)
             }
-            Dismiss::Escape if !self.dismiss_on_escape || !self.dismissible => {
-                Some(Refusal::Attempt)
-            }
-            Dismiss::Back if !self.dismissible => Some(Refusal::Attempt),
             _ => None,
-        }
-    }
-}
-
-impl Default for Options {
-    fn default() -> Self {
-        Self {
-            dismiss_on_backdrop: true,
-            dismiss_on_escape: true,
-            alert: false,
-            dismissible: true,
-            modal: true,
         }
     }
 }
@@ -223,7 +235,7 @@ impl Primitive for Dialog {
                 ..Default::default()
             },
             Part::Content => Semantics {
-                role: Some(if self.opts.alert {
+                role: Some(if matches!(self.opts.modality, Modality::Alert) {
                     Role::AlertDialog
                 } else {
                     Role::Dialog
@@ -417,10 +429,8 @@ mod tests {
     #[test]
     fn a_dialog_that_must_be_answered_ignores_escape_and_the_backdrop() {
         let mut dialog = opened(Options {
-            dismiss_on_backdrop: false,
-            dismiss_on_escape: false,
-            alert: true,
-            ..Default::default()
+            modality: Modality::Alert,
+            closes: Closes::By(DismissedBy::NEITHER),
         });
         assert_eq!(
             dialog.semantics(Part::Content, None).role,

@@ -63,7 +63,7 @@ Primitives not listed take their settings through `new(...)` arguments or builde
 | `calendar` | `week_start: u8`, `dir: Dir`, `min: Option<Date>`, `max: Option<Date>`, `mode: Selecting`, `unavailable: Option<fn(Date) -> bool>`, `deselectable: bool`, `months: usize` |
 | `carousel` | `wrap: bool`, `autoplay_ms: Option<u64>`, `dir: Dir`, `per_page: usize`, `orientation: crate::keys::Orientation` |
 | `combobox` | `multiple: bool`, `custom: bool`, `auto_highlight: bool`, `max_selected: Option<usize>`, `open_on_focus: bool`, `load_more: bool`, `remote: bool`, `read_only: bool` |
-| `dialog` | `dismiss_on_backdrop: bool`, `dismiss_on_escape: bool`, `alert: bool`, `dismissible: bool`, `modal: bool` |
+| `dialog` | `modality: Modality` (`Modeless`, `Modal`, `Alert`), `closes: Closes` (`Never`, `By(layers::DismissedBy)`) |
 | `event_list` | `orientation: Orientation`, `dir: Dir`, `wrap: bool`, `feed: bool` |
 | `file_input` | `multiple: bool`, `accept: Vec<String>`, `max_size: Option<u64>`, `max_files: Option<usize>` |
 | `listbox` | `mode: Mode`, `orientation: Orientation`, `dir: Dir`, `wrap: bool` |
@@ -196,9 +196,10 @@ the module, such as `"number"` for `number_input`.
   `Err(ActError::Disabled(key))`. Send `Input::Focus` to the item part with the item's
   key. In a single-choice listbox arrows only move focus; Enter, Space or a press
   chooses.
-- **Dialog.** Options default to dismissible and modal. `dismissible: false` refuses
-  Escape and outside presses together; `dismiss_on_escape` and `dismiss_on_backdrop`
-  turn off one each. The Close part, the trigger and agent actions always close.
+- **Dialog.** Options default to `Modality::Modal` and `Closes::By(DismissedBy::EITHER)`.
+  `Closes::Never` refuses Escape, outside presses and Back; `DismissedBy` picks which of
+  Escape and an outside press close it. `Modality::Alert` is modal, and an outside press
+  never closes it. The Close part, the trigger and agent actions always close.
   Escape returns focus to `Part::Trigger`.
 - **Accordion.** A fresh one has nothing open.
 - **Agent actions.** The gate sees `Source::Agent` and `Reason::Action` for every one.

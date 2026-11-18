@@ -890,7 +890,7 @@ fn DialogSection() -> impl IntoView {
             </Root>
             // One that must be answered with its own button: Escape and a press
             // outside are refused.
-            <Root machine=Dialog::new(dialog::Options { dismissible: false, ..Default::default() }) label="Terms">
+            <Root machine=Dialog::new(dialog::Options { closes: dialog::Closes::Never, ..Default::default() }) label="Terms">
                 <Part part=dialog::Part::Trigger>"Open terms"</Part>
                 <Part part=dialog::Part::Backdrop />
                 <Part part=dialog::Part::Content>
