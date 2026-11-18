@@ -62,7 +62,7 @@ Primitives not listed take their settings through `new(...)` arguments or builde
 | `accordion` | `open: selection::Choosing`, `findable: bool` |
 | `calendar` | `week_start: u8`, `dir: Dir`, `min: Option<Date>`, `max: Option<Date>`, `mode: Selecting`, `unavailable: Option<fn(Date) -> bool>`, `deselectable: bool`, `months: usize` |
 | `carousel` | `ends: roving::Ends`, `autoplay_ms: Option<u64>`, `dir: Dir`, `per_page: usize`, `orientation: crate::keys::Orientation` |
-| `combobox` | `count: selection::Count`, `custom: bool`, `auto_highlight: bool`, `open_on_focus: bool`, `load_more: bool`, `remote: bool`, `read_only: bool` |
+| `combobox` | `count: selection::Count`, `takes: Takes` (`Options`, `AnyText`), `auto_highlight: bool`, `open_on_focus: bool`, `load_more: bool`, `results: Results` (`Filtered`, `Requested`), `read_only: bool` |
 | `dialog` | `modality: Modality` (`Modeless`, `Modal`, `Alert`), `closes: Closes` (`Never`, `By(layers::DismissedBy)`) |
 | `event_list` | `orientation: Orientation`, `dir: Dir`, `ends: roving::Ends`, `feed: bool` |
 | `file_input` | `count: selection::Count`, `accept: Vec<String>`, `max_size: Option<u64>` |

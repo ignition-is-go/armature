@@ -46,7 +46,7 @@ Each lives in `armature_core::<module>` and exports a `Part` enum.
 | Avatar | `avatar` | `Root`, `Image`, `Fallback` | None. Put the picture inside `Image`. Read `status()`. |
 | Pagination | `pagination` | `Root`, `First`, `Previous`, `Page`, `Next`, `Last` | The page, from 1. Draw the row from `range()`. |
 | Text field, password, multi-line, label and field | `text_field` | `Root`, `Label`, `Input`, `Description`, `Error`, `Clear`, `Reveal` | The text. A submit arrives with `Reason::Keyboard`. Fill `Error` from `error()`. |
-| Combobox and autocomplete | `combobox` | `Input`, `List`, `Option`, `Chip`, `Clear`, `Empty`, `Status` | The chosen keys, or the text with `custom` (an `Options` field). Render every option: the primitive hides those that do not match. Typing arrives as `Input::Text` on `Input`; `results()` lists the matches and `is_open()` says whether the list shows. |
+| Combobox and autocomplete | `combobox` | `Input`, `List`, `Option`, `Chip`, `Clear`, `Empty`, `Status` | The chosen keys, or the text with `takes: Takes::AnyText` (an `Options` field). Render every option: the primitive hides those that do not match. Typing arrives as `Input::Text` on `Input`; `results()` lists the matches and `is_open()` says whether the list shows. |
 | Menu | `menu` | `Trigger`, `Content`, `Item`, `Area` | The checked entries, with `group=key` for radios. Running an action offers `run:<key>`. Draw the entries of `shown()`. |
 | Menubar | `menubar` | `Root`, `Trigger`, `Content`, `Item` | As a menu, with entries keyed `menu/entry`. Draw each menu from `shown(menu)`. |
 | Navigation menu | `navigation_menu` | `Root`, `Trigger`, `Link`, `Panel` | The open panel. Following a link offers `link:<key>`. |

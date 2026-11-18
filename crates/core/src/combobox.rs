@@ -27,17 +27,40 @@ pub enum Part {
     Status,
 }
 
+/// What can be a combobox's value.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Takes {
+    /// Only an option.
+    #[default]
+    Options,
+    /// Any text, as in a search box with suggestions: text that matches no option
+    /// is a value in its own right.
+    AnyText,
+}
+
+/// Who narrows a combobox's options as the person types.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Results {
+    /// The combobox, from the options it holds.
+    #[default]
+    Filtered,
+    /// The owner. Each change of text offers `load:<request>:<text>` to the gate,
+    /// and the owner answers with `set("loaded", request)` or
+    /// `set("failed", request)`. An answer to a request that has since been
+    /// replaced is ignored.
+    Requested,
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 #[expect(
     clippy::struct_excessive_bools,
-    reason = "each flag is an independent setting"
+    reason = "highlighting, opening on focus, asking for more and being read-only are independent switches"
 )]
 pub struct Options {
     /// How many options may be chosen at once.
     pub count: Count,
-    /// Whether text that matches no option is a value in its own right, as in a
-    /// search box with suggestions. Otherwise only an option can be the value.
-    pub custom: bool,
+    /// What can be the value: only an option, or any text typed.
+    pub takes: Takes,
     /// Whether the first match is highlighted as soon as there is one, so Enter
     /// takes it.
     pub auto_highlight: bool,
@@ -46,11 +69,8 @@ pub struct Options {
     /// Whether reaching the last option asks the owner for more, by offering
     /// `more:<text>` to the gate.
     pub load_more: bool,
-    /// Whether the options come from elsewhere as the person types. Each change
-    /// of text then offers `load:<request>:<text>` to the gate, and the owner
-    /// answers with `set("loaded", request)` or `set("failed", request)`. An
-    /// answer to a request that has since been replaced is ignored.
-    pub remote: bool,
+    /// Who narrows the options as the person types.
+    pub results: Results,
     /// Shown but not to be changed: typing, choosing and clearing are ignored.
     pub read_only: bool,
 }
@@ -58,7 +78,7 @@ pub struct Options {
 const ACTIONS: &[&str] = &["select", "remove", "clear", "type", "open", "close"];
 
 /// A text field with a list of options that narrows as the person types. With
-/// `custom` it is an autocomplete: the text itself is the value. The value is the
+/// `Takes::AnyText` it is an autocomplete: the text itself is the value. The value is the
 /// chosen keys, or the text.
 #[derive(Clone, Debug, Default)]
 pub struct Combobox {
@@ -204,7 +224,7 @@ impl Combobox {
             }
             return done;
         }
-        let value = if self.opts.custom {
+        let value = if self.opts.takes == Takes::AnyText {
             self.label(key)
         } else {
             key.to_string()
@@ -223,7 +243,7 @@ impl Combobox {
         self.close();
         if self.opts.count.is_many() {
             self.text.clear();
-        } else if self.opts.custom {
+        } else if self.opts.takes == Takes::AnyText {
             let next = if self.text.is_empty() {
                 Vec::new()
             } else {
@@ -264,7 +284,7 @@ impl Combobox {
     fn on_typed(&mut self, value: String, gate: Gate) -> Reaction<Part> {
         // Deleting all the text of a single choice clears it. Escape can
         // still bring it back.
-        if value.is_empty() && !self.opts.count.is_many() && !self.opts.custom {
+        if value.is_empty() && !self.opts.count.is_many() && self.opts.takes == Takes::Options {
             let was = self.selected.first().cloned();
             if was.is_some() && self.commit(Vec::new(), Source::User, Reason::Text, gate) {
                 self.deleted = was;
@@ -272,7 +292,7 @@ impl Combobox {
         }
         self.text = value;
         self.open = true;
-        if self.opts.remote {
+        if self.opts.results == Results::Requested {
             self.ask_for_results(gate);
         }
         let results = self.results();
@@ -349,7 +369,7 @@ impl Combobox {
                     self.choose(&key, Source::User, Reason::Keyboard, gate);
                     Reaction::handled()
                 }
-                None if self.opts.custom => {
+                None if self.opts.takes == Takes::AnyText => {
                     self.settle(gate);
                     Reaction::handled()
                 }
@@ -466,7 +486,7 @@ impl Primitive for Combobox {
 
     fn remove_item(&mut self, key: &str) {
         self.items.remove(key);
-        if !self.opts.custom {
+        if self.opts.takes == Takes::Options {
             self.selected.retain(|chosen| chosen != key);
         }
     }
@@ -611,7 +631,8 @@ impl Primitive for Combobox {
     }
 
     fn set_value(&mut self, value: Vec<String>) {
-        let known = |key: &String| self.opts.custom || self.items.get(key).is_some();
+        let known =
+            |key: &String| self.opts.takes == Takes::AnyText || self.items.get(key).is_some();
         let mut next: Vec<String> = value.into_iter().filter(known).collect();
         if !self.opts.count.is_many() {
             next.truncate(1);
@@ -774,7 +795,7 @@ mod tests {
     #[test]
     fn free_text_is_the_value_where_it_is_allowed() {
         let mut search = fruit(Options {
-            custom: true,
+            takes: Takes::AnyText,
             ..Default::default()
         });
         typed(&mut search, "dragonfruit");
@@ -838,7 +859,7 @@ mod tests {
         crate::testing::assert_conforms(
             || {
                 Combobox::new(Options {
-                    custom: true,
+                    takes: Takes::AnyText,
                     ..Default::default()
                 })
             },
@@ -946,7 +967,7 @@ mod tests {
     #[test]
     fn a_slow_answer_to_an_old_search_is_ignored() {
         let mut combobox = fruit(Options {
-            remote: true,
+            results: Results::Requested,
             ..Default::default()
         });
         let asked = std::cell::RefCell::new(Vec::new());

@@ -388,7 +388,7 @@ fn RemoteSearchSection() -> impl IntoView {
         <Section title="Remote search">
             <p id="remote-search-value">"Asked: " {move || searches.get().join(" ")}</p>
             <Root
-                machine=Combobox::new(combobox::Options { remote: true, ..Default::default() })
+                machine=Combobox::new(combobox::Options { results: combobox::Results::Requested, ..Default::default() })
                 label="Remote search"
                 settings=answers
                 on_value_change=Callback::new(move |change: ValueChange| {
